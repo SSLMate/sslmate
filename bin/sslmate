@@ -46,17 +46,19 @@ our $curl;
 sub print_usage {
 	my ($out) = @_;
 
+	#          |--------------------------------------------------------------------------------| 80 chars
 	print $out "Usage: sslmate COMMAND [ARGS]\n";
 	print $out "\n";
 	print $out "Commands:\n";
-	print $out " sslmate buy HOSTNAME          Buy a certificate for the given hostname\n";
-	print $out " sslmate renew HOSTNAME        Renew the certificate for the given hostname\n";
-	print $out " sslmate reissue HOSTNAME      Reissue the certificate for given hostname\n";
-	print $out " sslmate revoke [-a] HOSTNAME  Reissue the certificate for given hostname\n";
-	print $out " sslmate download HOSTNAME     Download the certificate for given hostname\n";
-	print $out " sslmate link                  Link this system with your SSLMate account\n";
-	print $out " sslmate help                  Display help\n";
-	print $out " sslmate version               Print the version of SSLMate that's installed\n";
+	print $out " sslmate buy HOSTNAME             Buy a certificate for the given hostname\n";
+	print $out " sslmate renew HOSTNAME           Renew the certificate for the given hostname\n";
+	print $out " sslmate reissue HOSTNAME         Reissue the certificate for given hostname\n";
+	print $out " sslmate revoke [-a] HOSTNAME     Reissue the certificate for given hostname\n";
+	print $out " sslmate download HOSTNAME        Download the certificate for given hostname\n";
+	print $out " sslmate import KEYFILE CERTFILE  Import this certificate to your account\n";
+	print $out " sslmate link                     Link this system with your SSLMate account\n";
+	print $out " sslmate help                     Display help\n";
+	print $out " sslmate version                  Print the version of SSLMate that's installed\n";
 	print $out "\n";
 	print $out "Run 'sslmate help COMMAND' for more information on a specific command.\n";
 }
@@ -214,6 +216,18 @@ sub file_contents_are {
 	open(my $fh, '<', $filename) or return 0;
 	my $actual_contents = do { local $/; <$fh> };
 	return $actual_contents eq $contents;
+}
+
+sub read_first_crt {
+	my ($fh) = @_;
+	my $crt = '';
+	while (defined(my $line = <$fh>)) {
+		chomp $line;
+		$crt .= $line;
+		$crt .= "\n";
+		last if $line eq '-----END CERTIFICATE-----';
+	}
+	return $crt;
 }
 
 sub make_openssl_req_cnf {
@@ -403,6 +417,36 @@ sub openssl_req {
 	return $csr_data;
 }
 
+sub extract_cn_from_crt {
+	my ($crt_filename) = @_;
+
+	pipe(my $openssl_reader, my $openssl_writer) or die "Error: pipe failed: $!";
+	my $openssl_pid = fork;
+	die "Error: fork failed: $!" unless defined $openssl_pid;
+	if ($openssl_pid == 0) {
+		open(STDIN, '<', '/dev/null');
+		open(STDOUT, '>&', $openssl_writer) or die "Error: dup failed: $!";
+		close($openssl_reader);
+		exec('openssl', 'x509', '-in', $crt_filename, '-noout', '-subject');
+		die "Error: Unable to run 'openssl x509' command: " . ($!{ENOENT} ? 'openssl command not found' : $!) . "\n";
+	}
+	close($openssl_writer);
+
+	my $cn = undef;
+	while (defined(my $line = <$openssl_reader>)) {
+		chomp $line;
+		if ($line =~ /^subject=\s*(.*\/)?CN=([^\/,]+)/) {
+			$cn = $2;
+		}
+	}
+	close($openssl_reader);
+
+	waitpid($openssl_pid, 0) or die "waitpid failed: $!";
+	die "Error: 'openssl x509' command failed - is $crt_filename a valid certificate file?\n" unless $? == 0;
+
+	return $cn;
+}
+
 sub wait_for_cert {
 	my ($cert_instance_id) = @_;
 
@@ -464,10 +508,6 @@ sub prompt_for_approver_email {
 
 	my $num_emails = int(@$approver_emails);
 
-	print "\n";
-	print "We need to send you an email to verify that you own this domain.\n";
-	print "Where should we send this email?\n";
-	print "\n";
 	my $i = 1;
 	for my $email (@$approver_emails) {
 		print "$i. $email\n";
@@ -695,6 +735,10 @@ sub do_buy {
 		}
 
 		# Prompt user to choose an approver email and to confirm the order:
+		print "\n";
+		print "We need to send you an email to verify that you own this domain.\n";
+		print "Where should we send this email?\n";
+		print "\n";
 		my $approver_email = prompt_for_approver_email($response->{approver_emails}) or $exit_with_error->();
 		prompt_for_order_confirmation($response) or $exit_with_error->();
 
@@ -1133,6 +1177,127 @@ sub command_download {
 	return 0;
 }
 
+sub command_import {
+	my @args = @_;
+
+	if (@args >= 1 && $args[0] eq "-?") {
+		print "Usage: sslmate import KEYFILE CERTFILE\n";
+		return 0;
+	}
+
+	my $force = 0;
+	while (@args >= 1) {
+		if ($args[0] eq "-f" || $args[0] eq "--force") {
+			$force = 1;
+			shift @args;
+		} else {
+			last;
+		}
+	}
+
+	if (@args != 2) {
+		print STDERR "Error: you must specify the key file and cert file paths.\n";
+		print STDERR "Example: sslmate import www.example.com.key www.example.com.crt\n";
+		return 2;
+	}
+
+	# 0. Load config, etc.
+	load_config;
+	if (!is_linked) {
+		unless (-t STDIN) {
+			print STDERR "Error: you have not yet linked this system with your SSLMate account.\n";
+			print STDERR "Please run 'sslmate link'.\n";
+			return 1;
+		}
+		do_link or return 1;
+	}
+
+	get_country_code_from_server or return 1;
+	init_default_paths;
+
+	# 1. Open the source key and crt files
+	my $source_key_path = $args[0];
+	my $source_crt_path = $args[1];
+	open(my $source_key_file, '<', $source_key_path) or die "Error: Unable to open $source_key_path: $!\n";
+	open(my $source_crt_file, '<', $source_crt_path) or die "Error: Unable to open $source_crt_path: $!\n";
+	my $key = do { local $/; <$source_key_file> };
+	my $crt = read_first_crt($source_crt_file);
+	close($source_key_file);
+	close($source_crt_file);
+
+	# 2. Extract the CN from the certificate
+	my $cn = extract_cn_from_crt($source_crt_path)
+			or die "Error: Unable to parse $source_crt_path - is it a valid certificate file?\n";
+	print "Importing certificate for $cn...\n";
+
+	# 3. Generate the CSR
+	my $csr = openssl_req($source_key_path, $cn);
+
+	# 4. Open the destination files
+	my $files = open_cert_files($cn, $force, 1);
+	my $exit_with_error = sub {
+		$files->{cleanup}->(1);
+		exit 1;
+	};
+
+	# 5. Upload the CSR and CRT to SSLMate:
+	print "Uploading $source_crt_path...\n";
+	my $request = { account_id =>	get_config('account_id'),
+			api_key =>	get_config('api_key'),
+			csr =>		$csr,
+			crt =>		$crt };
+	my $response = api_call('POST', '/import', $request) or $exit_with_error->();
+
+	while ($response->{status} eq 'need_approver_email') {
+		# Prompt user to choose an approver email address:
+		print "\n";
+		print "When it's time to renew this certificate, we will need to send you an email to\n";
+		print "verify that you own this domain.  Where should we send this email?\n";
+		print "\n";
+		my $approver_email = prompt_for_approver_email($response->{approver_emails}) or $exit_with_error->();
+
+		# Repeat /import call with approver email address
+		$request->{approver_email} = $approver_email;
+		$response = api_call('POST', '/import', $request) or $exit_with_error->();
+	}
+
+	if ($response->{status} eq 'error') {
+		print STDERR "Error: " . $response->{message} . "\n";
+		$exit_with_error->();
+	} elsif ($response->{status} ne 'success') {
+		print STDERR "Error: unknown response from server\n";
+		$exit_with_error->();
+	}
+
+	# 6. Write the key, crt, and chain to the destination directory
+	$response->{chain} ||= '';
+
+	# write .key file
+	print {$files->{key_file}} $key;
+	close $files->{key_file};
+
+	# write .crt file
+	print {$files->{crt_file}} $crt;
+	close $files->{crt_file};
+
+	# write .chain.crt file
+	print {$files->{chain_crt_file}} $response->{chain};
+	close $files->{chain_crt_file};
+
+	# write .chained.crt file
+	print {$files->{chained_crt_file}} $crt;
+	print {$files->{chained_crt_file}} $response->{chain};
+	close $files->{chained_crt_file};
+
+	print "\n";
+	print "Your certificate has been imported to SSLMate.\n\n";
+	print "           Private key file: " . $files->{key_filename} . "\n";
+	print "           Certificate file: " . $files->{crt_filename} . "\n";
+	print "     Certificate chain file: " . $files->{chain_crt_filename} . "\n";
+	print "Certificate with chain file: " . $files->{chained_crt_filename} . "\n";
+	return 0;
+}
+
 sub command_help {
 	my @args = @_;
 
@@ -1168,6 +1333,8 @@ sub main {
 		return command_renew @args;
 	} elsif ($command eq 'download') {
 		return command_download @args;
+	} elsif ($command eq 'import') {
+		return command_import @args;
 	} elsif ($command eq 'link') {
 		return command_link @args;
 	} elsif ($command eq 'help') {
