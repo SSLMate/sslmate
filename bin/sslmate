@@ -1087,17 +1087,15 @@ sub command_download {
 	my @args = @_;
 
 	if (@args >= 1 && $args[0] eq "-?") {
-		print "Usage: sslmate download HOSTNAME\n";
+		print "Usage: sslmate download HOSTNAME ...\n";
 		return 0;
 	}
 
-	if (@args != 1) {
+	if (@args == 0) {
 		print STDERR "Error: you must specify the hostname of the certificate to download.\n";
 		print STDERR "Example: sslmate download www.example.com\n";
 		return 2;
 	}
-
-	my $cn = $args[0];
 
 	load_config;
 	if (!is_linked) {
@@ -1110,70 +1108,87 @@ sub command_download {
 	}
 
 	init_default_paths;
-	my $paths = get_cert_paths($cn, 0);
 
-	my $response = api_call('GET', '/download',
-				{ account_id => get_config('account_id'),
-				  api_key => get_config('api_key'),
-				  cn => $cn }) or return 1;
-	if ($response->{status} eq 'error') {
-		print STDERR "Error: " . $response->{message} . "\n";
-		return 1;
-	} elsif ($response->{status} eq 'not_ready') {
-		print STDERR "Error: The certificates for $cn have not yet been issued. Please try again later.\n";
-		return 1;
-	} elsif ($response->{status} ne 'success') {
-		print STDERR "Error: unknown response from server\n";
-		return 1;
+	my @certs;
+	for my $cn (@args) {
+		my $paths = get_cert_paths($cn, 0);
+
+		my $response = api_call('GET', '/download',
+					{ account_id => get_config('account_id'),
+					  api_key => get_config('api_key'),
+					  cn => $cn }) or return 1;
+		if ($response->{status} eq 'error') {
+			print STDERR "Error: $cn: " . $response->{message} . "\n";
+			return 1;
+		} elsif ($response->{status} eq 'not_ready') {
+			print STDERR "Error: The certificates for $cn have not yet been issued. Please try again later.\n";
+			return 1;
+		} elsif ($response->{status} ne 'success') {
+			print STDERR "Error: unknown response from server\n";
+			return 1;
+		}
+
+		$response->{chain} ||= '';
+
+		if (file_contents_are($paths->{crt_filename}, $response->{crt}) &&
+				file_contents_are($paths->{chain_crt_filename}, $response->{chain}) &&
+				file_contents_are($paths->{chained_crt_filename}, $response->{crt} . $response->{chain})) {
+
+			# Certs did not change
+			next;
+		}
+
+		push @certs, { cn => $cn, paths => $paths, response => $response };
 	}
 
-	$response->{chain} ||= '';
-
-	if (file_contents_are($paths->{crt_filename}, $response->{crt}) &&
-			file_contents_are($paths->{chain_crt_filename}, $response->{chain}) &&
-			file_contents_are($paths->{chained_crt_filename}, $response->{crt} . $response->{chain})) {
-
-		# Certs did not change
-		print "Certificate files already downloaded and up-to-date.\n";
+	if (@certs == 0) {
+		print "All certificate files already downloaded and up-to-date.\n";
 		return 10;
 	}
 
-	# write .crt file
-	my $crt_file = File::Temp->new(DIR => dirname($paths->{crt_filename}), TEMPLATE => '.sslmate.XXXXXX');
-	chmod(0666 & ~umask, $crt_file);
-	print $crt_file $response->{crt};
-	close $crt_file;
+	for my $cert (@certs) {
+		my $cn		= $cert->{cn};
+		my $paths	= $cert->{paths};
+		my $response	= $cert->{response};
 
-	# write .chain.crt file
-	my $chain_crt_file = File::Temp->new(DIR => dirname($paths->{crt_filename}), TEMPLATE => '.sslmate.XXXXXX');
-	chmod(0666 & ~umask, $chain_crt_file);
-	print $chain_crt_file $response->{chain};
-	close $chain_crt_file;
+		# write .crt file
+		my $crt_file = File::Temp->new(DIR => dirname($paths->{crt_filename}), TEMPLATE => '.sslmate.XXXXXX');
+		chmod(0666 & ~umask, $crt_file);
+		print $crt_file $response->{crt};
+		close $crt_file;
 
-	# write .chained.crt file
-	my $chained_crt_file = File::Temp->new(DIR => dirname($paths->{crt_filename}), TEMPLATE => '.sslmate.XXXXXX');
-	chmod(0666 & ~umask, $chained_crt_file);
-	print $chained_crt_file $response->{crt};
-	print $chained_crt_file $response->{chain};
-	close $chained_crt_file;
+		# write .chain.crt file
+		my $chain_crt_file = File::Temp->new(DIR => dirname($paths->{crt_filename}), TEMPLATE => '.sslmate.XXXXXX');
+		chmod(0666 & ~umask, $chain_crt_file);
+		print $chain_crt_file $response->{chain};
+		close $chain_crt_file;
 
-	# Rename the new files on top of the old files:
-	rename($crt_file->filename, $paths->{crt_filename})
-			or die "Error: " . $paths->{crt_filename} . ' ' . $! . "\n";
-	$crt_file->unlink_on_destroy(0);
+		# write .chained.crt file
+		my $chained_crt_file = File::Temp->new(DIR => dirname($paths->{crt_filename}), TEMPLATE => '.sslmate.XXXXXX');
+		chmod(0666 & ~umask, $chained_crt_file);
+		print $chained_crt_file $response->{crt};
+		print $chained_crt_file $response->{chain};
+		close $chained_crt_file;
 
-	rename($chain_crt_file->filename, $paths->{chain_crt_filename})
-			or die "Error: " . $paths->{chain_crt_filename} . ' ' . $! . "\n";
-	$chain_crt_file->unlink_on_destroy(0);
+		# Rename the new files on top of the old files:
+		rename($crt_file->filename, $paths->{crt_filename})
+				or die "Error: " . $paths->{crt_filename} . ' ' . $! . "\n";
+		$crt_file->unlink_on_destroy(0);
 
-	rename($chained_crt_file->filename, $paths->{chained_crt_filename})
-			or die "Error: " . $paths->{chained_crt_filename} . ' ' . $! . "\n";
-	$chained_crt_file->unlink_on_destroy(0);
+		rename($chain_crt_file->filename, $paths->{chain_crt_filename})
+				or die "Error: " . $paths->{chain_crt_filename} . ' ' . $! . "\n";
+		$chain_crt_file->unlink_on_destroy(0);
 
-	print "Your certificate has been downloaded.\n\n";
-	print "           Certificate file: " . $paths->{crt_filename} . "\n";
-	print "     Certificate chain file: " . $paths->{chain_crt_filename} . "\n";
-	print "Certificate with chain file: " . $paths->{chained_crt_filename} . "\n";
+		rename($chained_crt_file->filename, $paths->{chained_crt_filename})
+				or die "Error: " . $paths->{chained_crt_filename} . ' ' . $! . "\n";
+		$chained_crt_file->unlink_on_destroy(0);
+
+		print "The certificate for $cn has been downloaded.\n\n";
+		print "           Certificate file: " . $paths->{crt_filename} . "\n";
+		print "     Certificate chain file: " . $paths->{chain_crt_filename} . "\n";
+		print "Certificate with chain file: " . $paths->{chained_crt_filename} . "\n";
+		print "\n";
+	}
 	return 0;
 }
 
