@@ -1,0 +1,3 @@
+MANIFEST			This list of files
+Makefile.PL
+bin/sslmate

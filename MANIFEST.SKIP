@@ -1,0 +1,17 @@
+# Version control files and dirs:
+\B\.git\b
+
+# Makemaker-generated files and dirs:
+^MANIFEST\.
+^Makefile$
+^Makefile.old$
+^blib/
+^MakeMaker-\d
+^pm_to_blib
+
+# Temp, old, and backup files:
+~$
+\.old$
+\.swp$
+^#.*#$
+^\.#

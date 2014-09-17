@@ -1,0 +1,1183 @@
+#!/usr/bin/perl
+
+#
+# Copyright (C) 2014 Opsmate, Inc.
+# All rights reserved.
+#
+# Redistribution and use, in source and binary forms, without
+# modification, is permitted for the sole purpose of using the SSLMate
+# service available at https://sslmate.com
+#
+# Use of this program is governed by the Terms and Conditions available
+# online at https://sslmate.com/terms
+#
+
+use strict;
+use warnings;
+use Errno;
+use Fcntl;
+use File::Basename;
+use File::Temp;
+use IO::Handle;
+				# Debian/Ubuntu package		RHEL/CentOS package
+				# --------------------------------------------------
+use WWW::Curl::Easy;		# libwww-curl-perl		perl-WWW-Curl
+use URI::Escape;		# liburi-perl			perl-URI
+use JSON;			# libjson-perl			perl-JSON
+use Term::ReadKey;		# libterm-readkey-perl		perl-TermReadKey
+
+BEGIN {
+	# WWW::Curl didn't export CURLPROTO_ constants before 4.15
+	local $@;
+	eval 'CURLPROTO_HTTP(); 1'  or *CURLPROTO_HTTP  = sub () { 1 << 0 };
+	eval 'CURLPROTO_HTTPS(); 1' or *CURLPROTO_HTTPS = sub () { 1 << 1 };
+}
+
+our ($VERSION, $API_ENDPOINT, $GLOBAL_CONFIG_PATH);
+$VERSION = '0.400';
+$API_ENDPOINT = 'https://sslmate.com/api/v1';
+$GLOBAL_CONFIG_PATH = '/etc/sslmate.conf';
+
+our %global_config;
+our %personal_config;
+our $country_code;
+our $curl;
+
+sub print_usage {
+	my ($out) = @_;
+
+	print $out "Usage: sslmate COMMAND [ARGS]\n";
+	print $out "\n";
+	print $out "Commands:\n";
+	print $out " sslmate buy HOSTNAME          Buy a certificate for the given hostname\n";
+	print $out " sslmate renew HOSTNAME        Renew the certificate for the given hostname\n";
+	print $out " sslmate reissue HOSTNAME      Reissue the certificate for given hostname\n";
+	print $out " sslmate revoke [-a] HOSTNAME  Reissue the certificate for given hostname\n";
+	print $out " sslmate download HOSTNAME     Download the certificate for given hostname\n";
+	print $out " sslmate link                  Link this system with your SSLMate account\n";
+	print $out " sslmate help                  Display help\n";
+	print $out " sslmate version               Print the version of SSLMate that's installed\n";
+	print $out "\n";
+	print $out "Run 'sslmate help COMMAND' for more information on a specific command.\n";
+}
+
+sub new_curl {
+	my $curl = WWW::Curl::Easy->new;
+	$curl->setopt(CURLOPT_PROTOCOLS, CURLPROTO_HTTP|CURLPROTO_HTTPS); # Only allow safe protocols (not SMTP, SSH, etc.)
+	$curl->setopt(CURLOPT_FOLLOWLOCATION, 1);		# Follow redirects
+	$curl->setopt(CURLOPT_MAXREDIRS, 20);			# Allow at most 20 redirections
+	$curl->setopt(CURLOPT_SSL_VERIFYPEER, 1);		# Check certificates
+	$curl->setopt(CURLOPT_SSL_VERIFYHOST, 2);		# Check certificates (2 is not a typo)
+	$curl->setopt(CURLOPT_USERAGENT, "SSLMate/$VERSION");
+	return $curl;
+}
+
+sub prompt_user {
+	my ($message) = @_;
+
+	print $message;
+	my $answer = <STDIN>;
+	die "Error: Input ended prematurely.\n" unless defined($answer);
+	chomp $answer;
+	return $answer;
+}
+
+sub prompt_yesno {
+	while (my $answer = prompt_user("Enter yes or no: ")) {
+		if ($answer eq 'yes') {
+			return 1;
+		} elsif ($answer eq 'no') {
+			return 0;
+		} else {
+			print "I did not understand that.\n";
+		}
+	}
+}
+
+sub prompt_password {
+	my ($message) = @_;
+
+	print $message;
+
+	my $password = '';
+	ReadMode(4);
+	while (my $key = ReadKey(0)) {
+		if ($key eq "\n" || $key eq "\r" || ord($key) == 4) { # 4 == Ctrl+D
+			print "\n";
+			last;
+		} elsif (ord($key) == 3) { # 3 == Ctrl+C
+			$password = undef;
+			last;
+		} elsif ($key eq "\b" || ord($key) == 127) { # 127 == DEL
+			if ($password ne '') {
+				chop $password;
+				print "\b \b";
+			}
+		} else {
+			$password = $password . $key;
+			print "*";
+		}
+	}
+	ReadMode(0);
+
+	return $password;
+}
+
+sub config_has {
+	my ($name) = @_;
+
+	return defined $personal_config{$name} || defined $global_config{$name};
+}
+
+sub get_config {
+	my ($name) = @_;
+
+	return $personal_config{$name} if defined $personal_config{$name};
+	return $global_config{$name}   if defined $global_config{$name};
+
+	return undef;
+}
+
+sub migrate_config_option {
+	my ($config_ref, $old_name, $new_name) = @_;
+
+	if (exists $config_ref->{$old_name}) {
+		$config_ref->{$new_name} = $config_ref->{$old_name} unless exists $config_ref->{$new_name};
+		delete $config_ref->{$old_name};
+	}
+}
+
+sub read_config_file {
+	my ($filename) = @_;
+
+	open(my $config_fh, '<', $filename) or die "Error: Unable to open $filename for reading: $!\n";
+	my %config_hash = map { my @f = split(' ', $_, 2); $f[0] => $f[1] } grep(/^[^#]/, map { chomp; $_ } <$config_fh>);
+	close($config_fh);
+	migrate_config_option(\%config_hash, 'api-endpoint', 'api_endpoint');
+	migrate_config_option(\%config_hash, 'account-id', 'account_id');
+	migrate_config_option(\%config_hash, 'api-key', 'api_key');
+	return %config_hash;
+}
+sub write_config_file {
+	my ($filename, $config_ref) = @_;
+	
+	sysopen(my $config_fh, $filename, O_WRONLY | O_CREAT, 0600) or die "Error: Unable to open $filename for writing: $!\n";
+	for my $param_name (keys %$config_ref) {
+		print $config_fh $param_name . ' ' . $config_ref->{$param_name} . "\n";
+	}
+	close($config_fh);
+}
+sub get_personal_config_file_path {
+	return $ENV{'SSLMATE_CONFIG'} if $ENV{'SSLMATE_CONFIG'};
+	return $ENV{'HOME'} . '/.sslmate' if $ENV{'HOME'};
+	die "Error: Neither \$SSLMATE_CONFIG nor \$HOME environment variables set.\n";
+}
+sub load_config {
+	# Personal config
+	%personal_config = ();
+
+	my $personal_config_path = get_personal_config_file_path;
+	if (-e $personal_config_path) {
+		%personal_config = read_config_file($personal_config_path);
+	}
+
+	# Global config
+	%global_config = ();
+
+	# /etc/sslmate.conf might be readable only by root, so only attempt
+	# to access if it's readable.
+	if (-r $GLOBAL_CONFIG_PATH) {
+		%global_config = read_config_file($GLOBAL_CONFIG_PATH);
+	}
+}
+sub save_config {
+	write_config_file(get_personal_config_file_path, \%personal_config);
+}
+sub is_linked {
+	return config_has('account_id') && config_has('api_key');
+}
+
+sub init_default_paths {
+	if (!config_has("key_directory") && !config_has("cert_directory")) {
+		if ($> == 0) {
+			if (!mkdir('/etc/sslmate', 0755)) {
+				die "Error: Unable to create /etc/sslmate: $!\n" unless $!{EEXIST};
+			}
+			$global_config{'key_directory'} = '/etc/sslmate';
+			$global_config{'cert_directory'} = '/etc/sslmate';
+		}
+	}
+}
+
+sub file_contents_are {
+	my ($filename, $contents) = @_;
+	open(my $fh, '<', $filename) or return 0;
+	my $actual_contents = do { local $/; <$fh> };
+	return $actual_contents eq $contents;
+}
+
+sub make_openssl_req_cnf {
+	my ($cn) = @_;
+	my $tempfile = File::Temp->new();
+	print $tempfile <<EOF;
+[ req ]
+distinguished_name	= req_distinguished_name
+prompt			= no
+[ req_distinguished_name ]
+C			= $country_code
+ST			= Some-State
+O			= Internet Widgits Pty Ltd
+CN			= $cn
+EOF
+	close $tempfile;
+	return $tempfile;
+}
+
+sub get_cert_paths {
+	my ($cn, $key_too) = @_;
+
+	my $key_directory = config_has("key_directory") ? get_config("key_directory") . "/" : "";
+	my $cert_directory = config_has("cert_directory") ? get_config("cert_directory") . "/" : "";
+
+	my $paths = {};
+	if ($key_too) {
+		$paths->{key_filename} = $key_directory . $cn . ".key";
+	}
+	$paths->{crt_filename} = $cert_directory . $cn . ".crt";
+	$paths->{chain_crt_filename} = $cert_directory . $cn . ".chain.crt";
+	$paths->{chained_crt_filename} = $cert_directory . $cn . ".chained.crt";
+	return $paths;
+}
+
+sub open_cert_files {
+	my ($cn, $force, $key_too) = @_;
+	my $files = get_cert_paths($cn, $key_too);
+
+	my $already_exists = 0;
+	my $open_errors = 0;
+
+	my $try_open = sub {
+		my ($filename, $mode) = @_;
+
+		my $fh;
+		my $flags = O_WRONLY | O_CREAT;
+		$flags |= O_EXCL unless $force;
+		if (!sysopen($fh, $filename, $flags, $mode)) {
+			if ($!{EEXIST}) {
+				print STDERR "Error: a file named '$filename' already exists.\n";
+				$already_exists++;
+			} else {
+				print STDERR "Error: unable to open '$filename' for writing: $!\n";
+				$open_errors++;
+			}
+			return undef;
+		}
+		return $fh;
+	};
+	if ($key_too) {
+		$files->{key_file} = $try_open->($files->{key_filename}, 0600);
+	}
+	$files->{crt_file} = $try_open->($files->{crt_filename}, 0666);
+	$files->{chain_crt_file} = $try_open->($files->{chain_crt_filename}, 0666);
+	$files->{chained_crt_file} = $try_open->($files->{chained_crt_filename}, 0666);
+
+	if ($already_exists) {
+		die "Please move/remove " . ($already_exists == 1 ? "this file" : "these files") . (!config_has("key_directory") && !config_has("cert_directory") ? " or run sslmate from a different directory" : "") . ".\n";
+	} elsif ($open_errors) {
+		die "Unable to open one or more key/cert files. See above for details.\n";
+	}
+
+	$files->{cleanup} = sub {
+		my ($cleanup_key_too) = @_;
+		for (qw/crt_filename chain_crt_filename chained_crt_filename/) {
+			unlink($files->{$_});
+		}
+		if ($key_too && $cleanup_key_too) {
+			unlink($files->{key_filename});
+		}
+	};
+
+	return $files;
+}
+
+sub qs_escape {
+	my ($str) = @_;
+	return uri_escape_utf8($str, '^A-Za-z0-9\-\._');
+}
+
+sub api_call {
+	my ($method, $command, $request_data) = @_;
+
+	if (ref($request_data) eq 'HASH') {
+		# Convert into a query string
+		$request_data = join('&', map { defined($request_data->{$_}) ? qs_escape($_) . '=' . qs_escape($request_data->{$_}) : () } keys %$request_data);
+		#print STDERR "||$request_data||\n";
+	}
+
+	$curl ||= new_curl;
+	if ($method eq 'GET') {
+		$command .= "?$request_data" if $request_data;
+		$curl->setopt(CURLOPT_HTTPGET, 1);
+	} elsif ($method eq 'POST') {
+		$curl->setopt(CURLOPT_POSTFIELDS, $request_data);
+		$curl->setopt(CURLOPT_POSTFIELDSIZE, length $request_data);
+	}
+	$curl->setopt(CURLOPT_URL, (get_config('api_endpoint') || $API_ENDPOINT) . $command);
+
+	my $response_data;
+	$curl->setopt(CURLOPT_WRITEDATA, \$response_data);
+
+	my $result = $curl->perform;
+	if ($result != 0) {
+		print STDERR "Error: unable to contact SSLMate server: " . $curl->strerror($result) . "\n";
+		undef $curl;
+		return undef;
+	}
+	my $content_type = $curl->getinfo(CURLINFO_CONTENT_TYPE) || '';
+	my $http_status = $curl->getinfo(CURLINFO_HTTP_CODE);
+
+	if ($content_type ne 'application/json') {
+		print STDERR "Error: received unexpected response from SSLMate server: response not JSON (content-type=$content_type; status=$http_status)\n";
+		return undef;
+	}
+	
+	my $response_obj = eval { from_json($response_data) };
+	if (!defined($response_obj)) {
+		chomp $@;
+		print STDERR "Error: received malformed response from SSLMate server: $@\n";
+		return undef;
+	}
+	if (!defined($response_obj->{status})) {
+		print STDERR "Error: received invalid response from SSLMate server: no status field\n";
+		return undef;
+	}
+	return $response_obj;
+}
+
+sub openssl_genrsa {
+	my ($key_file, $nbits) = @_;
+
+	print STDERR "Generating private key... ";
+	STDERR->flush;
+	my $openssl_pid = fork;
+	die "Error: fork failed: $!" unless defined $openssl_pid;
+	if ($openssl_pid == 0) {
+		open(STDIN, '<', '/dev/null');
+		open(STDOUT, '>&', $key_file) or die "Error: dup failed: $!";
+		exec('openssl', 'genrsa', $nbits);
+		die "Error: Unable to run 'openssl genrsa' command: " . ($!{ENOENT} ? 'openssl command not found' : $!) . "\n";
+	}
+	waitpid($openssl_pid, 0) or die "waitpid failed: $!";
+	die "Error: 'openssl genrsa' command failed.\n" unless $? == 0;
+
+	print STDERR "Done.\n";
+}
+
+sub openssl_req {
+	my ($key_filename, $cn) = @_;
+
+	print STDERR "Generating CSR... ";
+	STDERR->flush;
+	my $openssl_req_cnf = make_openssl_req_cnf($cn);
+	pipe(my $openssl_reader, my $openssl_writer) or die "Error: pipe failed: $!";
+	my $openssl_pid = fork;
+	die "Error: fork failed: $!" unless defined $openssl_pid;
+	if ($openssl_pid == 0) {
+		open(STDIN, '<', '/dev/null');
+		open(STDOUT, '>&', $openssl_writer) or die "Error: dup failed: $!";
+		close($openssl_reader);
+		$ENV{'CN'} = $cn;
+		$ENV{'COUNTRY_CODE'} = $country_code;
+		exec('openssl', 'req', '-new', '-key', $key_filename, '-config', $openssl_req_cnf->filename);
+		die "Error: Unable to run 'openssl req' command: " . ($!{ENOENT} ? 'openssl command not found' : $!) . "\n";
+	}
+	close($openssl_writer);
+
+	my $csr_data = do { local $/; <$openssl_reader> };
+	close($openssl_reader);
+
+	waitpid($openssl_pid, 0) or die "Error: waitpid failed: $!";
+	die "Error: 'openssl req' command failed - is $key_filename a valid key file?\n" unless $? == 0;
+
+	print STDERR "Done.\n";
+	return $csr_data;
+}
+
+sub wait_for_cert {
+	my ($cert_instance_id) = @_;
+
+	my $start_time = time;
+	my $warn_after = $start_time + 180;
+	my $timeout_after = $start_time + 600;
+	my $warned = 0;
+
+	while (1) {
+		my $now = time;
+		my $poll = 0;
+		if ($now < $warn_after) {
+			$poll = $warn_after - $now;
+		} elsif ($now < $timeout_after) {
+			$poll = $timeout_after - $now;
+		}
+
+		$poll = 180 if $poll > 180; # upper bound of 180 seconds
+		
+		my $response = api_call('GET', "/download/$cert_instance_id", { account_id => get_config('account_id'), api_key => get_config('api_key'), poll => $poll });
+		return unless defined $response; # TODO: repeat ? b/c this could be a timeout situation
+
+		if ($response->{status} eq 'success') {
+			return ($response->{crt}, $response->{chain});
+		} elsif ($response->{status} eq 'not_ready') {
+			my $now = time;
+			my $retry_after = $response->{retry_after};
+			if ($now < $warn_after) {
+				$retry_after = 1 if $retry_after < 1; # lower bound of 1 second
+			} elsif ($now < $timeout_after) {
+				if (not $warned) {
+					print STDERR "Sorry, your certificate isn't ready yet. I'll keep waiting, but if you'd rather do this later, you can hit Ctrl+C and we'll send your certificate by email instead.\n";
+					$warned = 1;
+				}
+				$retry_after = 10 if $retry_after < 10; # lower bound of 10 seconds
+			} else {
+				# Timed out
+				print STDERR "Sorry, your certificate still isn't ready. We'll send you an email when it's ready.\n";
+				return;
+			}
+			sleep($retry_after);
+		} elsif ($response->{status} eq 'error') {
+			print STDERR "Error: " . $response->{message} . "\n";
+			return;
+		} else {
+			print STDERR "Error: unknown response from server.\n";
+			return;
+		}
+	}
+}
+
+sub format_money {
+	my ($amount) = @_;
+	return sprintf("%.2f", $amount / 100);
+}
+
+sub prompt_for_approver_email {
+	my ($approver_emails) = @_;
+
+	my $num_emails = int(@$approver_emails);
+
+	print "\n";
+	print "We need to send you an email to verify that you own this domain.\n";
+	print "Where should we send this email?\n";
+	print "\n";
+	my $i = 1;
+	for my $email (@$approver_emails) {
+		print "$i. $email\n";
+		$i++;
+	}
+
+	my $mesg = "Enter 1-$num_emails (or q to quit): ";
+
+	while (1) {
+		my $answer = prompt_user($mesg);
+		if ($answer eq 'q') {
+			return undef;
+		} elsif ($answer ne '') {
+			if (!Scalar::Util::looks_like_number($answer) || $answer < 1 || $answer > $num_emails) {
+				print "That is not a number between 1 and $num_emails.\n";
+			} else {
+				return $approver_emails->[$answer - 1];
+			}
+		}
+	}
+}
+
+sub prompt_for_order_confirmation {
+	my ($data) = @_;
+
+	print "\n";
+	print "============ Order summary ============\n";
+	print "     Host Name: " . $data->{cn};
+	if ($data->{cn} =~ /^www\.(.*)$/) {
+		print " and $1";
+	}
+	print "\n";
+	if ($data->{years} == 1) {
+		print "       Product: 1 Year " . ($data->{is_wildcard} ? "Wildcard SSL" : "Standard SSL") . "\n";
+		print "         Price: " . format_money($data->{price}) . "\n";
+	} else {
+		print "       Product: " . ($data->{is_wildcard} ? "Wildcard SSL" : "Standard SSL") . "\n";
+		print "         Price: " . format_money($data->{price}) . " / year\n";
+		print "         Years: " . $data->{years} . "\n";
+	}
+	if (defined $data->{auto_renew}) {
+		print "    Auto-Renew: " . ($data->{auto_renew} ? "Yes" : "No") . "\n";
+	}
+	if (defined $data->{approver_email}) {
+		print "Approver Email: " . $data->{approver_email} . "\n";
+	}
+	print "\n";
+	print "=========== Payment details ===========\n";
+	if ($data->{amount_due}) {
+		print " Credit Card: " . $data->{cc_type} . " ending in " . $data->{cc_last4} . "\n";
+	}
+	if ($data->{coupon_discount}) {
+		print "    Discount: " . format_money($data->{coupon_discount}) . " (USD)\n";
+	}
+	print "  Amount Due: " . format_money($data->{amount_due}) . " (USD)\n";
+	print "\n";
+
+	while (1) {
+		my $answer = prompt_user('Press ENTER to confirm order (or q to quit): ');
+		if ($answer eq '') {
+			return 1;
+		} elsif ($answer eq 'q') {
+			return 0;
+		}
+	}
+}
+
+sub get_country_code_from_server {
+	my $response = api_call('POST', '/link',
+				{ account_id => get_config('account_id'),
+				  api_key => get_config('api_key') });
+	return 0 unless defined $response;
+
+	if ($response->{status} eq 'success') {
+		unless ($response->{country_code}) {
+			print STDERR "Error: your account does not have contact details on file.  Please visit https://sslmate.com/account to set your contact details.\n";
+			return 0;
+		}
+		$country_code = $response->{country_code};
+		return 1;
+	} elsif ($response->{status} eq 'error') {
+		print STDERR "Error: " . $response->{message} . "\n";
+		return 0;
+	} else {
+		print STDERR "Error: unknown response from server.\n";
+		return 0;
+	}
+}
+
+sub do_link {
+	print "If you don't have an account yet, visit https://sslmate.com/signup\n";
+	my $username = prompt_user("Enter your SSLMate username: ");
+	my $password = prompt_password("Enter your SSLMate password: ");
+	print "Linking account... ";
+	STDOUT->flush;
+
+	my $response = api_call('POST', '/link', { account_username => $username, account_password => $password });
+	return 0 if not defined $response;
+
+	if ($response->{status} eq 'success') {
+		if (not defined $response->{api_key} || not defined $response->{country_code}) {
+			print STDERR "Error: your account does not have contact details on file.  Please visit https://sslmate.com/account to set your contact details.\n";
+			return 0;
+		}
+		$personal_config{"account_id"} = $response->{account_id};
+		$personal_config{"api_key"} = $response->{api_key};
+		$country_code = $response->{country_code};
+		save_config;
+		print "Done.\n";
+		return 1;
+	} elsif ($response->{status} eq 'error') {
+		print STDERR "Error: " . $response->{message} . "\n";
+		return 0;
+	} else {
+		print STDERR "Error: unknown response from server.\n";
+		return 0;
+	}
+}
+
+sub command_link {
+	my @args = @_;
+
+	if (@args >= 1 && $args[0] eq "-?") {
+		print "Usage: sslmate link\n";
+		return 0;
+	} elsif (@args > 0) {
+		print STDERR "Error: sslmate link takes no arguments.\n";
+		print STDERR "Usage: sslmate link\n";
+		return 2;
+	}
+
+	load_config;
+
+	print STDERR "Note: sslmate has already been linked with an account.\nContinue to link it with a different account, or press Ctrl+C to exit.\n" if is_linked;
+
+	do_link or return 1;
+
+	return 0;
+}
+
+sub do_wait_for_cert {
+	my ($response, $files) = @_;
+
+	my $exit_with_error = sub {
+		$files->{cleanup}->(0);
+		exit 1;
+	};
+
+	print "You will soon receive an email at " . $response->{approver_email} . " from " . $response->{approval_from} . ". Follow the instructions in the email to verify your ownership of your domain. Once you've verified ownership, your certs will be automatically downloaded.\n\n";
+	print "If you'd rather do this later, you can hit Ctrl+C and your certs will be delivered over email instead.\n\n";
+	print "Waiting for ownership confirmation...\n";
+
+	my ($crt, $chain_crt) = wait_for_cert($response->{cert_instance_id}) or $exit_with_error->();
+	$chain_crt ||= '';
+
+	# write .crt file
+	print {$files->{crt_file}} $crt;
+	close $files->{crt_file};
+
+	# write .chain.crt file
+	print {$files->{chain_crt_file}} $chain_crt;
+	close $files->{chain_crt_file};
+
+	# write .chained.crt file
+	print {$files->{chained_crt_file}} $crt;
+	print {$files->{chained_crt_file}} $chain_crt;
+	close $files->{chained_crt_file};
+
+	print "\n";
+	print "Your certificate is ready for use!\n\n";
+	if ($files->{key_filename}) {
+		print "           Private key file: " . $files->{key_filename} . "\n";
+	}
+	print "           Certificate file: " . $files->{crt_filename} . "\n";
+	print "     Certificate chain file: " . $files->{chain_crt_filename} . "\n";
+	print "Certificate with chain file: " . $files->{chained_crt_filename} . "\n";
+	#print "\n";
+	#print "(" . $files->{chained_crt_filename} . " is the concatenation of " . $files->{crt_filename} . " and " . $files->{chain_crt_filename} . "; consult your program's documentation to determine whether you specify the certificate and chain in separate files or in one file.)\n";
+}
+
+sub do_buy {
+	my ($cn, $years, $force, $auto_renew, $coupon_code) = @_;
+
+	# Future TODO: support reusing key file if one already exists
+
+	my $files = open_cert_files($cn, $force, 1);
+
+	my $exit_with_error = sub {
+		$files->{cleanup}->(1);
+		exit 1;
+	};
+
+	# 1. Generate an RSA key
+	openssl_genrsa($files->{key_file}, 2048);
+	close($files->{key_file});
+
+	# 2. Generate the CSR
+	my $csr = openssl_req($files->{key_filename}, $cn);
+
+	# 3. Buy the certificate from SSLMate
+	my $request = { account_id	=> get_config('account_id'),
+			api_key		=> get_config('api_key'),
+			csr		=> $csr,
+			years		=> $years,
+			auto_renew	=> $auto_renew,
+			coupon_code	=> $coupon_code };
+
+	print STDERR "Submitting order...\n";
+	my $response = api_call('POST', '/buy', $request) or $exit_with_error->();
+
+	while ($response->{status} eq 'need_confirmation') {
+		if ($response->{currency} ne "USD") {
+			print STDERR "Error: this version of the sslmate command does not support non-USD currencies. Please download a new version as per the instructions at https://sslmate.com.\n";
+			$exit_with_error->();
+		}
+		if ($response->{cn_is_bare_domain}) {
+			my $www_cn = "www.$cn";
+			print STDERR "\n";
+			print STDERR "WARNING: This certificate will not be valid for $www_cn.\n";
+			print STDERR "Would you rather generate a certificate that will work with both $www_cn AND $cn?\n\n";
+			if (prompt_yesno) {
+				$files->{cleanup}->(1);
+				return do_buy($www_cn, $years, $force, $auto_renew, $coupon_code);
+			}
+		}
+
+		# Prompt user to choose an approver email and to confirm the order:
+		my $approver_email = prompt_for_approver_email($response->{approver_emails}) or $exit_with_error->();
+		prompt_for_order_confirmation($response) or $exit_with_error->();
+
+		# Repeat /buy call with confirmed price and approver email address
+		$request->{authorized_charge} = $response->{amount_due};
+		$request->{authorized_charge_currency} = $response->{currency};
+		$request->{approver_email} = $approver_email;
+		print STDERR "Placing order...\n";
+		$response = api_call('POST', '/buy', $request) or $exit_with_error->();
+	}
+
+	if ($response->{status} eq 'error') {
+		print STDERR "Error: " . $response->{message} . "\n";
+		$exit_with_error->();
+	} elsif ($response->{status} ne 'success') {
+		print STDERR "Error: unknown response from server\n";
+		$exit_with_error->();
+	}
+
+	print "Order complete.\n\n";
+	return do_wait_for_cert($response, $files);
+}
+
+sub command_buy {
+	my @args = @_;
+
+	if (@args >= 1 && $args[0] eq "-?") {
+		print "Usage: sslmate buy [OPTIONS] HOSTNAME [YEARS]\n\n";
+		print "Example: sslmate buy www.example.com\n";
+		print "         sslmate buy '*.example.com'\n";
+		print "\n";
+		print "Valid options:\n";
+		print " -f, --force        overwrite existing files\n";
+		print " --auto-renew       automatically renew this certificate before it expires\n";
+		print " --no-auto-renew    don't automatically renew this certificate\n";
+		print " --coupon=CODE      use the given coupon code for a discount\n";
+		return 0;
+	}
+
+	my $auto_renew = undef;
+	my $coupon_code = undef;
+	my $force = 0;
+	while (@args >= 1) {
+		if ($args[0] eq "-f" || $args[0] eq "--force") {
+			$force = 1;
+			shift @args;
+		} elsif ($args[0] eq "--auto-renew") {
+			$auto_renew = 1;
+			shift @args;
+		} elsif ($args[0] eq "--no-auto-renew") {
+			$auto_renew = 0;
+			shift @args;
+		} elsif ($args[0] =~ /^--coupon=(.*)$/) {
+			$coupon_code = $1;
+			shift @args;
+		} else {
+			last;
+		}
+	}
+
+	if (@args != 1 && @args != 2) {
+		print STDERR "Error: you must specify the hostname for the certificate.\n";
+		print STDERR "Example: sslmate buy www.example.com\n";
+		print STDERR "     or: sslmate buy '*.example.com'\n";
+		print STDERR "See 'sslmate help buy' for help.\n";
+		return 2;
+	}
+
+	my $cn = lc $args[0];
+	my $years = undef;
+
+	if (@args == 2) {
+		$years = $args[1];
+
+		if (!Scalar::Util::looks_like_number($years) || $years < 1 || $years > 5) {
+			print STDERR "Error: number of years must be between 1 and 5, inclusive.\n";
+			return 1;
+		}
+	}
+
+	load_config;
+	if (!is_linked) {
+		unless (-t STDIN) {
+			print STDERR "Error: you have not yet linked this system with your SSLMate account.\n";
+			print STDERR "Please run 'sslmate link'.\n";
+			return 1;
+		}
+		do_link or return 1;
+	}
+
+	get_country_code_from_server or return 1;
+	init_default_paths;
+	do_buy($cn, $years, $force, $auto_renew, $coupon_code);
+	return 0;
+}
+
+sub command_reissue {
+	my @args = @_;
+
+	if (@args >= 1 && $args[0] eq "-?") {
+		print "Usage: sslmate reissue [OPTIONS] HOSTNAME\n\n";
+		print "Example: sslmate reissue www.example.com\n";
+		print "\n";
+		print "Valid options:\n";
+		print " -f, --force        overwrite existing files\n";
+		return 0;
+	}
+
+	my $force = 0;
+	while (@args >= 1) {
+		if ($args[0] eq "-f" || $args[0] eq '--force') {
+			$force = 1;
+			shift @args;
+		} else {
+			last;
+		}
+	}
+
+	if (@args != 1) {
+		print STDERR "Error: you must specify the hostname of the certificate to reissue.\n";
+		print STDERR "Example: sslmate reissue www.example.com\n";
+		return 2;
+	}
+
+	my $cn = $args[0];
+
+	load_config;
+	if (!is_linked) {
+		unless (-t STDIN) {
+			print STDERR "Error: you have not yet linked this system with your SSLMate account.\n";
+			print STDERR "Please run 'sslmate link'.\n";
+			return 1;
+		}
+		do_link or return 1;
+	}
+
+	get_country_code_from_server or return 1;
+	init_default_paths;
+
+	my $files = open_cert_files($cn, $force, 1);
+
+	my $exit_with_error = sub {
+		$files->{cleanup}->(1);
+		exit 1;
+	};
+
+	# 1. Generate an RSA key
+	openssl_genrsa($files->{key_file}, 2048);
+	close($files->{key_file});
+
+	# 2. Generate the CSR
+	my $csr = openssl_req($files->{key_filename}, $cn);
+
+	# 3. Reissue the certificate from SSLMate
+	my $request = { account_id	=> get_config('account_id'),
+			api_key		=> get_config('api_key'),
+			csr		=> $csr };
+
+	print STDERR "Reissuing cert...\n";
+	my $response = api_call('POST', '/reissue', $request) or $exit_with_error->();
+
+	if ($response->{status} eq 'error') {
+		print STDERR "Error: " . $response->{message} . "\n";
+		$exit_with_error->();
+	} elsif ($response->{status} ne 'success') {
+		print STDERR "Error: unknown response from server\n";
+		$exit_with_error->();
+	}
+
+	print "Reissue complete.\n\n";
+	return do_wait_for_cert($response, $files);
+}
+
+sub command_revoke {
+	my @args = @_;
+
+	if (@args >= 1 && $args[0] eq "-?") {
+		print "Usage: sslmate revoke [-a] HOSTNAME\n";
+		print "By default, sslmate revokes all but the most recent certificate for HOSTNAME.\n";
+		print "To revoke all certificates, even the most recent, include the -a option.\n";
+		return 0;
+	}
+
+	my $all = 0;
+	while (@args >= 1) {
+		if ($args[0] eq "-a" || $args[0] eq "--all") {
+			$all = 1;
+			shift @args;
+		} else {
+			last;
+		}
+	}
+
+	if (@args != 1) {
+		print STDERR "Error: you must specify the hostname of the certificate to revoke.\n";
+		print STDERR "Example: sslmate revoke www.example.com\n";
+		return 2;
+	}
+
+	my $cn = $args[0];
+
+	load_config;
+	if (!is_linked) {
+		unless (-t STDIN) {
+			print STDERR "Error: you have not yet linked this system with your SSLMate account.\n";
+			print STDERR "Please run 'sslmate link'.\n";
+			return 1;
+		}
+		do_link or return 1;
+	}
+
+	print STDERR "Revoking cert...\n";
+
+	my $response = api_call('POST', '/revoke',
+				{ account_id =>	get_config('account_id'),
+				  api_key =>	get_config('api_key'),
+				  cn =>		$cn,
+				  all =>	$all }) or return 1;
+
+	if ($response->{status} eq 'error') {
+		print STDERR "Error: " . $response->{message} . "\n";
+		return 1;
+	} elsif ($response->{status} ne 'success' && $response->{status} ne 'pending') {
+		print STDERR "Error: unknown response from server\n";
+		return 1;
+	}
+
+	if ($response->{num_revoked} == 0 && $response->{num_active} == 0) {
+		print STDERR "Error: your account contains no active certificates for '$cn'.\n";
+		return 1;
+	} elsif ($response->{num_revoked} == 0) {
+		print STDERR "Error: the certificate for '$cn' is still in use.\n";
+		print STDERR "Before revoking this certificate, please re-issue it by running 'sslmate reissue $cn'.  Alternatively, if you want to revoke this certificate even though it's still in use, pass the -a option to 'sslmate revoke'.\n";
+		return 1;
+	} else {
+		print "Successfully revoked the certificate for $cn.\n";
+		print "Please allow up to two business days for this revocation to be processed. You will receive an email when this revocation is complete.\n";
+		return 0;
+	}
+}
+
+sub command_renew {
+	my @args = @_;
+
+	if (@args >= 1 && $args[0] eq "-?") {
+		print "Usage: sslmate renew [OPTIONS] HOSTNAME [YEARS]\n\n";
+		print "Example: sslmate renew www.example.com\n";
+		print "         sslmate renew '*.example.com'\n";
+		print "\n";
+		print "Valid options:\n";
+		print " -f, --force        overwrite existing files\n";
+		print " --coupon=CODE      use the given coupon code for a discount\n";
+		return 0;
+	}
+
+	my $coupon_code = undef;
+	my $force = 0;
+	while (@args >= 1) {
+		if ($args[0] eq "-f" || $args[0] eq "--force") {
+			$force = 1;
+			shift @args;
+		} elsif ($args[0] =~ /^--coupon=(.*)$/) {
+			$coupon_code = $1;
+			shift @args;
+		} else {
+			last;
+		}
+	}
+
+	if (@args != 1 && @args != 2) {
+		print STDERR "Error: you must specify the hostname for the certificate.\n";
+		print STDERR "Example: sslmate renew www.example.com\n";
+		print STDERR "     or: sslmate renew '*.example.com'\n";
+		print STDERR "See 'sslmate help renew' for help.\n";
+		return 2;
+	}
+
+	my $cn = $args[0];
+	my $years = undef;
+	if (@args == 2) {
+		$years = $args[1];
+		if (!Scalar::Util::looks_like_number($years) || $years < 1 || $years > 5) {
+			print STDERR "Error: number of years must be between 1 and 5, inclusive.\n";
+			return 1;
+		}
+	}
+
+	load_config;
+	if (!is_linked) {
+		unless (-t STDIN) {
+			print STDERR "Error: you have not yet linked this system with your SSLMate account.\n";
+			print STDERR "Please run 'sslmate link'.\n";
+			return 1;
+		}
+		do_link or return 1;
+	}
+
+	init_default_paths;
+
+	my $files = open_cert_files($cn, $force, 0);
+
+	my $exit_with_error = sub {
+		$files->{cleanup}->(0);
+		exit 1;
+	};
+
+	# Submit the order to SSLMate
+	my $request = { account_id	=> get_config('account_id'),
+			api_key		=> get_config('api_key'),
+			cn		=> $cn,
+			years		=> $years,
+			coupon_code	=> $coupon_code };
+
+	print STDERR "Submitting order...\n";
+	my $response = api_call('POST', '/renew', $request) or $exit_with_error->();
+
+	while ($response->{status} eq 'need_confirmation') {
+		if ($response->{currency} ne "USD") {
+			print STDERR "Error: this version of the sslmate command does not support non-USD currencies. Please download a new version as per the instructions at https://sslmate.com.\n";
+			$exit_with_error->();
+		}
+
+		# Prompt user to confirm the order:
+		prompt_for_order_confirmation($response) or $exit_with_error->();
+
+		# Repeat /renew call with confirmed price
+		$request->{authorized_charge} = $response->{amount_due};
+		$request->{authorized_charge_currency} = $response->{currency};
+		print STDERR "Placing order...\n";
+		$response = api_call('POST', '/renew', $request) or $exit_with_error->();
+	}
+
+	if ($response->{status} eq 'error') {
+		print STDERR "Error: " . $response->{message} . "\n";
+		$exit_with_error->();
+	} elsif ($response->{status} ne 'success') {
+		print STDERR "Error: unknown response from server\n";
+		$exit_with_error->();
+	}
+
+	print "Renewal complete.\n\n";
+	return do_wait_for_cert($response, $files);
+}
+
+sub command_download {
+	my @args = @_;
+
+	if (@args >= 1 && $args[0] eq "-?") {
+		print "Usage: sslmate download HOSTNAME\n";
+		return 0;
+	}
+
+	if (@args != 1) {
+		print STDERR "Error: you must specify the hostname of the certificate to download.\n";
+		print STDERR "Example: sslmate download www.example.com\n";
+		return 2;
+	}
+
+	my $cn = $args[0];
+
+	load_config;
+	if (!is_linked) {
+		unless (-t STDIN) {
+			print STDERR "Error: you have not yet linked this system with your SSLMate account.\n";
+			print STDERR "Please run 'sslmate link'.\n";
+			return 1;
+		}
+		do_link or return 1;
+	}
+
+	init_default_paths;
+	my $paths = get_cert_paths($cn, 0);
+
+	my $response = api_call('GET', '/download',
+				{ account_id => get_config('account_id'),
+				  api_key => get_config('api_key'),
+				  cn => $cn }) or return 1;
+	if ($response->{status} eq 'error') {
+		print STDERR "Error: " . $response->{message} . "\n";
+		return 1;
+	} elsif ($response->{status} eq 'not_ready') {
+		print STDERR "Error: The certificates for $cn have not yet been issued. Please try again later.\n";
+		return 1;
+	} elsif ($response->{status} ne 'success') {
+		print STDERR "Error: unknown response from server\n";
+		return 1;
+	}
+
+	$response->{chain} ||= '';
+
+	if (file_contents_are($paths->{crt_filename}, $response->{crt}) &&
+			file_contents_are($paths->{chain_crt_filename}, $response->{chain}) &&
+			file_contents_are($paths->{chained_crt_filename}, $response->{crt} . $response->{chain})) {
+
+		# Certs did not change
+		print "Certificate files already downloaded and up-to-date.\n";
+		return 10;
+	}
+
+	# write .crt file
+	my $crt_file = File::Temp->new(DIR => dirname($paths->{crt_filename}), TEMPLATE => '.sslmate.XXXXXX');
+	chmod(0666 & ~umask, $crt_file);
+	print $crt_file $response->{crt};
+	close $crt_file;
+
+	# write .chain.crt file
+	my $chain_crt_file = File::Temp->new(DIR => dirname($paths->{crt_filename}), TEMPLATE => '.sslmate.XXXXXX');
+	chmod(0666 & ~umask, $chain_crt_file);
+	print $chain_crt_file $response->{chain};
+	close $chain_crt_file;
+
+	# write .chained.crt file
+	my $chained_crt_file = File::Temp->new(DIR => dirname($paths->{crt_filename}), TEMPLATE => '.sslmate.XXXXXX');
+	chmod(0666 & ~umask, $chained_crt_file);
+	print $chained_crt_file $response->{crt};
+	print $chained_crt_file $response->{chain};
+	close $chained_crt_file;
+
+	# Rename the new files on top of the old files:
+	rename($crt_file->filename, $paths->{crt_filename})
+			or die "Error: " . $paths->{crt_filename} . ' ' . $! . "\n";
+	$crt_file->unlink_on_destroy(0);
+
+	rename($chain_crt_file->filename, $paths->{chain_crt_filename})
+			or die "Error: " . $paths->{chain_crt_filename} . ' ' . $! . "\n";
+	$chain_crt_file->unlink_on_destroy(0);
+
+	rename($chained_crt_file->filename, $paths->{chained_crt_filename})
+			or die "Error: " . $paths->{chained_crt_filename} . ' ' . $! . "\n";
+	$chained_crt_file->unlink_on_destroy(0);
+
+	print "Your certificate has been downloaded.\n\n";
+	print "           Certificate file: " . $paths->{crt_filename} . "\n";
+	print "     Certificate chain file: " . $paths->{chain_crt_filename} . "\n";
+	print "Certificate with chain file: " . $paths->{chained_crt_filename} . "\n";
+	return 0;
+}
+
+sub command_help {
+	my @args = @_;
+
+	if (@args == 0 || $args[0] eq 'help') {
+		print_usage(*STDOUT);
+	} else {
+		main($args[0], "-?");
+	}
+	return 0;
+}
+
+sub command_version {
+	print "SSLMate $VERSION\n";
+	return 0;
+}
+
+sub main {
+	my @args = @_;
+
+	if (@args == 0) {
+		print_usage(*STDERR);
+		return 2;
+	}
+	my $command = shift @args;
+
+	if ($command eq 'buy') {
+		return command_buy @args;
+	} elsif ($command eq 'reissue') {
+		return command_reissue @args;
+	} elsif ($command eq 'revoke') {
+		return command_revoke @args;
+	} elsif ($command eq 'renew') {
+		return command_renew @args;
+	} elsif ($command eq 'download') {
+		return command_download @args;
+	} elsif ($command eq 'link') {
+		return command_link @args;
+	} elsif ($command eq 'help') {
+		return command_help @args;
+	} elsif ($command eq 'version') {
+		return command_version @args;
+	} else {
+		print STDERR "sslmate: '$command' is not a valid sslmate command.  See 'sslmate help'.\n";
+		return 1;
+	}
+}
+
+exit main @ARGV;
