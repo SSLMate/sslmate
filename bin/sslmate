@@ -765,7 +765,7 @@ sub command_buy {
 	my @args = @_;
 
 	if (@args >= 1 && $args[0] eq "-?") {
-		print "Usage: sslmate buy [OPTIONS] HOSTNAME [YEARS]\n\n";
+		print "Usage: sslmate buy [OPTIONS] HOSTNAME\n\n";
 		print "Example: sslmate buy www.example.com\n";
 		print "         sslmate buy '*.example.com'\n";
 		print "\n";
@@ -983,7 +983,7 @@ sub command_renew {
 	my @args = @_;
 
 	if (@args >= 1 && $args[0] eq "-?") {
-		print "Usage: sslmate renew [OPTIONS] HOSTNAME [YEARS]\n\n";
+		print "Usage: sslmate renew [OPTIONS] HOSTNAME\n\n";
 		print "Example: sslmate renew www.example.com\n";
 		print "         sslmate renew '*.example.com'\n";
 		print "\n";
