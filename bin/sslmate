@@ -1195,7 +1195,14 @@ sub command_import {
 	my @args = @_;
 
 	if (@args >= 1 && $args[0] eq "-?") {
-		print "Usage: sslmate import KEYFILE CERTFILE\n";
+		print "Usage: sslmate import [OPTIONS] KEYFILE CERTFILE\n";
+		print "\n";
+		print "Example: sslmate import www.example.com.key www.example.com.crt\n";
+		print "\n";
+		print "Valid options:\n";
+		print " -f, --force        overwrite existing files\n";
+		print " --auto-renew       automatically renew this certificate before it expires\n";
+		print " --no-auto-renew    don't automatically renew this certificate\n";
 		return 0;
 	}
 
