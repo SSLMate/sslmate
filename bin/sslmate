@@ -33,7 +33,7 @@ BEGIN {
 	eval 'CURLPROTO_HTTPS(); 1' or *CURLPROTO_HTTPS = sub () { 1 << 1 };
 }
 
-use version; our $VERSION = version->declare('v0.4.0');
+use version; our $VERSION = version->declare('0.4.0');
 our $API_ENDPOINT = 'https://sslmate.com/api/v1';
 our $GLOBAL_CONFIG_PATH = '/etc/sslmate.conf';
 
