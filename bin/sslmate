@@ -1200,9 +1200,16 @@ sub command_import {
 	}
 
 	my $force = 0;
+	my $auto_renew = undef;
 	while (@args >= 1) {
 		if ($args[0] eq "-f" || $args[0] eq "--force") {
 			$force = 1;
+			shift @args;
+		} elsif ($args[0] eq "--auto-renew") {
+			$auto_renew = 1;
+			shift @args;
+		} elsif ($args[0] eq "--no-auto-renew") {
+			$auto_renew = 0;
 			shift @args;
 		} else {
 			last;
@@ -1258,6 +1265,7 @@ sub command_import {
 	print "Uploading $source_crt_path...\n";
 	my $request = { account_id =>	get_config('account_id'),
 			api_key =>	get_config('api_key'),
+			auto_renew =>	$auto_renew,
 			csr =>		$csr,
 			crt =>		$crt };
 	my $response = api_call('POST', '/import', $request) or $exit_with_error->();
