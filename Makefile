@@ -17,7 +17,7 @@ build: build-bin build-man
 build-bin:
 
 build-man:
-	$(MAKE) -C man all
+#	$(MAKE) -C man all
 
 #
 # Clean
@@ -27,7 +27,7 @@ clean: clean-bin clean-man
 clean-bin:
 
 clean-man:
-	$(MAKE) -C man clean
+#	$(MAKE) -C man clean
 
 #
 # Install
