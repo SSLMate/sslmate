@@ -1,0 +1,447 @@
+<!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.2//EN" "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
+<refentry>
+	<refentryinfo>
+		<title>SSLMate</title>
+		<date>2014-09-19</date>
+		<productname>SSLMate 0.4.0</productname>
+
+		<author>
+			<othername>SSLMate</othername>
+			<contrib></contrib>
+			<email>sslmate@sslmate.com</email>
+			<uri>https://sslmate.com</uri>
+		</author>
+	</refentryinfo>
+
+	<refmeta>
+		<refentrytitle>sslmate</refentrytitle>
+		<manvolnum>1</manvolnum>
+	</refmeta>
+
+	<refnamediv>
+		<refname>sslmate</refname>
+		<refpurpose>buy and manage SSL certificates</refpurpose>
+	</refnamediv>
+
+	<refsynopsisdiv>
+		<cmdsynopsis>
+			<command>sslmate <arg choice="plain"><replaceable>COMMAND</replaceable></arg> <arg choice="opt" rep="repeat"><replaceable>ARGS</replaceable></arg></command>
+		</cmdsynopsis>
+	</refsynopsisdiv>
+
+	<refsynopsisdiv>
+		<title>Common commands</title>
+		<cmdsynopsis>
+			<command>sslmate buy <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
+		</cmdsynopsis>
+		<cmdsynopsis>
+			<command>sslmate renew <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
+		</cmdsynopsis>
+		<cmdsynopsis>
+			<command>sslmate reissue <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
+		</cmdsynopsis>
+		<cmdsynopsis>
+			<command>sslmate revoke <arg choice="opt">-a</arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
+		</cmdsynopsis>
+		<cmdsynopsis>
+			<command>sslmate download <arg choice="plain" rep="repeat"><replaceable>HOSTNAME</replaceable></arg></command>
+		</cmdsynopsis>
+		<cmdsynopsis>
+			<command>sslmate import <arg choice="plain"><replaceable>KEYFILE</replaceable></arg> <arg choice="plain"><replaceable>CERTFILE</replaceable></arg></command>
+		</cmdsynopsis>
+		<cmdsynopsis>
+			<command>sslmate link</command>
+		</cmdsynopsis>
+	</refsynopsisdiv>
+
+	<refsect1>
+		<title>Description</title>
+
+		<para>
+			<command>sslmate</command> is the command line client for
+			SSLMate (https://sslmate.com), a service for
+			purchasing and managing SSL certificates.
+			SSLMate provides easy-to-use tools for buying,
+			renewing, and revoking certificates, for monitoring
+			the expiration date of your certificates, and for
+			synchronizing your certificates between your servers.
+		</para>
+
+		<para>
+			SSLMate emphasizes speed, ease-of-use, and automation.
+			For example, the command to purchase a certificate (<command>sslmate buy</command>)
+			typically completes in under a minute and automates the steps of generating a private key, generating a CSR,
+			and building a certificate bundle.  SSLMate can automatically renew your certificates,
+			and you can run <command>sslmate download</command> from a cron job so that renewed
+			certificates are automatically downloaded to your server.
+		</para>
+
+		<para>
+			To use the <command>sslmate</command> command, you must create
+			a free account at https://sslmate.com.
+		</para>
+	</refsect1>
+
+	<refsect1>
+		<title>Commands</title>
+
+		<para>
+			<command>sslmate</command> is logically divided into several sub-commands which
+			perform distinct tasks.  Each sub-command, and its arguments,
+			are documented below.
+		</para>
+
+		<variablelist>
+			<varlistentry>
+				<term><option>buy <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></option></term>
+				<listitem>
+					<para>
+						Generate a private key and purchase a certificate for the given hostname/common name/CN.
+					</para>
+
+					<para>
+						The following options are understood:
+					</para>
+					<variablelist>
+						<varlistentry>
+							<term><option>-f</option></term>
+							<term><option>--force</option></term>
+
+							<listitem>
+								<para>Overwrite existing key and certificate files.</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
+							<term><option>--auto-renew</option></term>
+							<term><option>--no-auto-renew</option></term>
+
+							<listitem>
+								<para>
+									Enable or disable automatic renewal for this certificate.
+									If neither option is specified, your account's default auto-renewal
+									setting is used.
+								</para>
+								<para>
+									The auto-renewal setting of an already-purchased certificate can be changed
+									from the SSLMate website.
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
+							<term><option>--coupon=<replaceable>CODE</replaceable></option></term>
+
+							<listitem>
+								<para>
+									Use the given coupon code for a discount.
+								</para>
+							</listitem>
+						</varlistentry>
+					</variablelist>
+				</listitem>
+			</varlistentry>
+
+			<varlistentry>
+				<term><option>renew <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></option></term>
+				<listitem>
+					<para>
+						Renew the certificate for the given hostname.
+					</para>
+
+					<para>
+						The following options are understood:
+					</para>
+					<variablelist>
+						<varlistentry>
+							<term><option>-f</option></term>
+							<term><option>--force</option></term>
+
+							<listitem>
+								<para>Overwrite existing certificate files.</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
+							<term><option>--coupon=<replaceable>CODE</replaceable></option></term>
+
+							<listitem>
+								<para>
+									Use the given coupon code for a discount.
+								</para>
+							</listitem>
+						</varlistentry>
+					</variablelist>
+				</listitem>
+			</varlistentry>
+
+			<varlistentry>
+				<term><option>reissue <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></option></term>
+				<listitem>
+					<para>
+						Generate a new private key and reissue the certificate for the given hostname.
+					</para>
+					<para>
+						Reissuing a certificate does <emphasis>not</emphasis> revoke it. Use the <command>sslmate revoke</command>
+						command to revoke a certificate after you have reissued it.
+					</para>
+
+					<para>
+						The following options are understood:
+					</para>
+					<variablelist>
+						<varlistentry>
+							<term><option>-f</option></term>
+							<term><option>--force</option></term>
+
+							<listitem>
+								<para>Overwrite existing files.</para>
+							</listitem>
+						</varlistentry>
+					</variablelist>
+				</listitem>
+			</varlistentry>
+
+			<varlistentry>
+				<term><option>revoke <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></option></term>
+				<listitem>
+					<para>
+						Revoke the certificate(s) for the given hostname.
+					</para>
+					<para>
+						Revoking a certificate does <emphasis>not</emphasis> issue a new certificate.
+						If you need a new certificate, use the <command>sslmate reissue</command> command
+						to generate and issue a new certificate <emphasis>before</emphasis> running
+						<command>sslmate revoke</command>.
+					</para>
+
+					<para>
+						The following options are understood:
+					</para>
+					<variablelist>
+						<varlistentry>
+							<term><option>-a</option></term>
+							<term><option>--all</option></term>
+
+							<listitem>
+								<para>
+									Revoke <emphasis>all</emphasis> certificates for this host, including the
+									most recent active certificate.  If this option is omitted, all but
+									the most recent active certificate are revoked.  Generally, if you want to
+									revoke a certificate, you should first reissue it with the <command>reissue</command>
+									command and then use <command>revoke</command> without the <option>-a</option> option.
+								</para>
+							</listitem>
+						</varlistentry>
+					</variablelist>
+				</listitem>
+			</varlistentry>
+
+			<varlistentry>
+				<term><option>download <arg choice="plain" rep="repeat"><replaceable>HOSTNAME</replaceable></arg></option></term>
+				<listitem>
+					<para>
+						Download the certificate(s) for the given hostname(s).
+					</para>
+					<para>
+						Certificate files for the given hostname(s) are downloaded from your SSLMate account
+						to your configured <parameter>cert_directory</parameter> (<filename>/etc/sslmate</filename>
+						by default if run as root, <filename>$PWD</filename> if run as non-root).  Existing certificate
+						files are replaced.  Exits with status code 0 if new certificate files were downloaded, or 10
+						if the most up-to-date certificate files have already been downloaded.
+					</para>
+					<para>
+						This command is designed to be run from a cron job or configuration management script so that
+						auto-renewed certificates are automatically propagated to your server.  You can check the
+						exit status and, if zero, restart daemons so they load the latest version of the certificate.
+					</para>
+				</listitem>
+			</varlistentry>
+
+			<varlistentry>
+				<term><option>import <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>KEYFILE</replaceable></arg> <arg choice="plain"><replaceable>CERTFILE</replaceable></arg></option></term>
+				<listitem>
+					<para>
+						Import the given certificate to your SSLMate account.
+						An imported certificate works just like a certificate purchased from SSLMate with
+						<command>sslmate buy</command>, meaning SSLMate will monitor its expiration and you
+						can set up automated renewals for it.
+					</para>
+
+					<para>
+						You must specify the paths to the key file (<arg choice="plain"><replaceable>KEYFILE</replaceable></arg>)
+						and to the certificate file (<arg choice="plain"><replaceable>CERTFILE</replaceable></arg>).  Note that
+						the private key is <emphasis>not</emphasis> uploaded to SSLMate; <command>sslmate</command>
+						only uses it to generate a certificate signing request.
+					</para>
+
+					<para>
+						The following options are understood:
+					</para>
+					<variablelist>
+						<varlistentry>
+							<term><option>-f</option></term>
+							<term><option>--force</option></term>
+
+							<listitem>
+								<para>Overwrite existing files.</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
+							<term><option>--auto-renew</option></term>
+							<term><option>--no-auto-renew</option></term>
+
+							<listitem>
+								<para>
+									Enable or disable automatic renewal for this certificate.
+									If neither option is specified, your account's default auto-renewal
+									setting is used.
+								</para>
+							</listitem>
+						</varlistentry>
+					</variablelist>
+				</listitem>
+			</varlistentry>
+
+			<varlistentry>
+				<term><option>link</option></term>
+				<listitem>
+					<para>
+						Link this server with your SSLMate account.
+						<command>sslmate link</command> prompts for your SSLMate username and
+						password and writes your API credentials to your personal SSLMate configuration
+						file, permitting you to use the <command>sslmate</command> commands without
+						having to enter your username and password.
+					</para>
+				</listitem>
+			</varlistentry>
+
+			<varlistentry>
+				<term><option>help <arg choice="opt"><replaceable>COMMAND</replaceable></arg></option></term>
+				<listitem>
+					<para>
+						Display help for the given <arg choice="plain"><replaceable>COMMAND</replaceable></arg>,
+						or an overview of all commands if no command is specified.
+					</para>
+				</listitem>
+			</varlistentry>
+
+			<varlistentry>
+				<term><option>version</option></term>
+				<listitem>
+					<para>
+						Print the currently-installed version of <command>sslmate</command>.
+					</para>
+				</listitem>
+			</varlistentry>
+
+		</variablelist>
+	</refsect1>
+
+	<refsect1>
+		<title>Configuration</title>
+		<para>
+			Upon startup, <command>sslmate</command> reads configuration from the global configuration
+			file, <filename>/etc/sslmate.conf</filename>, and your personal configuration file,
+			<filename>~/.sslmate</filename>, if they exist.  These files should contain one configuration
+			option per line of the form <userinput><replaceable>NAME</replaceable> <replaceable>VALUE</replaceable></userinput>.
+			Blank lines and lines starting with <token>#</token> are ignored.  Options in your personal configuration
+			file override options set in the global configuration file.  The location of your personal configuration
+			file can be changed by setting the <varname>$SSLMATE_CONFIG</varname> environment variable.
+		</para>
+		<para>
+			The following options are understood:
+		</para>
+		<variablelist>
+			<varlistentry>
+				<term><parameter>account_id</parameter></term>
+				<term><parameter>api_key</parameter></term>
+				<listitem><para>Your API credentials, which can be found on your <ulink url="https://sslmate.com/account">online SSLMate account page</ulink>. These options are automatically set when you run <command>sslmate link</command>.</para></listitem>
+			</varlistentry>
+			<varlistentry>
+				<term><parameter>key_directory</parameter></term>
+				<term><parameter>cert_directory</parameter></term>
+				<listitem><para>The directories where <command>sslmate</command> places keys and certificates. When running as root, the default is <filename>/etc/sslmate</filename>. When running as non-root, the default is the current working directory.</para></listitem>
+			</varlistentry>
+			<varlistentry>
+				<term><parameter>api_endpoint</parameter></term>
+				<listitem><para>The URI to the SSLMate API endpoint. This option does not need to be configured under normal circumstances.</para></listitem>
+			</varlistentry>
+		</variablelist>
+	</refsect1>
+
+	<refsect1>
+		<title>Files</title>
+		<variablelist>
+			<varlistentry>
+				<term><filename>~/.sslmate</filename></term>
+				<listitem><para>Your personal configuration file.  Options set in this file override options set in the global configuration file.  See the "Configuration" section above for the syntax of this file.</para></listitem>
+			</varlistentry>
+			<varlistentry>
+				<term><filename>/etc/sslmate.conf</filename></term>
+				<listitem><para>The global configuration file.  See the "Configuration" section above for the syntax of this file.</para></listitem>
+			</varlistentry>
+			<varlistentry>
+				<term><filename>/etc/sslmate</filename></term>
+				<listitem><para>The default directory for storing keys and certificates when run as root.  Can be overridden by the <parameter>key_directory</parameter> and <parameter>cert_directory</parameter> configuration options.</para></listitem>
+			</varlistentry>
+		</variablelist>
+		<para>SSLMate creates four files for every certificate:</para>
+		<variablelist>
+			<varlistentry>
+				<term><filename><replaceable>hostname</replaceable>.key</filename></term>
+				<listitem><para>The private key file for <replaceable>hostname</replaceable>.  Stored in the configured <parameter>key_directory</parameter> (<filename>/etc/sslmate</filename> by default if run as root; <filename>$PWD</filename> by default if run as non-root).</para></listitem>
+			</varlistentry>
+			<varlistentry>
+				<term><filename><replaceable>hostname</replaceable>.crt</filename></term>
+				<listitem><para>The public certificate file for <replaceable>hostname</replaceable>.  Stored in the configured <parameter>cert_directory</parameter> (<filename>/etc/sslmate</filename> by default if run as root; <filename>$PWD</filename> by default if run as non-root).</para></listitem>
+			</varlistentry>
+			<varlistentry>
+				<term><filename><replaceable>hostname</replaceable>.chain.crt</filename></term>
+				<listitem><para>The certificate chain file (aka intermediate certificate) file for <replaceable>hostname</replaceable>.  Stored in the configured <parameter>cert_directory</parameter> (<filename>/etc/sslmate</filename> by default if run as root; <filename>$PWD</filename> by default if run as non-root).</para></listitem>
+			</varlistentry>
+			<varlistentry>
+				<term><filename><replaceable>hostname</replaceable>.chained.crt</filename></term>
+				<listitem><para>A concatenation of the certificate and the chain for <replaceable>hostname</replaceable>.  Stored in the configured <parameter>cert_directory</parameter> (<filename>/etc/sslmate</filename> by default if run as root; <filename>$PWD</filename> by default if run as non-root).</para></listitem>
+			</varlistentry>
+		</variablelist>
+		<para>
+			 You need to configure your server software (e.g. Apache, nginx) with the private key file (.key) and some combination of the .crt files. Some software (e.g. Apache) requires you to specify the certificate (.crt) and the chain (.chain.crt) in separate files, while other software (e.g. nginx) requires you to specify both in a single file (.chained.crt). 
+		</para>
+		<para>
+			You are encouraged to store keys and certificates in the SSLMate-managed
+			<parameter>key_directory</parameter> and <parameter>cert_directory</parameter>
+			(<filename>/etc/sslmate</filename> by default) and to configure your server software to refer
+			to keys and certificates in this directory.  This makes automated renewals more seamless by
+			ensuring that your server software always refers to the latest version
+			of a certificate downloaded by <command>sslmate download</command>.
+		</para>
+	</refsect1>
+
+	<refsect1>
+		<title>Environment Variables</title>
+
+		<variablelist class='environment-variables'>
+			<varlistentry>
+				<term><varname>SSLMATE_CONFIG</varname></term>
+				<listitem>
+					<para>The path to your personal configuration file. Defaults to <filename>$HOME/.sslmate</filename>.</para>
+				</listitem>
+			</varlistentry>
+		</variablelist>
+	</refsect1>
+
+	<!-- TODO: examples section
+	<refsect1>
+		<title>Examples</title>
+
+		<para>Hello world?</para>
+	</refsect1>
+	-->
+
+	<refsect1>
+		<title>See Also</title>
+		<para>
+			<ulink url="https://sslmate.com/help">Online SSLMate Help</ulink>,
+			<citerefentry><refentrytitle>openssl</refentrytitle><manvolnum>1</manvolnum></citerefentry>
+		</para>
+	</refsect1>
+
+</refentry>
