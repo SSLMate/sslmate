@@ -1,0 +1,27 @@
+v0.4.0 (2014-09-??)
+  * Add `sslmate import` command.
+  * Allow multiple certs to be downloaded with `sslmate download`.
+  * Add sslmate(1) man page.
+  * Improve usage messages.
+  * Rewrite in Perl.
+
+v0.3.0 (2014-09-12)
+  * Add `sslmate renew` and `sslmate download` commands, and
+    --auto-renew and --no-auto-renew options to `sslmate buy`.
+    See https://sslmate.com/blog/post/automating_renewals
+  * Make years argument optional in `sslmate buy`; default to 1 year.
+  * Add key_directory and cert_directory config options to set the
+    location of purchased/downloaded files.  Defaults to $PWD for
+    non-root users and /etc/sslmate for root.
+  * Read default config options from /etc/sslmate.conf if it exists.
+  * Add --force as an alias for -f option, and --all as alias for -a.
+  * For consistency, always write a .chain.crt and .chained.crt file
+    even if chain is empty.
+  * Miscellaneous bug fixes and usability improvements.
+
+v0.2.1 (2014-09-03)
+  * When prompting for password, treat DEL as erase in addition to BS.
+
+v0.2.0 (2014-08-21)
+  * Add `sslmate revoke` command.
+  * Add `sslmate version` command.
