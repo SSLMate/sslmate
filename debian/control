@@ -1,0 +1,31 @@
+Source: sslmate
+Maintainer: SSLMate <sslmate@sslmate.com>
+Homepage: https://sslmate.com
+Section: utils
+Priority: extra
+Standards-Version: 3.9.4
+Build-Depends: debhelper (>= 9), xsltproc, docbook-xsl
+
+Package: sslmate
+Architecture: all
+Depends: ${misc:Depends}, ${perl:Depends}, libwww-curl-perl, liburi-perl, libjson-perl, libterm-readkey-perl, openssl
+Section: utils
+Priority: extra
+Homepage: https://sslmate.com
+Description: Buy and manage SSL certificates from the command line
+ sslmate is the command line client for SSLMate <https://sslmate.com>, a
+ service for purchasing and managing SSL certificates.  SSLMate provides
+ easy-to-use tools for buying, renewing, and revoking certificates, for
+ monitoring the expiration date of your certificates, and for synchronizing
+ your certificates between your servers.
+ .
+ SSLMate emphasizes speed, ease-of-use, and automation.  For example, the
+ command to purchase a certificate (sslmate buy) typically completes in
+ under a minute and automates the steps of generating a private key,
+ generating a CSR, and building a certificate bundle.  SSLMate can
+ automatically renew your certificates, and you can run sslmate download
+ from a cron job so that renewed certificates are automatically downloaded
+ to your server.
+ .
+ To use the sslmate command, you must create a free account at
+ https://sslmate.com.
