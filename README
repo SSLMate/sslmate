@@ -1,0 +1,57 @@
+sslmate is the command line client for SSLMate <https://sslmate.com>, a
+service for purchasing and managing SSL certificates.  SSLMate provides
+easy-to-use tools for buying, renewing, and revoking certificates, for
+monitoring the expiration date of your certificates, and for synchronizing
+your certificates between your servers.
+
+SSLMate emphasizes speed, ease-of-use, and automation.  For example, the
+command to purchase a certificate (sslmate buy) typically completes in
+under a minute and automates the steps of generating a private key,
+generating a CSR, and building a certificate bundle.  SSLMate can
+automatically renew your certificates, and you can run sslmate download
+from a cron job so that renewed certificates are automatically downloaded
+to your server.
+
+To use the sslmate command, you must create a free account at
+https://sslmate.com.
+
+
+DEPENDENCIES
+
+You must have the following software installed to use the sslmate program:
+
+ * Perl
+
+ * The following Perl modules:
+
+   Module              Debian/Ubuntu package        RHEL/CentOS package
+   -------------------------------------------------------------------------
+   WWW::Curl           libwww-curl-perl             perl-WWW-Curl
+   URI                 liburi-perl                  perl-URI
+   JSON                libjson-perl                 perl-JSON
+   Term::ReadKey       libterm-readkey-perl         perl-TermReadKey
+
+
+INSTALLATION
+
+  * Run `make install` to install to /usr/local.
+
+  * Run `make install PREFIX=/usr` to install to /usr.
+
+
+GETTING STARTED
+
+  See <https://sslmate.com/help/getting_started>.
+
+
+GETTING HELP
+
+  * Run `sslmate help`.
+
+  * Read the sslmate(1) man page.
+
+  * Consult <https://sslmate.com/help>.
+
+  * Email <support@sslmate.com> or Tweet to @SSLMate.
+ 
+
