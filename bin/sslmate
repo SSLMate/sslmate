@@ -337,10 +337,12 @@ sub api_call {
 	}
 	$curl->setopt(CURLOPT_URL, (get_config('api_endpoint') || $API_ENDPOINT) . $command);
 
-	my $response_data;
-	$curl->setopt(CURLOPT_WRITEDATA, \$response_data);
+	my $response_data = '';
+	open(my $response_fh, '>', \$response_data);
+	$curl->setopt(CURLOPT_WRITEDATA, $response_fh);
 
 	my $result = $curl->perform;
+	close($response_fh);
 	if ($result != 0) {
 		print STDERR "Error: unable to contact SSLMate server: " . $curl->strerror($result) . "\n";
 		undef $curl;
