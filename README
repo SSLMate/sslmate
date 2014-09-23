@@ -22,9 +22,10 @@ You must have the following software installed to use the sslmate program:
 
  * Perl
 
- * The following Perl modules:
+ * The following Perl modules, which can be installed by running
+   `cpan MODULENAME` or by installing the corresponding distro package.
 
-   Module              Debian/Ubuntu package        RHEL/CentOS package
+   Module Name         Debian/Ubuntu Package        RHEL/CentOS Package
    -------------------------------------------------------------------------
    WWW::Curl           libwww-curl-perl             perl-WWW-Curl
    URI                 liburi-perl                  perl-URI
