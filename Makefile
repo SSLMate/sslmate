@@ -59,9 +59,15 @@ uninstall-man:
 dist:
 	git archive --prefix=$(DISTDIR)/ $(VERSION) | gzip -n9 > $(DISTFILE).gz
 
+#
+# Misc.
+#
+get-version:
+	@echo $(VERSION)
+
 .PHONY: all \
 	build build-bin build-man \
 	clean clean-bin clean-man \
 	install install-bin install-man \
 	uninstall uninstall-bin uninstall-man \
-	dist
+	dist get-version
