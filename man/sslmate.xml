@@ -324,11 +324,38 @@
 			</varlistentry>
 
 			<varlistentry>
-				<term><option>version</option></term>
+				<term><option>version <arg choice="opt"><replaceable>OPTIONS</replaceable></arg></option></term>
 				<listitem>
 					<para>
-						Print the currently-installed version of <command>sslmate</command>.
+						Print the currently-installed version of <command>sslmate</command>.  By default,
+						check if this version is up-to-date and print a message if a newer version is available.
 					</para>
+					<para>
+						The following options are understood:
+					</para>
+					<variablelist>
+						<varlistentry>
+							<term><option>--no-check</option></term>
+
+							<listitem>
+								<para>Do not check for a newer version.</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
+							<term><option>--is-latest</option></term>
+
+							<listitem>
+								<para>
+									Print no output, but exit with 0 if this version of <command>sslmate</command>
+									is up-to-date, 10 if a newer version is available, and some other exit code
+									if there is an error.
+								</para>
+								<para>
+									This option cannot be combined with <option>--no-check</option>.
+								</para>
+							</listitem>
+						</varlistentry>
+					</variablelist>
 				</listitem>
 			</varlistentry>
 

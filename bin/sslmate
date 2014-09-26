@@ -1341,7 +1341,53 @@ sub command_help {
 }
 
 sub command_version {
-	print "SSLMate $VERSION\n";
+	my @args = @_;
+
+	if (@args >= 1 && $args[0] eq "-?") {
+		print "Usage: sslmate version [OPTIONS]\n";
+		print "\n";
+		print "Valid options:\n";
+		print " --no-check         don't check for the latest version\n";
+		print " --is-latest        exit non-zero if there is a newer version\n";
+		return 0;
+	}
+
+	my $check = 1;
+	my $is_latest = 0;
+	while (@args >= 1) {
+		if ($args[0] eq "--no-check") {
+			$check = 0;
+			shift @args;
+		} elsif ($args[0] eq "--is-latest") {
+			$is_latest = 1;
+			shift @args;
+		} else {
+			last;
+		}
+	}
+	die "Error: --no-check and --is-latest are mutually-exclusive.\n" if $is_latest && !$check;
+
+	print "SSLMate $VERSION\n" unless $is_latest;
+	if ($check) {
+		load_config;
+		my $response = api_call('GET', '/latest_client_version');
+
+		if (not $response) {
+			print STDERR "Error: unable to determine latest available version.\n";
+			exit 1 if $is_latest;
+		} elsif ($response && $response->{status} eq 'error') {
+			print STDERR "Error: unable to determine latest available version: " . $response->{message} . "\n";
+			exit 1 if $is_latest;
+		} elsif ($response && $response->{status} ne 'success') {
+			print STDERR "Error: unable to determine latest available version: unknown response from server\n";
+			exit 1 if $is_latest;
+		} else {
+			if ($VERSION ne $response->{latest_client_version}) {
+				exit 10 if $is_latest;
+				print "New version of SSLMate available: " . $response->{latest_client_version} . "\n";
+			}
+		}
+	}
 	return 0;
 }
 

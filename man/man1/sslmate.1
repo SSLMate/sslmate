@@ -207,10 +207,27 @@ Display help for the given
 \fICOMMAND\fR, or an overview of all commands if no command is specified\&.
 .RE
 .PP
-\fBversion\fR
+\fBversion \fR\fB[\fIOPTIONS\fR]\fR
 .RS 4
 Print the currently\-installed version of
-\fBsslmate\fR\&.
+\fBsslmate\fR\&. By default, check if this version is up\-to\-date and print a message if a newer version is available\&.
+.sp
+The following options are understood:
+.PP
+\fB\-\-no\-check\fR
+.RS 4
+Do not check for a newer version\&.
+.RE
+.PP
+\fB\-\-is\-latest\fR
+.RS 4
+Print no output, but exit with 0 if this version of
+\fBsslmate\fR
+is up\-to\-date, 10 if a newer version is available, and some other exit code if there is an error\&.
+.sp
+This option cannot be combined with
+\fB\-\-no\-check\fR\&.
+.RE
 .RE
 .SH "CONFIGURATION"
 .PP
