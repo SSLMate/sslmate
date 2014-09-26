@@ -43,6 +43,8 @@ sslmate \- buy and manage SSL certificates
 \fBsslmate revoke \fR\fB[\-a]\fR\fB \fR\fB\fIHOSTNAME\fR\fR
 .HP \w'\fBsslmate\ download\ \fR\fB\fIHOSTNAME\fR...\fR\ 'u
 \fBsslmate download \fR\fB\fIHOSTNAME\fR...\fR
+.HP \w'\fBsslmate\ download\ \fR\fB\-\-all\fR\ 'u
+\fBsslmate download \fR\fB\-\-all\fR
 .HP \w'\fBsslmate\ import\ \fR\fB\fIKEYFILE\fR\fR\fB\ \fR\fB\fICERTFILE\fR\fR\ 'u
 \fBsslmate import \fR\fB\fIKEYFILE\fR\fR\fB \fR\fB\fICERTFILE\fR\fR
 .HP \w'\fBsslmate\ link\fR\ 'u
@@ -154,11 +156,14 @@ option\&.
 .RE
 .RE
 .PP
-\fBdownload \fR\fB\fIHOSTNAME\fR...\fR
+\fBdownload \fR\fB[\fIOPTIONS\fR]\fR\fB \fR\fB\fIHOSTNAME\fR...\fR
 .RS 4
-Download the certificate(s) for the given hostname(s)\&.
+Download the certificate(s) for the given hostname(s), or, if
+\fB\-\-all\fR
+is specified, for all hostnames that have keys in the
+\fIkey_directory\fR\&.
 .sp
-Certificate files for the given hostname(s) are downloaded from your SSLMate account to your configured
+Certificate files are downloaded from your SSLMate account to your configured
 \fIcert_directory\fR
 (/etc/sslmate
 by default if run as root,
@@ -166,6 +171,20 @@ $PWD
 if run as non\-root)\&. Existing certificate files are replaced\&. Exits with status code 0 if new certificate files were downloaded, or 10 if the most up\-to\-date certificate files have already been downloaded\&.
 .sp
 This command is designed to be run from a cron job or configuration management script so that auto\-renewed certificates are automatically propagated to your server\&. You can check the exit status and, if zero, restart daemons so they load the latest version of the certificate\&.
+.sp
+The following options are understood:
+.PP
+\fB\-a\fR, \fB\-\-all\fR
+.RS 4
+Download certificate files for every key present in the
+\fIkey_directory\fR
+(/etc/sslmate
+by default if run as root,
+$PWD
+if run as non\-root)\&.
+.sp
+If this option is used, specific hostnames cannot be specified on the command line\&.
+.RE
 .RE
 .PP
 \fBimport \fR\fB[\fIOPTIONS\fR]\fR\fB \fR\fB\fIKEYFILE\fR\fR\fB \fR\fB\fICERTFILE\fR\fR

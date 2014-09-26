@@ -1093,13 +1093,29 @@ sub command_download {
 	my @args = @_;
 
 	if (@args >= 1 && $args[0] eq "-?") {
-		print "Usage: sslmate download HOSTNAME ...\n";
+		print "Usage: sslmate download [OPTIONS] HOSTNAME ...\n";
+		print "Example: sslmate download www.example.com\n";
+		print "         sslmate download --all\n";
+		print "\n";
+		print "Valid options:\n";
+		print " -a, --all      download certificate for every key in the SSLMate keys directory\n";
 		return 0;
 	}
 
-	if (@args == 0) {
-		print STDERR "Error: you must specify the hostname of the certificate to download.\n";
+	my $all = 0;
+	while (@args >= 1) {
+		if ($args[0] eq "-a" || $args[0] eq "--all") {
+			$all = 1;
+			shift @args;
+		} else {
+			last;
+		}
+	}
+
+	if ((!$all && @args == 0) || ($all && @args > 0)) {
+		print STDERR "Error: you must specify hostname(s) of certificate(s) to download OR use --all.\n";
 		print STDERR "Example: sslmate download www.example.com\n";
+		print STDERR "     or: sslmate download --all\n";
 		return 2;
 	}
 
@@ -1114,6 +1130,19 @@ sub command_download {
 	}
 
 	init_default_paths;
+
+	if ($all) {
+		# scan the key directory, populate @args for every .key file
+		my $key_directory = get_config('key_directory') || '.';
+		opendir(my $dh, $key_directory) or die "Error: unable to read key directory: $key_directory: $!\n";
+		push @args, map { s/\.key$//; $_ } grep { /\.key$/ } readdir($dh);
+		closedir($dh);
+
+		if (@args == 0) {
+			print "No certificates to download.\n";
+			return 10;
+		}
+	}
 
 	my @certs;
 	for my $cn (@args) {

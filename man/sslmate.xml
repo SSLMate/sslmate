@@ -47,6 +47,9 @@
 			<command>sslmate download <arg choice="plain" rep="repeat"><replaceable>HOSTNAME</replaceable></arg></command>
 		</cmdsynopsis>
 		<cmdsynopsis>
+			<command>sslmate download <arg choice="plain">--all</arg></command>
+		</cmdsynopsis>
+		<cmdsynopsis>
 			<command>sslmate import <arg choice="plain"><replaceable>KEYFILE</replaceable></arg> <arg choice="plain"><replaceable>CERTFILE</replaceable></arg></command>
 		</cmdsynopsis>
 		<cmdsynopsis>
@@ -235,13 +238,14 @@
 			</varlistentry>
 
 			<varlistentry>
-				<term><option>download <arg choice="plain" rep="repeat"><replaceable>HOSTNAME</replaceable></arg></option></term>
+				<term><option>download <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain" rep="repeat"><replaceable>HOSTNAME</replaceable></arg></option></term>
 				<listitem>
 					<para>
-						Download the certificate(s) for the given hostname(s).
+						Download the certificate(s) for the given hostname(s), or, if <option>--all</option> is specified,
+						for all hostnames that have keys in the <parameter>key_directory</parameter>.
 					</para>
 					<para>
-						Certificate files for the given hostname(s) are downloaded from your SSLMate account
+						Certificate files are downloaded from your SSLMate account
 						to your configured <parameter>cert_directory</parameter> (<filename>/etc/sslmate</filename>
 						by default if run as root, <filename>$PWD</filename> if run as non-root).  Existing certificate
 						files are replaced.  Exits with status code 0 if new certificate files were downloaded, or 10
@@ -252,6 +256,26 @@
 						auto-renewed certificates are automatically propagated to your server.  You can check the
 						exit status and, if zero, restart daemons so they load the latest version of the certificate.
 					</para>
+					<para>
+						The following options are understood:
+					</para>
+					<variablelist>
+						<varlistentry>
+							<term><option>-a</option></term>
+							<term><option>--all</option></term>
+
+							<listitem>
+								<para>
+									Download certificate files for every key present in the <parameter>key_directory</parameter>
+									(<filename>/etc/sslmate</filename> by default if run as root, <filename>$PWD</filename>
+									if run as non-root).
+								</para>
+								<para>
+									If this option is used, specific hostnames cannot be specified on the command line.
+								</para>
+							</listitem>
+						</varlistentry>
+					</variablelist>
 				</listitem>
 			</varlistentry>
 
