@@ -30,8 +30,8 @@
 .SH "NAME"
 sslmate \- buy and manage SSL certificates
 .SH "SYNOPSIS"
-.HP \w'\fBsslmate\ \fR\fB\fICOMMAND\fR\fR\fB\ \fR\fB[\fIARGS\fR...]\fR\ 'u
-\fBsslmate \fR\fB\fICOMMAND\fR\fR\fB \fR\fB[\fIARGS\fR...]\fR
+.HP \w'\fBsslmate\ \fR\fB[\fIOPTIONS\fR]\fR\fB\ \fR\fB\fICOMMAND\fR\fR\fB\ \fR\fB[\fIARGS\fR...]\fR\ 'u
+\fBsslmate \fR\fB[\fIOPTIONS\fR]\fR\fB \fR\fB\fICOMMAND\fR\fR\fB \fR\fB[\fIARGS\fR...]\fR
 .SH "COMMON COMMANDS"
 .HP \w'\fBsslmate\ buy\ \fR\fB\fIHOSTNAME\fR\fR\ 'u
 \fBsslmate buy \fR\fB\fIHOSTNAME\fR\fR
@@ -66,7 +66,9 @@ command, you must create a free account at https://sslmate\&.com\&.
 .PP
 
 \fBsslmate\fR
-is logically divided into several sub\-commands which perform distinct tasks\&. Each sub\-command, and its arguments, are documented below\&.
+is logically divided into several sub\-commands which perform distinct tasks\&. Each sub\-command, and its arguments, are documented below\&. Note that arguments and options to sub\-commands must be specified on the command line
+\fIafter\fR
+the name of the sub\-command\&.
 .PP
 \fBbuy \fR\fB[\fIOPTIONS\fR]\fR\fB \fR\fB\fIHOSTNAME\fR\fR
 .RS 4
@@ -247,6 +249,31 @@ is up\-to\-date, 10 if a newer version is available, and some other exit code if
 This option cannot be combined with
 \fB\-\-no\-check\fR\&.
 .RE
+.RE
+.SH "GLOBAL OPTIONS"
+.PP
+The following options are understood by
+\fBsslmate\fR
+and can be used with any sub\-command\&. Since they apply globally to
+\fBsslmate\fR, they must be specified on the command line
+\fIbefore\fR
+the sub\-command name\&.
+.PP
+\fB\-\-p \fR\fB\fIPROFILE\fR\fR, \fB\-\-profile=\fR\fB\fIPROFILE\fR\fR
+.RS 4
+Use the given configuration profile, instead of the default\&. If this option is specified, the string "\-\fIPROFILE\fR" will be appended to the paths of the configuration file and default key and certificate directories\&.
+.sp
+For example, if
+\fB\-\-profile=company\fR
+is used, the global configuration file will be
+/etc/sslmate\-company\&.conf
+and the default certificate directory will be
+/etc/sslmate\-company, instead of
+/etc/sslmate\&.conf
+and
+/etc/sslmate\&.
+.sp
+This option is intended for those who need to use several different SSLMate accounts on a single server, since each configuration file can contain distinct SSLMate API credentials\&.
 .RE
 .SH "CONFIGURATION"
 .PP

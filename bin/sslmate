@@ -46,7 +46,7 @@ sub print_usage {
 	my ($out) = @_;
 
 	#          |--------------------------------------------------------------------------------| 80 chars
-	print $out "Usage: sslmate COMMAND [ARGS]\n";
+	print $out "Usage: sslmate [OPTIONS] COMMAND [ARGS]\n";
 	print $out "\n";
 	print $out "Commands:\n";
 	print $out " sslmate buy HOSTNAME             Buy a certificate for the given hostname\n";
@@ -58,6 +58,9 @@ sub print_usage {
 	print $out " sslmate link                     Link this system with your SSLMate account\n";
 	print $out " sslmate help                     Display help\n";
 	print $out " sslmate version                  Print the version of SSLMate that's installed\n";
+	print $out "\n";
+	print $out "Valid options:\n";
+	print $out " -p, --profile=NAME               Use the given configuration profile\n";
 	print $out "\n";
 	print $out "Run 'sslmate help COMMAND' for more information on a specific command.\n";
 }

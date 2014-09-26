@@ -25,7 +25,7 @@
 
 	<refsynopsisdiv>
 		<cmdsynopsis>
-			<command>sslmate <arg choice="plain"><replaceable>COMMAND</replaceable></arg> <arg choice="opt" rep="repeat"><replaceable>ARGS</replaceable></arg></command>
+			<command>sslmate <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>COMMAND</replaceable></arg> <arg choice="opt" rep="repeat"><replaceable>ARGS</replaceable></arg></command>
 		</cmdsynopsis>
 	</refsynopsisdiv>
 
@@ -91,7 +91,8 @@
 		<para>
 			<command>sslmate</command> is logically divided into several sub-commands which
 			perform distinct tasks.  Each sub-command, and its arguments,
-			are documented below.
+			are documented below.  Note that arguments and options to sub-commands must be
+			specified on the command line <emphasis>after</emphasis> the name of the sub-command.
 		</para>
 
 		<variablelist>
@@ -386,6 +387,42 @@
 		</variablelist>
 	</refsect1>
 
+	<refsect1>
+		<title>Global options</title>
+
+		<para>
+			The following options are understood by <command>sslmate</command> and can
+			be used with any sub-command.  Since they apply globally
+			to <command>sslmate</command>, they must be specified on the command line
+			<emphasis>before</emphasis> the sub-command name.
+		</para>
+		<variablelist>
+			<varlistentry>
+				<term><option>--p <replaceable>PROFILE</replaceable></option></term>
+				<term><option>--profile=<replaceable>PROFILE</replaceable></option></term>
+
+				<listitem>
+					<para>
+						Use the given configuration profile, instead of the default.
+						If this option is specified, the string "-<replaceable>PROFILE</replaceable>"
+						will be appended to the paths of the configuration file and default key and
+						certificate directories.
+					</para>
+					<para>
+						For example, if <option>--profile=company</option>
+						is used, the global configuration file will be <filename>/etc/sslmate-company.conf</filename>
+						and the default certificate directory will be <filename>/etc/sslmate-company</filename>,
+						instead of <filename>/etc/sslmate.conf</filename> and <filename>/etc/sslmate</filename>.
+					</para>
+					<para>
+						This option is intended for those who need to use several different SSLMate
+						accounts on a single server, since each configuration file can contain distinct
+						SSLMate API credentials.
+					</para>
+				</listitem>
+			</varlistentry>
+		</variablelist>
+	</refsect1>
 	<refsect1>
 		<title>Configuration</title>
 		<para>
