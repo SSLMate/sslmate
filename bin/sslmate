@@ -1154,12 +1154,13 @@ sub command_download {
 					  cn => $cn }) or return 1;
 		if ($response->{status} eq 'error') {
 			print STDERR "Error: $cn: " . $response->{message} . "\n";
-			return 1;
+			return 1 unless $response->{reason} eq 'no_such_cert';
+			next;
 		} elsif ($response->{status} eq 'not_ready') {
 			print STDERR "Error: The certificates for $cn have not yet been issued. Please try again later.\n";
-			return 1;
+			next;
 		} elsif ($response->{status} ne 'success') {
-			print STDERR "Error: unknown response from server\n";
+			print STDERR "Error: unknown response from server when downloading certificate for $cn\n";
 			return 1;
 		}
 
