@@ -35,8 +35,8 @@ BEGIN {
 
 use version; our $VERSION = version->declare('0.4.0');
 our $API_ENDPOINT = 'https://sslmate.com/api/v1';
-our $GLOBAL_CONFIG_PATH = '/etc/sslmate.conf';
 
+our $config_profile;
 our %global_config;
 our %personal_config;
 our $country_code;
@@ -168,16 +168,19 @@ sub write_config_file {
 	}
 	close($config_fh);
 }
-sub get_personal_config_file_path {
+sub get_personal_config_path {
 	return $ENV{'SSLMATE_CONFIG'} if $ENV{'SSLMATE_CONFIG'};
-	return $ENV{'HOME'} . '/.sslmate' if $ENV{'HOME'};
+	return $ENV{'HOME'} . '/.sslmate' . ($config_profile ? "-$config_profile" : "") if $ENV{'HOME'};
 	die "Error: Neither \$SSLMATE_CONFIG nor \$HOME environment variables set.\n";
+}
+sub get_global_config_path {
+	return '/etc/sslmate' . ($config_profile ? "-$config_profile" : "") . '.conf';
 }
 sub load_config {
 	# Personal config
 	%personal_config = ();
 
-	my $personal_config_path = get_personal_config_file_path;
+	my $personal_config_path = get_personal_config_path;
 	if (-e $personal_config_path) {
 		%personal_config = read_config_file($personal_config_path);
 	}
@@ -185,14 +188,15 @@ sub load_config {
 	# Global config
 	%global_config = ();
 
-	# /etc/sslmate.conf might be readable only by root, so only attempt
+	my $global_config_path = get_global_config_path;
+	# global config file might be readable only by root, so only attempt
 	# to access if it's readable.
-	if (-r $GLOBAL_CONFIG_PATH) {
-		%global_config = read_config_file($GLOBAL_CONFIG_PATH);
+	if (-r $global_config_path) {
+		%global_config = read_config_file($global_config_path);
 	}
 }
 sub save_config {
-	write_config_file(get_personal_config_file_path, \%personal_config);
+	write_config_file(get_personal_config_path, \%personal_config);
 }
 sub is_linked {
 	return config_has('account_id') && config_has('api_key');
@@ -201,11 +205,12 @@ sub is_linked {
 sub init_default_paths {
 	if (!config_has("key_directory") && !config_has("cert_directory")) {
 		if ($> == 0) {
-			if (!mkdir('/etc/sslmate', 0755)) {
-				die "Error: Unable to create /etc/sslmate: $!\n" unless $!{EEXIST};
+			my $default_directory = '/etc/sslmate' . ($config_profile ? "-$config_profile" : "");
+			if (!mkdir($default_directory, 0755)) {
+				die "Error: Unable to create $default_directory: $!\n" unless $!{EEXIST};
 			}
-			$global_config{'key_directory'} = '/etc/sslmate';
-			$global_config{'cert_directory'} = '/etc/sslmate';
+			$global_config{'key_directory'} = $default_directory;
+			$global_config{'cert_directory'} = $default_directory;
 		}
 	}
 }
@@ -1398,6 +1403,20 @@ sub main {
 		print_usage(*STDERR);
 		return 2;
 	}
+
+	while (@args >= 1) {
+		if ($args[0] eq "-p" && @args >= 2) {
+			shift @args;
+			$config_profile = $args[0];
+			shift @args;
+		} elsif ($args[0] =~ /^--profile=(.*)$/) {
+			$config_profile = $1;
+			shift @args;
+		} else {
+			last;
+		}
+	}
+
 	my $command = shift @args;
 
 	if ($command eq 'buy') {
