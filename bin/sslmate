@@ -165,7 +165,7 @@ sub read_config_file {
 sub write_config_file {
 	my ($filename, $config_ref) = @_;
 	
-	sysopen(my $config_fh, $filename, O_WRONLY | O_CREAT, 0600) or die "Error: Unable to open $filename for writing: $!\n";
+	sysopen(my $config_fh, $filename, O_WRONLY | O_TRUNC | O_CREAT, 0600) or die "Error: Unable to open $filename for writing: $!\n";
 	for my $param_name (keys %$config_ref) {
 		print $config_fh $param_name . ' ' . $config_ref->{$param_name} . "\n";
 	}
@@ -281,7 +281,7 @@ sub open_cert_files {
 		my ($filename, $mode) = @_;
 
 		my $fh;
-		my $flags = O_WRONLY | O_CREAT;
+		my $flags = O_WRONLY | O_TRUNC | O_CREAT;
 		$flags |= O_EXCL unless $force;
 		if (!sysopen($fh, $filename, $flags, $mode)) {
 			if ($!{EEXIST}) {
