@@ -23,7 +23,7 @@ use IO::Handle;
 				# --------------------------------------------------
 use WWW::Curl::Easy;		# libwww-curl-perl		perl-WWW-Curl
 use URI::Escape;		# liburi-perl			perl-URI
-use JSON;			# libjson-perl			perl-JSON
+use JSON::PP; # core in 5.13.9+	# libjson-perl			perl-JSON (RHEL6), perl-JSON-PP (RHEL7)
 use Term::ReadKey;		# libterm-readkey-perl		perl-TermReadKey
 
 BEGIN {
@@ -364,7 +364,7 @@ sub api_call {
 		return undef;
 	}
 	
-	my $response_obj = eval { from_json($response_data) };
+	my $response_obj = eval { decode_json($response_data) };
 	if (!defined($response_obj)) {
 		chomp $@;
 		print STDERR "Error: received malformed response from SSLMate server: $@\n";
