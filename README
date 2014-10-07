@@ -27,10 +27,18 @@ You must have the following software installed to use the sslmate program:
 
    Module Name         Debian/Ubuntu Package        RHEL/CentOS Package
    -------------------------------------------------------------------------
-   WWW::Curl           libwww-curl-perl             perl-WWW-Curl
    URI                 liburi-perl                  perl-URI
-   JSON                libjson-perl                 perl-JSON
    Term::ReadKey       libterm-readkey-perl         perl-TermReadKey
+   JSON::PP (*)        libjson-perl                 perl-JSON (RHEL 6),
+                                                    perl-JSON-PP (RHEL 7)
+   WWW::Curl (**)      libwww-curl-perl             perl-WWW-Curl
+
+
+   Notes:
+     * JSON::PP is included with Perl 5.14 and later.
+
+    ** WWW::Curl is optional; if not available SSLMate will fall back
+       to executing the 'curl' command directly.
 
 
 INSTALLATION
