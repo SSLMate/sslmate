@@ -279,7 +279,7 @@ sub open_cert_files {
 		my ($filename, $mode) = @_;
 
 		my $fh;
-		my $flags = O_WRONLY | O_TRUNC | O_CREAT;
+		my $flags = O_WRONLY | O_CREAT;
 		$flags |= O_EXCL unless $force;
 		if (!sysopen($fh, $filename, $flags, $mode)) {
 			if ($!{EEXIST}) {
@@ -768,14 +768,17 @@ sub do_wait_for_cert {
 	$chain_crt ||= '';
 
 	# write .crt file
+	truncate($files->{crt_file}, 0);
 	print {$files->{crt_file}} $crt;
 	close $files->{crt_file};
 
 	# write .chain.crt file
+	truncate($files->{chain_crt_file}, 0);
 	print {$files->{chain_crt_file}} $chain_crt;
 	close $files->{chain_crt_file};
 
 	# write .chained.crt file
+	truncate($files->{chained_crt_file}, 0);
 	print {$files->{chained_crt_file}} $crt;
 	print {$files->{chained_crt_file}} $chain_crt;
 	close $files->{chained_crt_file};
@@ -805,6 +808,7 @@ sub do_buy {
 	};
 
 	# 1. Generate an RSA key
+	truncate($files->{key_file}, 0);
 	openssl_genrsa($files->{key_file}, 2048);
 	close($files->{key_file});
 
@@ -990,6 +994,7 @@ sub command_reissue {
 	};
 
 	# 1. Generate an RSA key
+	truncate($files->{key_file}, 0);
 	openssl_genrsa($files->{key_file}, 2048);
 	close($files->{key_file});
 
@@ -1437,18 +1442,22 @@ sub command_import {
 	$response->{chain} ||= '';
 
 	# write .key file
+	truncate($files->{key_file}, 0);
 	print {$files->{key_file}} $key;
 	close $files->{key_file};
 
 	# write .crt file
+	truncate($files->{crt_file}, 0);
 	print {$files->{crt_file}} $crt;
 	close $files->{crt_file};
 
 	# write .chain.crt file
+	truncate($files->{chain_crt_file}, 0);
 	print {$files->{chain_crt_file}} $response->{chain};
 	close $files->{chain_crt_file};
 
 	# write .chained.crt file
+	truncate($files->{chained_crt_file}, 0);
 	print {$files->{chained_crt_file}} $crt;
 	print {$files->{chained_crt_file}} $response->{chain};
 	close $files->{chained_crt_file};
