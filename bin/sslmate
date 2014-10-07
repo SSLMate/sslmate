@@ -332,7 +332,6 @@ sub api_call {
 	if (ref($request_data) eq 'HASH') {
 		# Convert into a query string
 		$request_data = join('&', map { defined($request_data->{$_}) ? qs_escape($_) . '=' . qs_escape($request_data->{$_}) : () } keys %$request_data);
-		#print STDERR "||$request_data||\n";
 	}
 
 	$curl ||= new_curl;
