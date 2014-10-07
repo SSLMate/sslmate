@@ -17,6 +17,7 @@ use warnings;
 use Errno;
 use Fcntl;
 use POSIX ":sys_wait_h";
+use Cwd qw(realpath);
 use File::Basename;
 use File::Temp;
 use IO::Handle;
@@ -269,18 +270,17 @@ sub get_cert_paths {
 }
 
 sub open_cert_files {
-	my ($cn, $force, $key_too) = @_;
-	my $files = get_cert_paths($cn, $key_too);
+	my ($files, $overwrite_all) = @_;
 
 	my $already_exists = 0;
 	my $open_errors = 0;
 
 	my $try_open = sub {
-		my ($filename, $mode) = @_;
+		my ($filename, $mode, $overwrite) = @_;
 
 		my $fh;
 		my $flags = O_WRONLY | O_CREAT;
-		$flags |= O_EXCL unless $force;
+		$flags |= O_EXCL unless $overwrite_all || $overwrite;
 		if (!sysopen($fh, $filename, $flags, $mode)) {
 			if ($!{EEXIST}) {
 				print STDERR "Error: a file named '$filename' already exists.\n";
@@ -293,12 +293,12 @@ sub open_cert_files {
 		}
 		return $fh;
 	};
-	if ($key_too) {
-		$files->{key_file} = $try_open->($files->{key_filename}, 0600);
-	}
-	$files->{crt_file} = $try_open->($files->{crt_filename}, 0666);
-	$files->{chain_crt_file} = $try_open->($files->{chain_crt_filename}, 0666);
-	$files->{chained_crt_file} = $try_open->($files->{chained_crt_filename}, 0666);
+	$files->{key_file} = $try_open->($files->{key_filename}, 0600, $files->{overwrite_key}) if defined $files->{key_filename};
+	$files->{crt_file} = $try_open->($files->{crt_filename}, 0666, $files->{overwrite_crt}) if defined $files->{crt_filename};
+	$files->{chain_crt_file} = $try_open->($files->{chain_crt_filename}, 0666,
+							$files->{overwrite_chain_crt}) if defined $files->{chain_crt_filename};
+	$files->{chained_crt_file} = $try_open->($files->{chained_crt_filename}, 0666,
+							$files->{overwrite_chained_crt}) if defined $files->{chained_crt_filename};
 
 	if ($already_exists) {
 		die "Please move/remove " . ($already_exists == 1 ? "this file" : "these files") . (!config_has("key_directory") && !config_has("cert_directory") ? " or run sslmate from a different directory" : "") . ".\n";
@@ -309,10 +309,12 @@ sub open_cert_files {
 	$files->{cleanup} = sub {
 		my ($cleanup_key_too) = @_;
 		for (qw/crt_filename chain_crt_filename chained_crt_filename/) {
-			unlink($files->{$_});
+			unlink($files->{$_}) if defined $files->{$_};
 		}
-		if ($key_too && $cleanup_key_too) {
-			unlink($files->{key_filename});
+		if ($cleanup_key_too) {
+			for (qw/key_filename/) {
+				unlink($files->{$_}) if defined $files->{$_};
+			}
 		}
 	};
 
@@ -800,7 +802,7 @@ sub do_buy {
 
 	# Future TODO: support reusing key file if one already exists
 
-	my $files = open_cert_files($cn, $force, 1);
+	my $files = open_cert_files(get_cert_paths($cn, 1), $force);
 
 	my $exit_with_error = sub {
 		$files->{cleanup}->(1);
@@ -986,7 +988,7 @@ sub command_reissue {
 	get_country_code_from_server or return 1;
 	init_default_paths;
 
-	my $files = open_cert_files($cn, $force, 1);
+	my $files = open_cert_files(get_cert_paths($cn, 1), $force);
 
 	my $exit_with_error = sub {
 		$files->{cleanup}->(1);
@@ -1147,7 +1149,7 @@ sub command_renew {
 
 	init_default_paths;
 
-	my $files = open_cert_files($cn, $force, 0);
+	my $files = open_cert_files(get_cert_paths($cn, 0), $force);
 
 	my $exit_with_error = sub {
 		$files->{cleanup}->(0);
@@ -1402,7 +1404,7 @@ sub command_import {
 	my $csr = openssl_req($source_key_path, $cn);
 
 	# 4. Open the destination files
-	my $files = open_cert_files($cn, $force, 1);
+	my $files = open_cert_files(get_cert_paths($cn, 1), $force);
 	my $exit_with_error = sub {
 		$files->{cleanup}->(1);
 		exit 1;
