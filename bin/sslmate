@@ -1272,6 +1272,7 @@ sub command_download {
 	}
 
 	my @certs;
+	my $errors = 0;
 	for my $cn (@args) {
 		my $paths = get_cert_paths($cn, 1);
 
@@ -1288,12 +1289,15 @@ sub command_download {
 		if ($response->{status} eq 'error') {
 			if ($response->{reason} eq 'no_such_cert') {
 				print STDERR "Error: $cn: There is no certificate in your account with this name.\n";
+				++$errors;
 				next;
 			} elsif ($response->{reason} eq 'inactive_cert') {
 				print STDERR "Error: $cn" . ($pubkey_hash ? " (with private key " . $paths->{key_filename} . ")" : "") . ": " . $response->{message} . "\n";
+				++$errors;
 				next;
 			} elsif ($response->{reason} eq 'no_such_pubkey_hash') {
 				print STDERR "Error: $cn: There is no certificate in your account that matches the private key " . $paths->{key_filename} . "\n";
+				++$errors;
 				next;
 			} else {
 				print STDERR "Error: $cn: " . $response->{message} . "\n";
@@ -1301,6 +1305,7 @@ sub command_download {
 			}
 		} elsif ($response->{status} eq 'not_ready') {
 			print STDERR "Error: The certificates for $cn" . ($pubkey_hash ? " (with private key " . $paths->{key_filename} . ")" : "") . " have not yet been issued. Please try again later.\n";
+			++$errors;
 			next;
 		} elsif ($response->{status} ne 'success') {
 			print STDERR "Error: unknown response from server when downloading certificate for $cn\n";
@@ -1321,6 +1326,7 @@ sub command_download {
 	}
 
 	if (@certs == 0) {
+		return 1 if $errors;
 		print "All certificate files already downloaded and up-to-date.\n";
 		return 10;
 	}
@@ -1367,6 +1373,9 @@ sub command_download {
 		print "     Certificate chain file: " . $paths->{chain_crt_filename} . "\n";
 		print "Certificate with chain file: " . $paths->{chained_crt_filename} . "\n";
 		print "\n";
+	}
+	if ($errors) {
+		print "Some new certificates were downloaded, but other certificates had errors. See above.\n";
 	}
 	return 0;
 }
