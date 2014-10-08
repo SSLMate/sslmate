@@ -18,6 +18,7 @@ use Errno;
 use Fcntl;
 use POSIX ":sys_wait_h";
 use Cwd qw(realpath);
+use Digest::SHA qw(sha256_hex);
 use File::Basename;
 use File::Temp;
 use IO::Handle;
@@ -547,6 +548,31 @@ sub extract_cn_from_crt {
 	die "Error: 'openssl x509' command failed - is $crt_filename a valid certificate file?\n" unless $? == 0;
 
 	return $cn;
+}
+
+sub extract_pubkey_from_key {
+	my ($key_filename) = @_;
+
+	pipe(my $openssl_reader, my $openssl_writer) or die "Error: pipe failed: $!";
+	my $openssl_pid = fork;
+	die "Error: fork failed: $!" unless defined $openssl_pid;
+	if ($openssl_pid == 0) {
+		open(STDIN, '<', '/dev/null');
+		open(STDOUT, '>&', $openssl_writer) or die "Error: dup failed: $!";
+		open(STDERR, '>', '/dev/null');
+		close($openssl_reader);
+		exec('openssl', 'rsa', '-in', $key_filename, '-pubout', '-outform', 'DER');
+		die "Error: Unable to run 'openssl rsa' command: " . ($!{ENOENT} ? 'openssl command not found' : $!) . "\n";
+	}
+	close($openssl_writer);
+
+	my $pubkey = do { local $/; <$openssl_reader> };
+	close($openssl_reader);
+
+	waitpid($openssl_pid, 0) or die "waitpid failed: $!";
+	die "Error: 'openssl rsa' command failed - is $key_filename a valid private key file?\n" unless $? == 0;
+
+	return $pubkey;
 }
 
 sub wait_for_cert {
@@ -1247,18 +1273,34 @@ sub command_download {
 
 	my @certs;
 	for my $cn (@args) {
-		my $paths = get_cert_paths($cn, 0);
+		my $paths = get_cert_paths($cn, 1);
+
+		my $pubkey_hash;
+		if (-f $paths->{key_filename} && -r $paths->{key_filename}) {
+			$pubkey_hash = sha256_hex(extract_pubkey_from_key($paths->{key_filename}));
+		}
 
 		my $response = api_call('GET', '/download',
 					{ account_id => get_config('account_id'),
 					  api_key => get_config('api_key'),
-					  cn => $cn }) or return 1;
+					  cn => $cn,
+					  pubkey_hash => $pubkey_hash }) or return 1;
 		if ($response->{status} eq 'error') {
-			print STDERR "Error: $cn: " . $response->{message} . "\n";
-			return 1 unless $response->{reason} eq 'no_such_cert';
-			next;
+			if ($response->{reason} eq 'no_such_cert') {
+				print STDERR "Error: $cn: There is no certificate in your account with this name.\n";
+				next;
+			} elsif ($response->{reason} eq 'inactive_cert') {
+				print STDERR "Error: $cn" . ($pubkey_hash ? " (with private key " . $paths->{key_filename} . ")" : "") . ": " . $response->{message} . "\n";
+				next;
+			} elsif ($response->{reason} eq 'no_such_pubkey_hash') {
+				print STDERR "Error: $cn: There is no certificate in your account that matches the private key " . $paths->{key_filename} . "\n";
+				next;
+			} else {
+				print STDERR "Error: $cn: " . $response->{message} . "\n";
+				return 1;
+			}
 		} elsif ($response->{status} eq 'not_ready') {
-			print STDERR "Error: The certificates for $cn have not yet been issued. Please try again later.\n";
+			print STDERR "Error: The certificates for $cn" . ($pubkey_hash ? " (with private key " . $paths->{key_filename} . ")" : "") . " have not yet been issued. Please try again later.\n";
 			next;
 		} elsif ($response->{status} ne 'success') {
 			print STDERR "Error: unknown response from server when downloading certificate for $cn\n";
