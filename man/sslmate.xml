@@ -62,7 +62,7 @@
 
 		<para>
 			<command>sslmate</command> is the command line client for
-			SSLMate (https://sslmate.com), a service for
+			SSLMate (<ulink url="https://sslmate.com">https://sslmate.com</ulink>), a service for
 			purchasing and managing SSL certificates.
 			SSLMate provides easy-to-use tools for buying,
 			renewing, and revoking certificates, for monitoring
@@ -81,7 +81,7 @@
 
 		<para>
 			To use the <command>sslmate</command> command, you must create
-			a free account at https://sslmate.com.
+			a free account at <ulink url="https://sslmate.com">https://sslmate.com</ulink>.
 		</para>
 	</refsect1>
 
