@@ -29,8 +29,7 @@ You must have the following software installed to use the sslmate program:
    -------------------------------------------------------------------------
    URI                 liburi-perl                  perl-URI
    Term::ReadKey       libterm-readkey-perl         perl-TermReadKey
-   JSON::PP (*)        libjson-perl                 perl-JSON (RHEL 6),
-                                                    perl-JSON-PP (RHEL 7)
+   JSON::PP (*)        libjson-perl                 perl-JSON
    WWW::Curl (**)      libwww-curl-perl             perl-WWW-Curl
 
 
@@ -38,7 +37,7 @@ You must have the following software installed to use the sslmate program:
      * JSON::PP is included with Perl 5.14 and later.
 
     ** WWW::Curl is optional; if not available SSLMate will fall back
-       to executing the 'curl' command directly.
+       to executing the `curl` command directly.
 
 
 INSTALLATION

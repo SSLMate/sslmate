@@ -29,7 +29,7 @@ use IPC::Open2;
 				# --------------------------------------------------
 # WWW::Curl::Easy		# libwww-curl-perl		perl-WWW-Curl
 use URI::Escape;		# liburi-perl			perl-URI
-use JSON::PP; # core in 5.13.9+	# libjson-perl			perl-JSON (RHEL6), perl-JSON-PP (RHEL7)
+use JSON::PP; # core in 5.13.9+	# libjson-perl			perl-JSON
 use Term::ReadKey;		# libterm-readkey-perl		perl-TermReadKey
 
 our $has_curl = eval { require WWW::Curl::Easy; 1 };
