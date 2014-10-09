@@ -730,6 +730,7 @@ sub do_link {
 	print "If you don't have an account yet, visit https://sslmate.com/signup\n";
 	my $username = prompt_user("Enter your SSLMate username: ");
 	my $password = prompt_password("Enter your SSLMate password: ");
+	return 0 if not defined $password;
 	print "Linking account... ";
 	STDOUT->flush;
 
