@@ -12,6 +12,7 @@
 # online at https://sslmate.com/terms
 #
 
+use 5.010;	# 5.10
 use strict;
 use warnings;
 use Errno;

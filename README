@@ -20,7 +20,7 @@ DEPENDENCIES
 
 You must have the following software installed to use the sslmate program:
 
- * Perl
+ * Perl v5.10.0 or newer.
 
  * The following Perl modules, which can be installed by running
    `cpan MODULENAME` or by installing the corresponding distro package.
