@@ -655,12 +655,10 @@ sub prompt_for_approver_email {
 		my $answer = prompt_user($mesg);
 		if ($answer eq 'q') {
 			return undef;
-		} elsif ($answer ne '') {
-			if (!Scalar::Util::looks_like_number($answer) || $answer < 1 || $answer > $num_emails) {
-				print "That is not a number between 1 and $num_emails.\n";
-			} else {
-				return $approver_emails->[$answer - 1];
-			}
+		} elsif ($answer =~ /^\d+$/ and $answer >= 1 and $answer <= $num_emails) {
+			return $approver_emails->[$answer - 1];
+		} else {
+			print "That is not a number between 1 and $num_emails.\n";
 		}
 	}
 }
