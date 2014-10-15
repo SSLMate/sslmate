@@ -49,9 +49,11 @@
 		<cmdsynopsis>
 			<command>sslmate download <arg choice="plain">--all</arg></command>
 		</cmdsynopsis>
+		<!--
 		<cmdsynopsis>
 			<command>sslmate import <arg choice="plain"><replaceable>KEYFILE</replaceable></arg> <arg choice="plain"><replaceable>CERTFILE</replaceable></arg></command>
 		</cmdsynopsis>
+		-->
 		<cmdsynopsis>
 			<command>sslmate link</command>
 		</cmdsynopsis>
@@ -280,6 +282,7 @@
 				</listitem>
 			</varlistentry>
 
+			<!--
 			<varlistentry>
 				<term><option>import <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>KEYFILE</replaceable></arg> <arg choice="plain"><replaceable>CERTFILE</replaceable></arg></option></term>
 				<listitem>
@@ -303,15 +306,15 @@
 					<variablelist>
 						<varlistentry>
 							<term><option>-f</option></term>
-							<term><option>--force</option></term>
+							<term><option>- -force</option></term>
 
 							<listitem>
 								<para>Overwrite existing files.</para>
 							</listitem>
 						</varlistentry>
 						<varlistentry>
-							<term><option>--auto-renew</option></term>
-							<term><option>--no-auto-renew</option></term>
+							<term><option>- -auto-renew</option></term>
+							<term><option>- -no-auto-renew</option></term>
 
 							<listitem>
 								<para>
@@ -324,6 +327,7 @@
 					</variablelist>
 				</listitem>
 			</varlistentry>
+			-->
 
 			<varlistentry>
 				<term><option>link</option></term>

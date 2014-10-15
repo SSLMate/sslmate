@@ -55,7 +55,7 @@ sub print_usage {
 	print $out " sslmate reissue HOSTNAME         Reissue the certificate for given hostname\n";
 	print $out " sslmate revoke [-a] HOSTNAME     Revoke the certificate for given hostname\n";
 	print $out " sslmate download HOSTNAME        Download the certificate for given hostname\n";
-	print $out " sslmate import KEYFILE CERTFILE  Import this certificate to your account\n";
+	#print $out " sslmate import KEYFILE CERTFILE  Import this certificate to your account\n";
 	print $out " sslmate link                     Link this system with your SSLMate account\n";
 	print $out " sslmate help                     Display help\n";
 	print $out " sslmate version                  Print the version of SSLMate that's installed\n";

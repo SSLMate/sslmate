@@ -45,8 +45,6 @@ sslmate \- buy and manage SSL certificates
 \fBsslmate download \fR\fB\fIHOSTNAME\fR...\fR
 .HP \w'\fBsslmate\ download\ \fR\fB\-\-all\fR\ 'u
 \fBsslmate download \fR\fB\-\-all\fR
-.HP \w'\fBsslmate\ import\ \fR\fB\fIKEYFILE\fR\fR\fB\ \fR\fB\fICERTFILE\fR\fR\ 'u
-\fBsslmate import \fR\fB\fIKEYFILE\fR\fR\fB \fR\fB\fICERTFILE\fR\fR
 .HP \w'\fBsslmate\ link\fR\ 'u
 \fBsslmate link\fR
 .SH "DESCRIPTION"
@@ -187,30 +185,6 @@ $PWD
 if run as non\-root)\&.
 .sp
 If this option is used, specific hostnames cannot be specified on the command line\&.
-.RE
-.RE
-.PP
-\fBimport \fR\fB[\fIOPTIONS\fR]\fR\fB \fR\fB\fIKEYFILE\fR\fR\fB \fR\fB\fICERTFILE\fR\fR
-.RS 4
-Import the given certificate to your SSLMate account\&. An imported certificate works just like a certificate purchased from SSLMate with
-\fBsslmate buy\fR, meaning SSLMate will monitor its expiration and you can set up automated renewals for it\&.
-.sp
-You must specify the paths to the key file (\fIKEYFILE\fR) and to the certificate file (\fICERTFILE\fR)\&. Note that the private key is
-\fInot\fR
-uploaded to SSLMate;
-\fBsslmate\fR
-only uses it to generate a certificate signing request\&.
-.sp
-The following options are understood:
-.PP
-\fB\-f\fR, \fB\-\-force\fR
-.RS 4
-Overwrite existing files\&.
-.RE
-.PP
-\fB\-\-auto\-renew\fR, \fB\-\-no\-auto\-renew\fR
-.RS 4
-Enable or disable automatic renewal for this certificate\&. If neither option is specified, your account\*(Aqs default auto\-renewal setting is used\&.
 .RE
 .RE
 .PP
