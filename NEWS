@@ -1,8 +1,12 @@
-v0.4.0 (2014-09-??)
-  * Add `sslmate import` command.
-  * Allow multiple certs to be downloaded with `sslmate download`.
+v0.4.0 (2014-10-15)
+  * Allow multiple certs, or all certs, to be downloaded with
+    `sslmate download`.
   * Add sslmate(1) man page.
+  * Ensure that `sslmate download` only downloads certs that
+    match the corresponding private keys.
   * Improve usage messages.
+  * Add support for configuration profiles.
+  * Check for newer version when running `sslmate version`.
   * Rewrite in Perl.
 
 v0.3.0 (2014-09-12)
