@@ -18,7 +18,18 @@ https://sslmate.com.
 
 DEPENDENCIES
 
-You must have the following software installed to use the sslmate program:
+SSLMate officially supports:
+
+ * Debian 6 and 7
+ * Ubuntu 10.04, 12.04, 13.10, and 14.04
+ * RHEL/CentOS 6 and 7
+ * Mac OS X 10.9 and above
+
+Packages (.deb, .rpm, and .pkg) for the above operating systems are
+available from <https://sslmate.com/help/install>.
+
+SSLMate can run on other Unix-based operating systems provided the
+following software is installed:
 
  * Perl v5.10.0 or newer.
 
