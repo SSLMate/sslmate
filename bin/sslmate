@@ -361,14 +361,14 @@ sub native_api_call {
 }
 
 sub escape_curl_param {
-	my $_ = shift;
-	s/\\/\\\\/g;
-	s/\"/\\\"/g;
-	s/\t/\\t/g;
-	s/\n/\\n/g;
-	s/\r/\\r/g;
-	s/\v/\\v/g;
-	return $_;
+	my ($param) = @_;
+	$param =~ s/\\/\\\\/g;
+	$param =~ s/\"/\\\"/g;
+	$param =~ s/\t/\\t/g;
+	$param =~ s/\n/\\n/g;
+	$param =~ s/\r/\\r/g;
+	$param =~ s/\v/\\v/g;
+	return $param;
 }
 
 sub decode_curl_error {
