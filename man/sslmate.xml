@@ -41,7 +41,7 @@
 			<command>sslmate reissue <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
 		</cmdsynopsis>
 		<cmdsynopsis>
-			<command>sslmate revoke <arg choice="opt">-a</arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
+			<command>sslmate revoke <arg choice="opt">--all</arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
 		</cmdsynopsis>
 		<cmdsynopsis>
 			<command>sslmate download <arg choice="plain" rep="repeat"><replaceable>HOSTNAME</replaceable></arg></command>
