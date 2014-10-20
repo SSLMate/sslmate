@@ -34,7 +34,7 @@ use Term::ReadKey;		# libterm-readkey-perl		perl-TermReadKey
 
 our $has_curl = eval { require WWW::Curl::Easy; 1 };
 
-use version; our $VERSION = version->declare('0.4.1');
+use version; our $VERSION = version->declare('0.4.2');
 our $API_ENDPOINT = 'https://sslmate.com/api/v1';
 
 our $config_profile;
@@ -88,7 +88,7 @@ sub prompt_user {
 }
 
 sub prompt_yesno {
-	while (my $answer = prompt_user("Enter yes or no: ")) {
+	while (defined(my $answer = prompt_user("Enter yes or no: "))) {
 		if ($answer eq 'yes') {
 			return 1;
 		} elsif ($answer eq 'no') {
@@ -107,7 +107,7 @@ sub prompt_password {
 	my $password = '';
 	ReadMode(4);
 	my %ctrl = GetControlChars;
-	while (my $key = ReadKey(0)) {
+	while (defined(my $key = ReadKey(0))) {
 		if ($key eq "\n" || $key eq "\r" || $key eq $ctrl{EOF}) { # e.g. Ctrl+D
 			print "\n";
 			last;
