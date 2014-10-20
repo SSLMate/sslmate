@@ -443,17 +443,21 @@
 		</para>
 		<variablelist>
 			<varlistentry>
-				<term><parameter>account_id</parameter></term>
-				<term><parameter>api_key</parameter></term>
+				<term><option>account_id <replaceable>ID</replaceable></option></term>
+				<term><option>api_key <replaceable>KEY</replaceable></option></term>
 				<listitem><para>Your API credentials, which can be found on your <ulink url="https://sslmate.com/account">online SSLMate account page</ulink>. These options are automatically set when you run <command>sslmate link</command>.</para></listitem>
 			</varlistentry>
 			<varlistentry>
-				<term><parameter>key_directory</parameter></term>
-				<term><parameter>cert_directory</parameter></term>
+				<term><option>key_directory <replaceable>PATH</replaceable></option></term>
+				<term><option>cert_directory <replaceable>PATH</replaceable></option></term>
 				<listitem><para>The directories where <command>sslmate</command> places keys and certificates. When running as root, the default is <filename>/etc/sslmate</filename>. When running as non-root, the default is the current working directory.</para></listitem>
 			</varlistentry>
 			<varlistentry>
-				<term><parameter>api_endpoint</parameter></term>
+				<term><option>honor_umask yes | no</option></term>
+				<listitem><para>By default, sslmate creates certificate files with 644 permissions and key files with 600 permissions. If this option is set to yes, sslmate honors your umask when creating files.  Note that key files are never created with group or world permissions, even if this option is set to yes.</para></listitem>
+			</varlistentry>
+			<varlistentry>
+				<term><option>api_endpoint <replaceable>URI</replaceable></option></term>
 				<listitem><para>The URI to the SSLMate API endpoint. This option does not need to be configured under normal circumstances.</para></listitem>
 			</varlistentry>
 		</variablelist>

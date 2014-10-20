@@ -141,12 +141,12 @@ sub config_has {
 }
 
 sub get_config {
-	my ($name) = @_;
+	my ($name, $default_value) = @_;
 
 	return $personal_config{$name} if defined $personal_config{$name};
 	return $global_config{$name}   if defined $global_config{$name};
 
-	return undef;
+	return $default_value;
 }
 
 sub migrate_config_option {
@@ -222,6 +222,9 @@ sub init_default_paths {
 			$global_config{'key_directory'} = $default_directory;
 			$global_config{'cert_directory'} = $default_directory;
 		}
+	}
+	unless (get_config('honor_umask', 'no') eq 'yes') {
+		umask 0022;
 	}
 }
 
