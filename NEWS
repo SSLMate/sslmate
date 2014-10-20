@@ -1,3 +1,7 @@
+v0.4.2 (2014-10-20)
+  * Fix bug that prevented 'sslmate link' from working with
+    passwords containing '0'.
+
 v0.4.1 (2014-10-18)
   * Fix warning when run with newer versions of Perl.
 
