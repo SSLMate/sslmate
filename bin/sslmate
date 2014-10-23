@@ -319,7 +319,7 @@ sub open_cert_files {
 
 	$files->{cleanup} = sub {
 		my ($params) = @_;
-		$params ||= {};
+		$params //= {};
 		for (qw/key crt chain_crt chained_crt/) {
 			unlink($files->{$_ . "_filename"}) if defined $files->{$_ . "_filename"} && not $params->{"keep_" . $_};
 		}
@@ -336,7 +336,7 @@ sub qs_escape {
 sub native_api_call {
 	my ($method, $command, $request_data) = @_;
 
-	$curl ||= new_curl;
+	$curl //= new_curl;
 	if ($method eq 'GET') {
 		$command .= "?$request_data" if $request_data;
 		$curl->setopt(WWW::Curl::Easy::CURLOPT_HTTPGET(), 1);
@@ -344,7 +344,7 @@ sub native_api_call {
 		$curl->setopt(WWW::Curl::Easy::CURLOPT_POSTFIELDS(), $request_data);
 		$curl->setopt(WWW::Curl::Easy::CURLOPT_POSTFIELDSIZE(), length $request_data);
 	}
-	$curl->setopt(WWW::Curl::Easy::CURLOPT_URL(), (get_config('api_endpoint') || $API_ENDPOINT) . $command);
+	$curl->setopt(WWW::Curl::Easy::CURLOPT_URL(), (get_config('api_endpoint') // $API_ENDPOINT) . $command);
 
 	my $response_data = '';
 	open(my $response_fh, '>', \$response_data);
@@ -402,7 +402,7 @@ sub external_api_call {
 	print $config_fh "user-agent = \"" . escape_curl_param("SSLMate-external/$VERSION") . "\"\n";
 	print $config_fh "silent\n";
 	print $config_fh "include\n";
-	print $config_fh "url = \"" . escape_curl_param((get_config('api_endpoint') || $API_ENDPOINT) . $command) . "\"\n";
+	print $config_fh "url = \"" . escape_curl_param((get_config('api_endpoint') // $API_ENDPOINT) . $command) . "\"\n";
 	if ($method eq 'POST') {
 		print $config_fh "data = \"" . escape_curl_param($request_data) . "\"\n";
 	}
@@ -461,7 +461,7 @@ sub api_call {
 
 	return undef unless defined($http_status);
 
-	$content_type ||= '';
+	$content_type //= '';
 
 	if ($content_type ne 'application/json') {
 		print STDERR "Error: received unexpected response from SSLMate server: response not JSON (content-type=$content_type; status=$http_status)\n";
@@ -798,7 +798,7 @@ sub do_wait_for_cert {
 	print "Waiting for ownership confirmation...\n";
 
 	my ($crt, $chain_crt) = wait_for_cert($response->{cert_instance_id}) or $exit_with_error->();
-	$chain_crt ||= '';
+	$chain_crt //= '';
 
 	# write .crt file
 	truncate($files->{crt_file}, 0);
@@ -1269,7 +1269,7 @@ sub command_download {
 
 	if ($all) {
 		# scan the key directory, populate @args for every .key file
-		my $key_directory = get_config('key_directory') || '.';
+		my $key_directory = get_config('key_directory') // '.';
 		opendir(my $dh, $key_directory) or die "Error: unable to read key directory: $key_directory: $!\n";
 		push @args, map { s/\.key$//; $_ } grep { /\.key$/ } readdir($dh);
 		closedir($dh);
@@ -1321,7 +1321,7 @@ sub command_download {
 			return 1;
 		}
 
-		$response->{chain} ||= '';
+		$response->{chain} //= '';
 
 		if (file_contents_are($paths->{crt_filename}, $response->{crt}) &&
 				file_contents_are($paths->{chain_crt_filename}, $response->{chain}) &&
@@ -1507,7 +1507,7 @@ sub command_import {
 	}
 
 	# 6. Write the key, crt, and chain to the destination directory
-	$response->{chain} ||= '';
+	$response->{chain} //= '';
 
 	if (defined $files->{key_file}) {
 		# write .key file
@@ -1534,7 +1534,7 @@ sub command_import {
 
 	print "\n";
 	print "Your certificate has been imported to SSLMate.\n\n";
-	print "           Private key file: " . ($files->{key_filename} || $source_key_path) . "\n";
+	print "           Private key file: " . ($files->{key_filename} // $source_key_path) . "\n";
 	print "           Certificate file: " . $files->{crt_filename} . "\n";
 	print "     Certificate chain file: " . $files->{chain_crt_filename} . "\n";
 	print "Certificate with chain file: " . $files->{chained_crt_filename} . "\n";
