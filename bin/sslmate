@@ -1442,9 +1442,14 @@ sub command_import {
 	get_country_code_from_server or return 1;
 	init_default_paths;
 
+	do_import($force, $auto_renew, $args[0], $args[1]);
+	return 0;
+}
+
+sub do_import {
+	my ($force, $auto_renew, $source_key_path, $source_crt_path, $cn) = @_;
+
 	# 1. Open the source key and crt files
-	my $source_key_path = $args[0];
-	my $source_crt_path = $args[1];
 	open(my $source_key_file, '<', $source_key_path) or die "Error: Unable to open $source_key_path: $!\n";
 	open(my $source_crt_file, '<', $source_crt_path) or die "Error: Unable to open $source_crt_path: $!\n";
 	my $key = do { local $/; <$source_key_file> };
@@ -1452,8 +1457,8 @@ sub command_import {
 	close($source_key_file);
 	close($source_crt_file);
 
-	# 2. Extract the CN from the certificate
-	my $cn = extract_cn_from_crt($source_crt_path)
+	# 2. Extract the CN from the certificate, if not already known
+	$cn //= extract_cn_from_crt($source_crt_path)
 			or die "Error: Unable to parse $source_crt_path - is it a valid certificate file?\n";
 	print "Importing certificate for $cn...\n";
 
@@ -1487,6 +1492,17 @@ sub command_import {
 	my $response = api_call('POST', '/import', $request) or $exit_with_error->();
 
 	while ($response->{status} eq 'need_approver_email') {
+		if ($response->{cn_is_bare_domain}) {
+			my $www_cn = "www.$cn";
+			print STDERR "\n";
+			print STDERR "WARNING: This certificate will not be valid for $www_cn when it renews.\n";
+			print STDERR "Would you rather import a certificate that will work with both $www_cn AND $cn?\n\n";
+			if (prompt_yesno) {
+				$files->{cleanup}->($cleanup_params);
+				return do_import($force, $auto_renew, $source_key_path, $source_crt_path, $www_cn);
+			}
+		}
+
 		# Prompt user to choose an approver email address:
 		print "\n";
 		print "When it's time to renew this certificate, we will need to send you an email to\n";
@@ -1539,7 +1555,6 @@ sub command_import {
 	print "           Certificate file: " . $files->{crt_filename} . "\n";
 	print "     Certificate chain file: " . $files->{chain_crt_filename} . "\n";
 	print "Certificate with chain file: " . $files->{chained_crt_filename} . "\n";
-	return 0;
 }
 
 sub command_help {
