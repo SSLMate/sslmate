@@ -1,3 +1,9 @@
+v0.4.3 (2014-10-24)
+  * Create cert files with a umask of 022 unless honor_umask config
+    option set to 'yes'.
+  * Re-license under the X11 license.
+  * Minor bug fixes.
+
 v0.4.2 (2014-10-20)
   * Fix bug that prevented 'sslmate link' from working with
     passwords containing '0'.
