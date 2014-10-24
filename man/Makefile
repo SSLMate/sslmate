@@ -1,3 +1,9 @@
+#
+# Copyright (c) 2014 Opsmate, Inc.
+#
+# See COPYING file for license information.
+#
+
 MANPAGES = man1/sslmate.1
 DOCBOOK = xsltproc \
 	--param man.output.in.separate.dir 1 \
