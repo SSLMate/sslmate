@@ -1,15 +1,36 @@
 #!/usr/bin/perl
 
 #
-# Copyright (C) 2014 Opsmate, Inc.
-# All rights reserved.
+# Copyright (c) 2014 Opsmate, Inc.
 #
-# Redistribution and use, in source and binary forms, without
-# modification, is permitted for the sole purpose of using the SSLMate
-# service available at https://sslmate.com
+# Permission is hereby granted, free of charge, to any person obtaining a
+# copy of this software and associated documentation files (the "Software"),
+# to deal in the Software without restriction, including without limitation
+# the rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Software, and to permit persons to whom the
+# Software is furnished to do so, subject to the following conditions:
 #
-# Use of this program is governed by the Terms and Conditions available
-# online at https://sslmate.com/terms
+# The above copyright notice and this permission notice shall be included
+# in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+# OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+# ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+# OTHER DEALINGS IN THE SOFTWARE.
+#
+# Except as contained in this notice, the name(s) of the above copyright
+# holders shall not be used in advertising or otherwise to promote the
+# sale, use or other dealings in this Software without prior written
+# authorization.
+#
+
+#
+# This program is designed to be used with the online SSLMate service at
+# <https://sslmate.com/>.  Use of the SSLMate service is governed by the
+# Terms and Conditions available online at <https://sslmate.com/terms>.
 #
 
 use 5.010;	# 5.10
@@ -34,7 +55,7 @@ use Term::ReadKey;		# libterm-readkey-perl		perl-TermReadKey
 
 our $has_curl = eval { require WWW::Curl::Easy; 1 };
 
-use version; our $VERSION = version->declare('0.4.2');
+use version; our $VERSION = version->declare('0.4.3');
 our $API_ENDPOINT = 'https://sslmate.com/api/v1';
 
 our $config_profile;
@@ -141,12 +162,12 @@ sub config_has {
 }
 
 sub get_config {
-	my ($name) = @_;
+	my ($name, $default_value) = @_;
 
 	return $personal_config{$name} if defined $personal_config{$name};
 	return $global_config{$name}   if defined $global_config{$name};
 
-	return undef;
+	return $default_value;
 }
 
 sub migrate_config_option {
@@ -222,6 +243,9 @@ sub init_default_paths {
 			$global_config{'key_directory'} = $default_directory;
 			$global_config{'cert_directory'} = $default_directory;
 		}
+	}
+	unless (get_config('honor_umask', 'no') eq 'yes') {
+		umask 0022;
 	}
 }
 
@@ -316,8 +340,9 @@ sub open_cert_files {
 
 	$files->{cleanup} = sub {
 		my ($params) = @_;
-		$params ||= {};
+		$params //= {};
 		for (qw/key crt chain_crt chained_crt/) {
+			close($files->{$_}) if defined $files->{$_};
 			unlink($files->{$_ . "_filename"}) if defined $files->{$_ . "_filename"} && not $params->{"keep_" . $_};
 		}
 	};
@@ -333,7 +358,7 @@ sub qs_escape {
 sub native_api_call {
 	my ($method, $command, $request_data) = @_;
 
-	$curl ||= new_curl;
+	$curl //= new_curl;
 	if ($method eq 'GET') {
 		$command .= "?$request_data" if $request_data;
 		$curl->setopt(WWW::Curl::Easy::CURLOPT_HTTPGET(), 1);
@@ -341,7 +366,7 @@ sub native_api_call {
 		$curl->setopt(WWW::Curl::Easy::CURLOPT_POSTFIELDS(), $request_data);
 		$curl->setopt(WWW::Curl::Easy::CURLOPT_POSTFIELDSIZE(), length $request_data);
 	}
-	$curl->setopt(WWW::Curl::Easy::CURLOPT_URL(), (get_config('api_endpoint') || $API_ENDPOINT) . $command);
+	$curl->setopt(WWW::Curl::Easy::CURLOPT_URL(), (get_config('api_endpoint') // $API_ENDPOINT) . $command);
 
 	my $response_data = '';
 	open(my $response_fh, '>', \$response_data);
@@ -399,7 +424,7 @@ sub external_api_call {
 	print $config_fh "user-agent = \"" . escape_curl_param("SSLMate-external/$VERSION") . "\"\n";
 	print $config_fh "silent\n";
 	print $config_fh "include\n";
-	print $config_fh "url = \"" . escape_curl_param((get_config('api_endpoint') || $API_ENDPOINT) . $command) . "\"\n";
+	print $config_fh "url = \"" . escape_curl_param((get_config('api_endpoint') // $API_ENDPOINT) . $command) . "\"\n";
 	if ($method eq 'POST') {
 		print $config_fh "data = \"" . escape_curl_param($request_data) . "\"\n";
 	}
@@ -458,7 +483,7 @@ sub api_call {
 
 	return undef unless defined($http_status);
 
-	$content_type ||= '';
+	$content_type //= '';
 
 	if ($content_type ne 'application/json') {
 		print STDERR "Error: received unexpected response from SSLMate server: response not JSON (content-type=$content_type; status=$http_status)\n";
@@ -795,7 +820,7 @@ sub do_wait_for_cert {
 	print "Waiting for ownership confirmation...\n";
 
 	my ($crt, $chain_crt) = wait_for_cert($response->{cert_instance_id}) or $exit_with_error->();
-	$chain_crt ||= '';
+	$chain_crt //= '';
 
 	# write .crt file
 	truncate($files->{crt_file}, 0);
@@ -1266,7 +1291,7 @@ sub command_download {
 
 	if ($all) {
 		# scan the key directory, populate @args for every .key file
-		my $key_directory = get_config('key_directory') || '.';
+		my $key_directory = get_config('key_directory') // '.';
 		opendir(my $dh, $key_directory) or die "Error: unable to read key directory: $key_directory: $!\n";
 		push @args, map { s/\.key$//; $_ } grep { /\.key$/ } readdir($dh);
 		closedir($dh);
@@ -1318,7 +1343,7 @@ sub command_download {
 			return 1;
 		}
 
-		$response->{chain} ||= '';
+		$response->{chain} //= '';
 
 		if (file_contents_are($paths->{crt_filename}, $response->{crt}) &&
 				file_contents_are($paths->{chain_crt_filename}, $response->{chain}) &&
@@ -1438,9 +1463,14 @@ sub command_import {
 	get_country_code_from_server or return 1;
 	init_default_paths;
 
+	do_import($force, $auto_renew, $args[0], $args[1]);
+	return 0;
+}
+
+sub do_import {
+	my ($force, $auto_renew, $source_key_path, $source_crt_path, $cn) = @_;
+
 	# 1. Open the source key and crt files
-	my $source_key_path = $args[0];
-	my $source_crt_path = $args[1];
 	open(my $source_key_file, '<', $source_key_path) or die "Error: Unable to open $source_key_path: $!\n";
 	open(my $source_crt_file, '<', $source_crt_path) or die "Error: Unable to open $source_crt_path: $!\n";
 	my $key = do { local $/; <$source_key_file> };
@@ -1448,8 +1478,8 @@ sub command_import {
 	close($source_key_file);
 	close($source_crt_file);
 
-	# 2. Extract the CN from the certificate
-	my $cn = extract_cn_from_crt($source_crt_path)
+	# 2. Extract the CN from the certificate, if not already known
+	$cn //= extract_cn_from_crt($source_crt_path)
 			or die "Error: Unable to parse $source_crt_path - is it a valid certificate file?\n";
 	print "Importing certificate for $cn...\n";
 
@@ -1483,6 +1513,17 @@ sub command_import {
 	my $response = api_call('POST', '/import', $request) or $exit_with_error->();
 
 	while ($response->{status} eq 'need_approver_email') {
+		if ($response->{cn_is_bare_domain}) {
+			my $www_cn = "www.$cn";
+			print STDERR "\n";
+			print STDERR "WARNING: This certificate will not be valid for $www_cn when it renews.\n";
+			print STDERR "Would you rather import a certificate that will work with both $www_cn AND $cn?\n\n";
+			if (prompt_yesno) {
+				$files->{cleanup}->($cleanup_params);
+				return do_import($force, $auto_renew, $source_key_path, $source_crt_path, $www_cn);
+			}
+		}
+
 		# Prompt user to choose an approver email address:
 		print "\n";
 		print "When it's time to renew this certificate, we will need to send you an email to\n";
@@ -1504,7 +1545,7 @@ sub command_import {
 	}
 
 	# 6. Write the key, crt, and chain to the destination directory
-	$response->{chain} ||= '';
+	$response->{chain} //= '';
 
 	if (defined $files->{key_file}) {
 		# write .key file
@@ -1531,11 +1572,10 @@ sub command_import {
 
 	print "\n";
 	print "Your certificate has been imported to SSLMate.\n\n";
-	print "           Private key file: " . ($files->{key_filename} || $source_key_path) . "\n";
+	print "           Private key file: " . ($files->{key_filename} // $source_key_path) . "\n";
 	print "           Certificate file: " . $files->{crt_filename} . "\n";
 	print "     Certificate chain file: " . $files->{chain_crt_filename} . "\n";
 	print "Certificate with chain file: " . $files->{chained_crt_filename} . "\n";
-	return 0;
 }
 
 sub command_help {

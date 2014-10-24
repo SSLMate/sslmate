@@ -1,5 +1,11 @@
+#
+# Copyright (c) 2014 Opsmate, Inc.
+#
+# See COPYING file for license information.
+#
+
 PROJECT = sslmate
-VERSION = 0.4.2
+VERSION = 0.4.3
 
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin

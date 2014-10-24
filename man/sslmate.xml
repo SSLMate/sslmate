@@ -1,9 +1,35 @@
 <!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.2//EN" "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
 <refentry>
+	<!--
+		Copyright (c) 2014 Opsmate, Inc.
+
+		Permission is hereby granted, free of charge, to any person obtaining a
+		copy of this software and associated documentation files (the "Software"),
+		to deal in the Software without restriction, including without limitation
+		the rights to use, copy, modify, merge, publish, distribute, sublicense,
+		and/or sell copies of the Software, and to permit persons to whom the
+		Software is furnished to do so, subject to the following conditions:
+
+		The above copyright notice and this permission notice shall be included
+		in all copies or substantial portions of the Software.
+
+		THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+		IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+		FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+		THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+		OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+		ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+		OTHER DEALINGS IN THE SOFTWARE.
+
+		Except as contained in this notice, the name(s) of the above copyright
+		holders shall not be used in advertising or otherwise to promote the
+		sale, use or other dealings in this Software without prior written
+		authorization.
+	-->
 	<refentryinfo>
 		<title>SSLMate</title>
-		<date>2014-10-20</date>
-		<productname>SSLMate 0.4.2</productname>
+		<date>2014-10-24</date>
+		<productname>SSLMate 0.4.3</productname>
 
 		<author>
 			<othername>SSLMate</othername>
@@ -41,7 +67,7 @@
 			<command>sslmate reissue <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
 		</cmdsynopsis>
 		<cmdsynopsis>
-			<command>sslmate revoke <arg choice="opt">-a</arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
+			<command>sslmate revoke <arg choice="opt">--all</arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
 		</cmdsynopsis>
 		<cmdsynopsis>
 			<command>sslmate download <arg choice="plain" rep="repeat"><replaceable>HOSTNAME</replaceable></arg></command>
@@ -443,17 +469,21 @@
 		</para>
 		<variablelist>
 			<varlistentry>
-				<term><parameter>account_id</parameter></term>
-				<term><parameter>api_key</parameter></term>
+				<term><option>account_id <replaceable>ID</replaceable></option></term>
+				<term><option>api_key <replaceable>KEY</replaceable></option></term>
 				<listitem><para>Your API credentials, which can be found on your <ulink url="https://sslmate.com/account">online SSLMate account page</ulink>. These options are automatically set when you run <command>sslmate link</command>.</para></listitem>
 			</varlistentry>
 			<varlistentry>
-				<term><parameter>key_directory</parameter></term>
-				<term><parameter>cert_directory</parameter></term>
+				<term><option>key_directory <replaceable>PATH</replaceable></option></term>
+				<term><option>cert_directory <replaceable>PATH</replaceable></option></term>
 				<listitem><para>The directories where <command>sslmate</command> places keys and certificates. When running as root, the default is <filename>/etc/sslmate</filename>. When running as non-root, the default is the current working directory.</para></listitem>
 			</varlistentry>
 			<varlistentry>
-				<term><parameter>api_endpoint</parameter></term>
+				<term><option>honor_umask yes | no</option></term>
+				<listitem><para>By default, sslmate creates certificate files with 644 permissions and key files with 600 permissions. If this option is set to yes, sslmate honors your umask when creating files.  Note that key files are never created with group or world permissions, even if this option is set to yes.</para></listitem>
+			</varlistentry>
+			<varlistentry>
+				<term><option>api_endpoint <replaceable>URI</replaceable></option></term>
 				<listitem><para>The URI to the SSLMate API endpoint. This option does not need to be configured under normal circumstances.</para></listitem>
 			</varlistentry>
 		</variablelist>
