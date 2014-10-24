@@ -1,3 +1,11 @@
+sslmate (0.4.3-1) unstable; urgency=low
+
+  * New upstream release.
+  * Update debian/copyright.
+  * Change maintainer to software@sslmate.com.
+
+ -- SSLMate Software Release Role <software@sslmate.com>  Fri, 24 Oct 2014 12:30:29 -0700
+
 sslmate (0.4.2-1) unstable; urgency=low
 
   * New upstream release.
