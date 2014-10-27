@@ -535,8 +535,6 @@ sub openssl_req {
 		open(STDIN, '<', '/dev/null');
 		open(STDOUT, '>&', $openssl_writer) or die "Error: dup failed: $!";
 		close($openssl_reader);
-		$ENV{'CN'} = $cn;
-		$ENV{'COUNTRY_CODE'} = $country_code;
 		exec('openssl', 'req', '-new', '-key', $key_filename, '-config', $openssl_req_cnf->filename);
 		die "Error: Unable to run 'openssl req' command: " . ($!{ENOENT} ? 'openssl command not found' : $!) . "\n";
 	}
