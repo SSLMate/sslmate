@@ -342,7 +342,7 @@ sub open_cert_files {
 		my ($params) = @_;
 		$params //= {};
 		for (qw/key crt chain_crt chained_crt/) {
-			close($files->{$_}) if defined $files->{$_};
+			close($files->{$_ . "_file"}) if defined $files->{$_ . "_file"};
 			unlink($files->{$_ . "_filename"}) if defined $files->{$_ . "_filename"} && not $params->{"keep_" . $_};
 		}
 	};
