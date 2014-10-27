@@ -1245,6 +1245,70 @@ sub command_renew {
 	return do_wait_for_cert($response, $files);
 }
 
+sub command_req {
+	my @args = @_;
+
+	if (@args >= 1 && $args[0] eq "-?") {
+		print "Usage: sslmate req [OPTIONS] HOSTNAME\n\n";
+		print "Example: sslmate req www.example.com\n";
+		print "         sslmate req '*.example.com'\n";
+		print "\n";
+		print "Valid options:\n";
+		print " -f, --force        overwrite existing files\n";
+		print " --country=CODE     set country code for request\n";
+		return 0;
+	}
+
+	my $force = 0;
+	while (@args >= 1) {
+		if ($args[0] eq "-f" || $args[0] eq "--force") {
+			$force = 1;
+			shift @args;
+		} elsif ($args[0] =~ /^--country=(.*)$/) {
+			$country_code = $1;
+			shift @args;
+		} else {
+			last;
+		}
+	}
+
+	if (@args != 1) {
+		print STDERR "Error: you must specify the hostname for the certificate.\n";
+		print STDERR "Example: sslmate req www.example.com\n";
+		print STDERR "     or: sslmate req '*.example.com'\n";
+		print STDERR "See 'sslmate help req' for help.\n";
+		return 2;
+	}
+
+	$country_code //= 'US';
+
+	my $cn = lc $args[0];
+
+	# 0. Open the files
+	my $open_flags = O_WRONLY | O_CREAT | O_TRUNC;
+	$open_flags |= O_EXCL unless $force;
+	my $key_file;
+	if (!sysopen($key_file, "$cn.key", $open_flags, 0600)) {
+		print STDERR "Error: unable to open '$cn.key' for writing: $!\n";
+		return 1;
+	}
+	my $csr_file;
+	if (!sysopen($csr_file, "$cn.csr", $open_flags, 0666)) {
+		print STDERR "Error: unable to open '$cn.csr' for writing: $!\n";
+		return 1;
+	}
+
+	# 1. Generate an RSA key
+	openssl_genrsa($key_file, 2048);
+	close($key_file);
+
+	# 2. Generate the CSR
+	print $csr_file openssl_req("$cn.key", $cn);
+	close($csr_file);
+
+	return 0;
+}
+
 sub command_download {
 	my @args = @_;
 
@@ -1669,6 +1733,8 @@ sub main {
 		return command_revoke @args;
 	} elsif ($command eq 'renew') {
 		return command_renew @args;
+	} elsif ($command eq 'req') {
+		return command_req @args;
 	} elsif ($command eq 'download') {
 		return command_download @args;
 	} elsif ($command eq 'import') {
