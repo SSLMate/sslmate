@@ -55,7 +55,7 @@ use Term::ReadKey;		# libterm-readkey-perl		perl-TermReadKey
 
 our $has_curl = eval { require WWW::Curl::Easy; 1 };
 
-use version; our $VERSION = version->declare('0.4.4');
+use version; our $VERSION = version->declare('0.4.5');
 our $API_ENDPOINT = 'https://sslmate.com/api/v1';
 
 our $config_profile;
