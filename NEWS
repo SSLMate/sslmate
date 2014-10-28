@@ -1,3 +1,10 @@
+v0.4.5 (2014-10-27)
+  * Support Perl when installed in a directory other than /usr/bin.
+
+v0.4.4 (2014-10-27)
+  * Add `sslmate req` command for generating a key and CSR.
+  * Minor bug fixes.
+
 v0.4.3 (2014-10-24)
   * Create cert files with a umask of 022 unless honor_umask config
     option set to 'yes'.
