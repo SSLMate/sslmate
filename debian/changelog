@@ -1,3 +1,9 @@
+sslmate (0.4.5-1) unstable; urgency=low
+
+  * New upstream release.
+
+ -- SSLMate Software Release Role <software@sslmate.com>  Mon, 27 Oct 2014 21:28:42 -0700
+
 sslmate (0.4.3-2) unstable; urgency=low
 
   * Use quilt source format.
