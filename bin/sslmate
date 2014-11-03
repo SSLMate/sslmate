@@ -1323,6 +1323,7 @@ sub command_download {
 	}
 
 	my $all = 0;
+	my $accept_dummy = 0; # TODO: command line option for dummy certs
 	while (@args >= 1) {
 		if ($args[0] eq "-a" || $args[0] eq "--all") {
 			$all = 1;
@@ -1378,6 +1379,7 @@ sub command_download {
 					{ account_id => get_config('account_id'),
 					  api_key => get_config('api_key'),
 					  cn => $cn,
+					  dummy => 1,
 					  pubkey_hash => $pubkey_hash }) or return 1;
 		if ($response->{status} eq 'error') {
 			if ($response->{reason} eq 'no_such_cert') {
@@ -1396,10 +1398,6 @@ sub command_download {
 				print STDERR "Error: $cn: " . $response->{message} . "\n";
 				return 1;
 			}
-		} elsif ($response->{status} eq 'not_ready') {
-			print STDERR "Error: The certificates for $cn" . ($pubkey_hash ? " (with private key " . $paths->{key_filename} . ")" : "") . " have not yet been issued. Please try again later.\n";
-			++$errors;
-			next;
 		} elsif ($response->{status} ne 'success') {
 			print STDERR "Error: unknown response from server when downloading certificate for $cn\n";
 			return 1;
@@ -1412,6 +1410,12 @@ sub command_download {
 				file_contents_are($paths->{chained_crt_filename}, $response->{crt} . $response->{chain})) {
 
 			# Certs did not change
+			next;
+		}
+
+		if ($response->{dummy} && !$accept_dummy) {
+			print STDERR "Error: The certificates for $cn" . ($pubkey_hash ? " (with private key " . $paths->{key_filename} . ")" : "") . " have not yet been issued. Please try again later.\n";
+			++$errors;
 			next;
 		}
 
@@ -1462,6 +1466,7 @@ sub command_download {
 		$chained_crt_file->unlink_on_destroy(0);
 
 		print "The certificate for $cn has been downloaded.\n\n";
+		#print "Notice: this is a dummy cert!\n" if $response->{dummy}; # TODO: message if this is a dummy cert
 		print "           Certificate file: " . $paths->{crt_filename} . "\n";
 		print "     Certificate chain file: " . $paths->{chain_crt_filename} . "\n";
 		print "Certificate with chain file: " . $paths->{chained_crt_filename} . "\n";
