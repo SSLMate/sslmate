@@ -1406,12 +1406,28 @@ sub command_download {
 			$pubkey_hash = sha256_hex(extract_pubkey_from_key($paths->{key_filename}));
 		}
 
-		my $response = api_call('GET', '/download',
-					{ account_id => get_config('account_id'),
-					  api_key => get_config('api_key'),
-					  cn => $cn,
-					  dummy => 1,
-					  pubkey_hash => $pubkey_hash }) or return 1;
+		my $has_new_key = 0;
+		my $response;
+		if (-f $paths->{key_filename} . ".new" && -r $paths->{key_filename} . ".new") {
+			# First try to download the cert corresponding to the new key.
+			my $new_pubkey_hash = sha256_hex(extract_pubkey_from_key($paths->{key_filename} . ".new"));
+
+			$response = api_call('GET', '/download',
+						{ account_id => get_config('account_id'),
+						  api_key => get_config('api_key'),
+						  cn => $cn,
+						  pubkey_hash => $new_pubkey_hash }) or return 1;
+
+			$has_new_key = 1 if $response->{status} eq 'success';
+		}
+		unless ($has_new_key) {
+			$response = api_call('GET', '/download',
+						{ account_id => get_config('account_id'),
+						  api_key => get_config('api_key'),
+						  cn => $cn,
+						  dummy => 1,
+						  pubkey_hash => $pubkey_hash }) or return 1;
+		}
 		if ($response->{status} eq 'error') {
 			if ($response->{reason} eq 'no_such_cert') {
 				print STDERR "Error: $cn: There is no certificate in your account with this name.\n";
@@ -1436,7 +1452,8 @@ sub command_download {
 
 		$response->{chain} //= '';
 
-		if (file_contents_are($paths->{crt_filename}, $response->{crt}) &&
+		if (not($has_new_key) &&
+				file_contents_are($paths->{crt_filename}, $response->{crt}) &&
 				file_contents_are($paths->{chain_crt_filename}, $response->{chain}) &&
 				file_contents_are($paths->{chained_crt_filename}, $response->{crt} . $response->{chain})) {
 
@@ -1450,7 +1467,7 @@ sub command_download {
 			next;
 		}
 
-		push @certs, { cn => $cn, paths => $paths, response => $response };
+		push @certs, { cn => $cn, paths => $paths, response => $response, has_new_key => $has_new_key };
 	}
 
 	if (@certs == 0) {
@@ -1463,6 +1480,7 @@ sub command_download {
 		my $cn		= $cert->{cn};
 		my $paths	= $cert->{paths};
 		my $response	= $cert->{response};
+		my $has_new_key	= $cert->{has_new_key};
 
 		# write .crt file
 		my $crt_file = File::Temp->new(DIR => dirname($paths->{crt_filename}), TEMPLATE => '.sslmate.XXXXXX');
@@ -1484,6 +1502,11 @@ sub command_download {
 		close $chained_crt_file;
 
 		# Rename the new files on top of the old files:
+		if ($has_new_key) {
+			rename($paths->{key_filename} . ".new", $paths->{key_filename})
+					or die "Error: " . $paths->{key_filename} . ': ' . $! . "\n";
+		}
+
 		rename($crt_file->filename, $paths->{crt_filename})
 				or die "Error: " . $paths->{crt_filename} . ': ' . $! . "\n";
 		$crt_file->unlink_on_destroy(0);
@@ -1498,6 +1521,7 @@ sub command_download {
 
 		print "The certificate for $cn has been downloaded.\n\n";
 		#print "Notice: this is a dummy cert!\n" if $response->{dummy}; # TODO: message if this is a dummy cert
+		print "           Private key file: " . $paths->{key_filename} . "\n" if $has_new_key;
 		print "           Certificate file: " . $paths->{crt_filename} . "\n";
 		print "     Certificate chain file: " . $paths->{chain_crt_filename} . "\n";
 		print "Certificate with chain file: " . $paths->{chained_crt_filename} . "\n";
