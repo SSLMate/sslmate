@@ -61,7 +61,6 @@ our $API_ENDPOINT = 'https://sslmate.com/api/v1';
 our $config_profile;
 our %global_config;
 our %personal_config;
-our $country_code;
 our $curl;
 
 sub print_usage {
@@ -269,18 +268,17 @@ sub read_first_crt {
 }
 
 sub make_openssl_req_cnf {
-	my ($cn) = @_;
+	my ($dn) = @_;
 	my $tempfile = File::Temp->new();
 	print $tempfile <<EOF;
 [ req ]
 distinguished_name	= req_distinguished_name
 prompt			= no
 [ req_distinguished_name ]
-C			= $country_code
-ST			= Some-State
-O			= Internet Widgits Pty Ltd
-CN			= $cn
 EOF
+	for my $component (qw/C ST L O OU CN/) {
+		print $tempfile $component . " = " . $dn->{$component} . "\n" if defined $dn->{$component};
+	}
 	close $tempfile;
 	return $tempfile;
 }
@@ -523,11 +521,11 @@ sub openssl_genrsa {
 }
 
 sub openssl_req {
-	my ($key_filename, $cn) = @_;
+	my ($key_filename, $dn) = @_;
 
 	print STDERR "Generating CSR... ";
 	STDERR->flush;
-	my $openssl_req_cnf = make_openssl_req_cnf($cn);
+	my $openssl_req_cnf = make_openssl_req_cnf($dn);
 	pipe(my $openssl_reader, my $openssl_writer) or die "Error: pipe failed: $!";
 	my $openssl_pid = fork;
 	die "Error: fork failed: $!" unless defined $openssl_pid;
@@ -731,25 +729,22 @@ sub prompt_for_order_confirmation {
 	}
 }
 
-sub get_country_code_from_server {
-	my $response = api_call('POST', '/link',
+sub get_dn_from_server {
+	my ($cn) = @_;
+
+	my $response = api_call('GET', "/distinguished_name/$cn",
 				{ account_id => get_config('account_id'),
 				  api_key => get_config('api_key') });
-	return 0 unless defined $response;
+	return undef unless defined $response;
 
 	if ($response->{status} eq 'success') {
-		unless ($response->{country_code}) {
-			print STDERR "Error: your account does not have contact details on file.  Please visit https://sslmate.com/account to set your contact details.\n";
-			return 0;
-		}
-		$country_code = $response->{country_code};
-		return 1;
+		return $response->{distinguished_name};
 	} elsif ($response->{status} eq 'error') {
 		print STDERR "Error: " . $response->{message} . "\n";
-		return 0;
+		return undef;
 	} else {
 		print STDERR "Error: unknown response from server.\n";
-		return 0;
+		return undef;
 	}
 }
 
@@ -771,7 +766,6 @@ sub do_link {
 		}
 		$personal_config{"account_id"} = $response->{account_id};
 		$personal_config{"api_key"} = $response->{api_key};
-		$country_code = $response->{country_code};
 		save_config;
 		print "Done.\n";
 		return 1;
@@ -851,6 +845,8 @@ sub do_wait_for_cert {
 sub do_buy {
 	my ($cn, $years, $force, $auto_renew, $coupon_code, $batch, $approver_email) = @_;
 
+	my $dn = get_dn_from_server($cn) or exit 1;
+
 	# Future TODO: support reusing key file if one already exists
 
 	my $files = open_cert_files(get_cert_paths($cn, 1), $force);
@@ -866,7 +862,7 @@ sub do_buy {
 	close($files->{key_file});
 
 	# 2. Generate the CSR
-	my $csr = openssl_req($files->{key_filename}, $cn);
+	my $csr = openssl_req($files->{key_filename}, $dn);
 
 	# 3. Buy the certificate from SSLMate
 	my $request = { account_id	=> get_config('account_id'),
@@ -1010,7 +1006,6 @@ sub command_buy {
 		do_link or return 1;
 	}
 
-	get_country_code_from_server or return 1;
 	init_default_paths;
 	do_buy($cn, $years, $force, $auto_renew, $coupon_code, $batch, $approver_email);
 	return 0;
@@ -1056,9 +1051,9 @@ sub command_reissue {
 		do_link or return 1;
 	}
 
-	get_country_code_from_server or return 1;
 	init_default_paths;
 
+	my $dn = get_dn_from_server($cn) or exit 1;
 	my $files = open_cert_files(get_cert_paths($cn, 1), $force);
 
 	my $exit_with_error = sub {
@@ -1072,7 +1067,7 @@ sub command_reissue {
 	close($files->{key_file});
 
 	# 2. Generate the CSR
-	my $csr = openssl_req($files->{key_filename}, $cn);
+	my $csr = openssl_req($files->{key_filename}, $dn);
 
 	# 3. Reissue the certificate from SSLMate
 	my $request = { account_id	=> get_config('account_id'),
@@ -1287,6 +1282,7 @@ sub command_req {
 		return 0;
 	}
 
+	my $country_code = 'US';
 	my $force = 0;
 	while (@args >= 1) {
 		if ($args[0] eq "-f" || $args[0] eq "--force") {
@@ -1307,8 +1303,6 @@ sub command_req {
 		print STDERR "See 'sslmate help req' for help.\n";
 		return 2;
 	}
-
-	$country_code //= 'US';
 
 	my $cn = lc $args[0];
 
@@ -1331,7 +1325,7 @@ sub command_req {
 	close($key_file);
 
 	# 2. Generate the CSR
-	print $csr_file openssl_req("$cn.key", $cn);
+	print $csr_file openssl_req("$cn.key", { CN => $cn, C => $country_code, ST => 'Some-State', O => 'Internet Widgits Pty Ltd' });
 	close($csr_file);
 
 	return 0;
@@ -1571,7 +1565,6 @@ sub command_import {
 		do_link or return 1;
 	}
 
-	get_country_code_from_server or return 1;
 	init_default_paths;
 
 	do_import($force, $auto_renew, $args[0], $args[1], undef, $batch, $approver_email);
@@ -1595,7 +1588,8 @@ sub do_import {
 	print STDERR "Importing certificate for $cn...\n";
 
 	# 3. Generate the CSR
-	my $csr = openssl_req($source_key_path, $cn);
+	my $dn = get_dn_from_server($cn) or exit 1;
+	my $csr = openssl_req($source_key_path, $dn);
 
 	# 4. Open the destination files
 	my $paths = get_cert_paths($cn, 1);
