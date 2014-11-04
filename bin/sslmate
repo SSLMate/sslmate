@@ -1173,17 +1173,22 @@ sub command_renew {
 		print "Valid options:\n";
 		print " -f, --force        overwrite existing files\n";
 		print " --coupon=CODE      use the given coupon code for a discount\n";
+		print " --batch            don't prompt for confirmation\n";
 		return 0;
 	}
 
 	my $coupon_code = undef;
 	my $force = 0;
+	my $batch = 0;
 	while (@args >= 1) {
 		if ($args[0] eq "-f" || $args[0] eq "--force") {
 			$force = 1;
 			shift @args;
 		} elsif ($args[0] =~ /^--coupon=(.*)$/) {
 			$coupon_code = $1;
+			shift @args;
+		} elsif ($args[0] eq "--batch") {
+			$batch = 1;
 			shift @args;
 		} else {
 			last;
@@ -1210,7 +1215,7 @@ sub command_renew {
 
 	load_config;
 	if (!is_linked) {
-		unless (-t STDIN) {
+		if ($batch || not(-t STDIN)) {
 			print STDERR "Error: you have not yet linked this system with your SSLMate account.\n";
 			print STDERR "Please run 'sslmate link'.\n";
 			return 1;
@@ -1237,14 +1242,17 @@ sub command_renew {
 	print STDERR "Submitting order...\n";
 	my $response = api_call('POST', '/renew', $request) or $exit_with_error->();
 
+	# TODO: if in batch mode, don't require a second hit to the server to confirm order
 	while ($response->{status} eq 'need_confirmation') {
-		if ($response->{currency} ne "USD") {
-			print STDERR "Error: this version of the sslmate command does not support non-USD currencies. Please download a new version as per the instructions at https://sslmate.com.\n";
-			$exit_with_error->();
-		}
+		unless ($batch) {
+			if ($response->{currency} ne "USD") {
+				print STDERR "Error: this version of the sslmate command does not support non-USD currencies. Please download a new version as per the instructions at https://sslmate.com.\n";
+				$exit_with_error->();
+			}
 
-		# Prompt user to confirm the order:
-		prompt_for_order_confirmation($response) or $exit_with_error->();
+			# Prompt user to confirm the order:
+			prompt_for_order_confirmation($response) or $exit_with_error->();
+		}
 
 		# Repeat /renew call with confirmed price
 		$request->{authorized_charge} = $response->{amount_due};
