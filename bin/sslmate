@@ -61,6 +61,7 @@ our $API_ENDPOINT = 'https://sslmate.com/api/v1';
 our $config_profile;
 our %global_config;
 our %personal_config;
+our %ephemeral_config;
 our $curl;
 
 sub print_usage {
@@ -157,12 +158,13 @@ sub prompt_password {
 sub config_has {
 	my ($name) = @_;
 
-	return defined $personal_config{$name} || defined $global_config{$name};
+	return defined $ephemeral_config{$name} || defined $personal_config{$name} || defined $global_config{$name};
 }
 
 sub get_config {
 	my ($name, $default_value) = @_;
 
+	return $ephemeral_config{$name} if defined $ephemeral_config{$name};
 	return $personal_config{$name} if defined $personal_config{$name};
 	return $global_config{$name}   if defined $global_config{$name};
 
@@ -749,6 +751,8 @@ sub get_dn_from_server {
 }
 
 sub do_link {
+	my ($persistent) = @_;
+
 	print "If you don't have an account yet, visit https://sslmate.com/signup\n";
 	my $username = prompt_user("Enter your SSLMate username: ");
 	my $password = prompt_password("Enter your SSLMate password: ");
@@ -764,9 +768,14 @@ sub do_link {
 			print STDERR "Error: your account does not have contact details on file.  Please visit https://sslmate.com/account to set your contact details.\n";
 			return 0;
 		}
-		$personal_config{"account_id"} = $response->{account_id};
-		$personal_config{"api_key"} = $response->{api_key};
-		save_config;
+		if ($persistent) {
+			$personal_config{"account_id"} = $response->{account_id};
+			$personal_config{"api_key"} = $response->{api_key};
+			save_config;
+		} else {
+			$ephemeral_config{"account_id"} = $response->{account_id};
+			$ephemeral_config{"api_key"} = $response->{api_key};
+		}
 		print "Done.\n";
 		return 1;
 	} elsif ($response->{status} eq 'error') {
@@ -794,7 +803,7 @@ sub command_link {
 
 	print STDERR "Note: sslmate has already been linked with an account.\nContinue to link it with a different account, or press Ctrl+C to exit.\n" if is_linked;
 
-	do_link or return 1;
+	do_link(1) or return 1;
 
 	return 0;
 }
