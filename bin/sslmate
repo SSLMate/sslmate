@@ -1510,11 +1510,15 @@ sub command_import {
 		print " -f, --force        overwrite existing files\n";
 		print " --auto-renew       automatically renew this certificate before it expires\n";
 		print " --no-auto-renew    don't automatically renew this certificate\n";
+		print " --batch            don't prompt for confirmation\n";
+		print " --email=ADDRESS    use the given approver email address\n";
 		return 0;
 	}
 
 	my $force = 0;
 	my $auto_renew = undef;
+	my $batch = 0;
+	my $approver_email = undef;
 	while (@args >= 1) {
 		if ($args[0] eq "-f" || $args[0] eq "--force") {
 			$force = 1;
@@ -1524,6 +1528,12 @@ sub command_import {
 			shift @args;
 		} elsif ($args[0] eq "--no-auto-renew") {
 			$auto_renew = 0;
+			shift @args;
+		} elsif ($args[0] eq "--batch") {
+			$batch = 1;
+			shift @args;
+		} elsif ($args[0] =~ /^--email=(.*)$/) {
+			$approver_email = $1;
 			shift @args;
 		} else {
 			last;
@@ -1536,10 +1546,16 @@ sub command_import {
 		return 2;
 	}
 
+	if ($batch && not defined($approver_email)) {
+		print STDERR "Error: in batch mode, you must specify the approver email with --email.\n";
+		print STDERR "See 'sslmate help import' for help.\n";
+		return 2;
+	}
+
 	# 0. Load config, etc.
 	load_config;
 	if (!is_linked) {
-		unless (-t STDIN) {
+		if ($batch || not(-t STDIN)) {
 			print STDERR "Error: you have not yet linked this system with your SSLMate account.\n";
 			print STDERR "Please run 'sslmate link'.\n";
 			return 1;
@@ -1550,12 +1566,12 @@ sub command_import {
 	get_country_code_from_server or return 1;
 	init_default_paths;
 
-	do_import($force, $auto_renew, $args[0], $args[1]);
+	do_import($force, $auto_renew, $args[0], $args[1], undef, $batch, $approver_email);
 	return 0;
 }
 
 sub do_import {
-	my ($force, $auto_renew, $source_key_path, $source_crt_path, $cn) = @_;
+	my ($force, $auto_renew, $source_key_path, $source_crt_path, $cn, $batch, $approver_email) = @_;
 
 	# 1. Open the source key and crt files
 	open(my $source_key_file, '<', $source_key_path) or die "Error: Unable to open $source_key_path: $!\n";
@@ -1568,7 +1584,7 @@ sub do_import {
 	# 2. Extract the CN from the certificate, if not already known
 	$cn //= extract_cn_from_crt($source_crt_path)
 			or die "Error: Unable to parse $source_crt_path - is it a valid certificate file?\n";
-	print "Importing certificate for $cn...\n";
+	print STDERR "Importing certificate for $cn...\n";
 
 	# 3. Generate the CSR
 	my $csr = openssl_req($source_key_path, $cn);
@@ -1591,15 +1607,16 @@ sub do_import {
 	};
 
 	# 5. Upload the CSR and CRT to SSLMate:
-	print "Uploading $source_crt_path...\n";
+	print STDERR "Uploading $source_crt_path...\n";
 	my $request = { account_id =>	get_config('account_id'),
 			api_key =>	get_config('api_key'),
 			auto_renew =>	$auto_renew,
 			csr =>		$csr,
-			crt =>		$crt };
+			crt =>		$crt,
+			approver_email => $batch ? $approver_email : undef };
 	my $response = api_call('POST', '/import', $request) or $exit_with_error->();
 
-	while ($response->{status} eq 'need_approver_email') {
+	while (not($batch) && $response->{status} eq 'need_approver_email') {
 		if ($response->{cn_is_bare_domain}) {
 			my $www_cn = "www.$cn";
 			print STDERR "\n";
@@ -1607,16 +1624,18 @@ sub do_import {
 			print STDERR "Would you rather import a certificate that will work with both $www_cn AND $cn?\n\n";
 			if (prompt_yesno) {
 				$files->{cleanup}->($cleanup_params);
-				return do_import($force, $auto_renew, $source_key_path, $source_crt_path, $www_cn);
+				return do_import($force, $auto_renew, $source_key_path, $source_crt_path, $www_cn, $batch, $approver_email);
 			}
 		}
 
-		# Prompt user to choose an approver email address:
-		print "\n";
-		print "When it's time to renew this certificate, we will need to send you an email to\n";
-		print "verify that you own this domain.  Where should we send this email?\n";
-		print "\n";
-		my $approver_email = prompt_for_approver_email($response->{approver_emails}) or $exit_with_error->();
+		unless (defined $approver_email) {
+			# Prompt user to choose an approver email address:
+			print "\n";
+			print "When it's time to renew this certificate, we will need to send you an email to\n";
+			print "verify that you own this domain.  Where should we send this email?\n";
+			print "\n";
+			$approver_email = prompt_for_approver_email($response->{approver_emails}) or $exit_with_error->();
+		}
 
 		# Repeat /import call with approver email address
 		$request->{approver_email} = $approver_email;
