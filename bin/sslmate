@@ -849,7 +849,7 @@ sub do_wait_for_cert {
 }
 
 sub do_buy {
-	my ($cn, $years, $force, $auto_renew, $coupon_code) = @_;
+	my ($cn, $years, $force, $auto_renew, $coupon_code, $batch, $approver_email) = @_;
 
 	# Future TODO: support reusing key file if one already exists
 
@@ -874,12 +874,13 @@ sub do_buy {
 			csr		=> $csr,
 			years		=> $years,
 			auto_renew	=> $auto_renew,
-			coupon_code	=> $coupon_code };
+			coupon_code	=> $coupon_code,
+			approver_email	=> $batch ? $approver_email : undef };
 
 	print STDERR "Submitting order...\n";
 	my $response = api_call('POST', '/buy', $request) or $exit_with_error->();
 
-	while ($response->{status} eq 'need_confirmation') {
+	while (not($batch) && $response->{status} eq 'need_confirmation') {
 		if ($response->{currency} ne "USD") {
 			print STDERR "Error: this version of the sslmate command does not support non-USD currencies. Please download a new version as per the instructions at https://sslmate.com.\n";
 			$exit_with_error->();
@@ -891,16 +892,19 @@ sub do_buy {
 			print STDERR "Would you rather generate a certificate that will work with both $www_cn AND $cn?\n\n";
 			if (prompt_yesno) {
 				$files->{cleanup}->();
-				return do_buy($www_cn, $years, $force, $auto_renew, $coupon_code);
+				return do_buy($www_cn, $years, $force, $auto_renew, $coupon_code, $batch, $approver_email);
 			}
 		}
 
-		# Prompt user to choose an approver email and to confirm the order:
-		print "\n";
-		print "We need to send you an email to verify that you own this domain.\n";
-		print "Where should we send this email?\n";
-		print "\n";
-		my $approver_email = prompt_for_approver_email($response->{approver_emails}) or $exit_with_error->();
+		unless (defined $approver_email) {
+			# Prompt user to choose an approver email and to confirm the order:
+			print "\n";
+			print "We need to send you an email to verify that you own this domain.\n";
+			print "Where should we send this email?\n";
+			print "\n";
+			$approver_email = prompt_for_approver_email($response->{approver_emails}) or $exit_with_error->();
+		}
+
 		prompt_for_order_confirmation($response) or $exit_with_error->();
 
 		# Repeat /buy call with confirmed price and approver email address
@@ -936,12 +940,16 @@ sub command_buy {
 		print " --auto-renew       automatically renew this certificate before it expires\n";
 		print " --no-auto-renew    don't automatically renew this certificate\n";
 		print " --coupon=CODE      use the given coupon code for a discount\n";
+		print " --batch            don't prompt for confirmation\n";
+		print " --email=ADDRESS    use the given approver email address\n";
 		return 0;
 	}
 
 	my $auto_renew = undef;
 	my $coupon_code = undef;
 	my $force = 0;
+	my $batch = 0;
+	my $approver_email = undef;
 	while (@args >= 1) {
 		if ($args[0] eq "-f" || $args[0] eq "--force") {
 			$force = 1;
@@ -955,6 +963,12 @@ sub command_buy {
 		} elsif ($args[0] =~ /^--coupon=(.*)$/) {
 			$coupon_code = $1;
 			shift @args;
+		} elsif ($args[0] eq "--batch") {
+			$batch = 1;
+			shift @args;
+		} elsif ($args[0] =~ /^--email=(.*)$/) {
+			$approver_email = $1;
+			shift @args;
 		} else {
 			last;
 		}
@@ -964,6 +978,12 @@ sub command_buy {
 		print STDERR "Error: you must specify the hostname for the certificate.\n";
 		print STDERR "Example: sslmate buy www.example.com\n";
 		print STDERR "     or: sslmate buy '*.example.com'\n";
+		print STDERR "See 'sslmate help buy' for help.\n";
+		return 2;
+	}
+
+	if ($batch && not defined($approver_email)) {
+		print STDERR "Error: in batch mode, you must specify the approver email with --email.\n";
 		print STDERR "See 'sslmate help buy' for help.\n";
 		return 2;
 	}
@@ -982,7 +1002,7 @@ sub command_buy {
 
 	load_config;
 	if (!is_linked) {
-		unless (-t STDIN) {
+		if ($batch || not(-t STDIN)) {
 			print STDERR "Error: you have not yet linked this system with your SSLMate account.\n";
 			print STDERR "Please run 'sslmate link'.\n";
 			return 1;
@@ -992,7 +1012,7 @@ sub command_buy {
 
 	get_country_code_from_server or return 1;
 	init_default_paths;
-	do_buy($cn, $years, $force, $auto_renew, $coupon_code);
+	do_buy($cn, $years, $force, $auto_renew, $coupon_code, $batch, $approver_email);
 	return 0;
 }
 
