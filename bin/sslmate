@@ -952,10 +952,10 @@ sub command_buy {
 		print " -f, --force        overwrite existing files\n";
 		print " --auto-renew       automatically renew this certificate before it expires\n";
 		print " --no-auto-renew    don't automatically renew this certificate\n";
-		print " --coupon=CODE      use the given coupon code for a discount\n";
 		print " --batch            don't prompt for confirmation\n";
 		print " --email=ADDRESS    use the given approver email address\n";
 		print " --no-wait          return immediately; don't wait for cert to be issued\n";
+		print " --coupon=CODE      use the given coupon code for a discount\n";
 		return 0;
 	}
 
@@ -1197,9 +1197,9 @@ sub command_renew {
 		print "         sslmate renew '*.example.com'\n";
 		print "\n";
 		print "Valid options:\n";
-		print " --coupon=CODE      use the given coupon code for a discount\n";
 		print " --batch            don't prompt for confirmation\n";
 		print " --no-wait          return immediately; don't wait for new cert to be issued\n";
+		print " --coupon=CODE      use the given coupon code for a discount\n";
 		return 0;
 	}
 
