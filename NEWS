@@ -1,3 +1,22 @@
+v0.5.0 (2014-05-05)
+  * Allow buy, import, and renew commands to be used non-interactively:
+    - The --batch option disables prompting for confirmation.
+    - The --email=ADDRESS option specifies the desired approver address.
+    - The --no-wait option tells sslmate to return immediately
+      instead of waiting for the new certificate to be issued.
+  * Better support for key rollover in `sslmate reissue`:
+    - The new key file is initially written to CN.key.new and the
+      existing key file is only overwritten (by either `sslmate reissue`
+      or `sslmate download`) once the new certificate is ready.
+    - Existing .key and .crt files are overwritten even without the
+      --force option, but only once the reissue completes successfully.
+  * renew now overwrites existing .crt files even without the --force
+    option. A safety check has been added to ensure that renew only
+    installs a certificate if it matches the .key file.
+  * API credentials are now saved to disk only if `sslmate link` is run
+    explicitly. Other commands no longer implicitly link the system.
+  * Minor bug fixes and internal improvements.
+
 v0.4.5 (2014-10-27)
   * Support Perl when installed in a directory other than /usr/bin.
 
