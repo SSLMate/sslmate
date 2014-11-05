@@ -655,7 +655,7 @@ sub wait_for_cert {
 				$retry_after = 1 if $retry_after < 1; # lower bound of 1 second
 			} elsif ($now < $timeout_after) {
 				if (not $warned) {
-					print STDERR "Sorry, your certificate isn't ready yet. I'll keep waiting, but if you'd rather do this later, you can hit Ctrl+C and we'll send your certificate by email instead.\n";
+					print STDERR "Sorry, your certificate isn't ready yet. I'll keep waiting, but if you'd rather do this later, you can hit Ctrl+C and we'll send you an email when it's ready.\n";
 					$warned = 1;
 				}
 				$retry_after = 10 if $retry_after < 10; # lower bound of 10 seconds
@@ -828,10 +828,17 @@ sub command_link {
 }
 
 sub do_wait_for_cert {
-	my ($response, $files, $new_key_filename) = @_;
+	my ($response, $no_wait, $files, $new_key_filename) = @_;
 
-	print "You will soon receive an email at " . $response->{approver_email} . " from " . $response->{approval_from} . ". Follow the instructions in the email to verify your ownership of your domain. Once you've verified ownership, your certs will be automatically downloaded.\n\n";
-	print "If you'd rather do this later, you can hit Ctrl+C and your certs will be delivered over email instead.\n\n";
+	print "You will soon receive an email at " . $response->{approver_email} . " from " . $response->{approval_from} . ". Follow the instructions in the email to verify your ownership of your domain.\n\n";
+
+	if ($no_wait) {
+		print "Once you've verified ownership, you will be able to download your certificate with the 'sslmate download' command.\n";
+		return 0;
+	} else {
+		print "Once you've verified ownership, your certificate will be automatically downloaded.  If you'd rather do this later, press Ctrl+C and download your certificate with the 'sslmate download' command instead.\n\n";
+	}
+
 	print "Waiting for ownership confirmation...\n";
 
 	my ($crt, $chain_crt) = wait_for_cert($response->{cert_instance_id}) or exit 1;
@@ -850,7 +857,7 @@ sub do_wait_for_cert {
 }
 
 sub do_buy {
-	my ($cn, $years, $force, $auto_renew, $coupon_code, $batch, $approver_email) = @_;
+	my ($cn, $years, $force, $no_wait, $auto_renew, $coupon_code, $batch, $approver_email) = @_;
 
 	my $dn = get_dn_from_server($cn) or exit 1;
 	# Future TODO: support reusing key file if one already exists
@@ -898,7 +905,7 @@ sub do_buy {
 			print STDERR "Would you rather generate a certificate that will work with both $www_cn AND $cn?\n\n";
 			if (prompt_yesno) {
 				unlink($files->{key_filename});
-				return do_buy($www_cn, $years, $force, $auto_renew, $coupon_code, $batch, $approver_email);
+				return do_buy($www_cn, $years, $force, $no_wait, $auto_renew, $coupon_code, $batch, $approver_email);
 			}
 		}
 
@@ -930,7 +937,7 @@ sub do_buy {
 	}
 
 	print "Order complete.\n\n";
-	return do_wait_for_cert($response, $files, $files->{key_filename});
+	return do_wait_for_cert($response, $no_wait, $files, $files->{key_filename});
 }
 
 sub command_buy {
@@ -948,6 +955,7 @@ sub command_buy {
 		print " --coupon=CODE      use the given coupon code for a discount\n";
 		print " --batch            don't prompt for confirmation\n";
 		print " --email=ADDRESS    use the given approver email address\n";
+		print " --no-wait          return immediately; don't wait for cert to be issued\n";
 		return 0;
 	}
 
@@ -956,6 +964,7 @@ sub command_buy {
 	my $force = 0;
 	my $batch = 0;
 	my $approver_email = undef;
+	my $no_wait = 0;
 	while (@args >= 1) {
 		if ($args[0] eq "-f" || $args[0] eq "--force") {
 			$force = 1;
@@ -974,6 +983,9 @@ sub command_buy {
 			shift @args;
 		} elsif ($args[0] =~ /^--email=(.*)$/) {
 			$approver_email = $1;
+			shift @args;
+		} elsif ($args[0] eq "--no-wait") {
+			$no_wait = 1;
 			shift @args;
 		} else {
 			last;
@@ -1017,7 +1029,7 @@ sub command_buy {
 	}
 
 	init_default_paths;
-	do_buy($cn, $years, $force, $auto_renew, $coupon_code, $batch, $approver_email);
+	do_buy($cn, $years, $force, $no_wait, $auto_renew, $coupon_code, $batch, $approver_email);
 	return 0;
 }
 
@@ -1030,13 +1042,18 @@ sub command_reissue {
 		print "\n";
 		print "Valid options:\n";
 		print " -f, --force        overwrite existing files\n";
+		print " --no-wait          return immediately; don't wait for new cert to be issued\n";
 		return 0;
 	}
 
 	my $force = 0;
+	my $no_wait = 0;
 	while (@args >= 1) {
 		if ($args[0] eq "-f" || $args[0] eq '--force') {
 			$force = 1;
+			shift @args;
+		} elsif ($args[0] eq "--no-wait") {
+			$no_wait = 1;
 			shift @args;
 		} else {
 			last;
@@ -1100,7 +1117,7 @@ sub command_reissue {
 	}
 
 	print "Reissue complete.\n\n";
-	return do_wait_for_cert($response, $files, $new_key_filename);
+	return do_wait_for_cert($response, $no_wait, $files, $new_key_filename);
 }
 
 sub command_revoke {
@@ -1182,11 +1199,13 @@ sub command_renew {
 		print "Valid options:\n";
 		print " --coupon=CODE      use the given coupon code for a discount\n";
 		print " --batch            don't prompt for confirmation\n";
+		print " --no-wait          return immediately; don't wait for new cert to be issued\n";
 		return 0;
 	}
 
 	my $coupon_code = undef;
 	my $batch = 0;
+	my $no_wait = 0;
 	while (@args >= 1) {
 		if ($args[0] eq "-f" || $args[0] eq "--force") {
 			# Ignored for backwards compatibility with pre-0.5.0
@@ -1196,6 +1215,9 @@ sub command_renew {
 			shift @args;
 		} elsif ($args[0] eq "--batch") {
 			$batch = 1;
+			shift @args;
+		} elsif ($args[0] eq "--no-wait") {
+			$no_wait = 1;
 			shift @args;
 		} else {
 			last;
@@ -1281,7 +1303,7 @@ sub command_renew {
 	}
 
 	print "Renewal complete.\n\n";
-	return do_wait_for_cert($response, $files);
+	return do_wait_for_cert($response, $no_wait, $files);
 }
 
 sub command_req {
