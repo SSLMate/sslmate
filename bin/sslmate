@@ -301,53 +301,31 @@ sub get_cert_paths {
 	return $paths;
 }
 
-sub open_cert_files {
-	my ($files, $overwrite_all) = @_;
+sub check_for_existing_files {
+	my @filenames = @_;
 
 	my $already_exists = 0;
-	my $open_errors = 0;
-
-	my $try_open = sub {
-		my ($filename, $mode, $overwrite) = @_;
-
-		my $fh;
-		my $flags = O_WRONLY | O_CREAT;
-		$flags |= O_EXCL unless $overwrite_all || $overwrite;
-		if (!sysopen($fh, $filename, $flags, $mode)) {
-			if ($!{EEXIST}) {
-				print STDERR "Error: a file named '$filename' already exists.\n";
-				$already_exists++;
-			} else {
-				print STDERR "Error: unable to open '$filename' for writing: $!\n";
-				$open_errors++;
-			}
-			return undef;
+	for my $filename (@filenames) {
+		if (defined $filename && -e $filename) {
+			print STDERR "Error: a file named '$filename' already exists.\n";
+			$already_exists++;
 		}
-		return $fh;
-	};
-	$files->{key_file} = $try_open->($files->{key_filename}, 0600, $files->{overwrite_key}) if defined $files->{key_filename};
-	$files->{crt_file} = $try_open->($files->{crt_filename}, 0666, $files->{overwrite_crt}) if defined $files->{crt_filename};
-	$files->{chain_crt_file} = $try_open->($files->{chain_crt_filename}, 0666,
-							$files->{overwrite_chain_crt}) if defined $files->{chain_crt_filename};
-	$files->{chained_crt_file} = $try_open->($files->{chained_crt_filename}, 0666,
-							$files->{overwrite_chained_crt}) if defined $files->{chained_crt_filename};
-
+	}
 	if ($already_exists) {
 		die "Please move/remove " . ($already_exists == 1 ? "this file" : "these files") . (!config_has("key_directory") && !config_has("cert_directory") ? " or run sslmate from a different directory" : "") . ".\n";
-	} elsif ($open_errors) {
-		die "Unable to open one or more key/cert files. See above for details.\n";
 	}
+}
 
-	$files->{cleanup} = sub {
-		my ($params) = @_;
-		$params //= {};
-		for (qw/key crt chain_crt chained_crt/) {
-			close($files->{$_ . "_file"}) if defined $files->{$_ . "_file"};
-			unlink($files->{$_ . "_filename"}) if defined $files->{$_ . "_filename"} && not $params->{"keep_" . $_};
-		}
-	};
+sub open_key_file {
+	my ($filename, $overwrite) = @_;
 
-	return $files;
+	my $flags = O_WRONLY | O_CREAT;
+	$flags |= O_EXCL unless $overwrite;
+
+	my $fh;
+	sysopen($fh, $filename, $flags, 0600)
+		or die "Error: unable to open '$filename' for writing: $!\n";
+	return $fh;
 }
 
 sub write_cert_files {
@@ -850,41 +828,20 @@ sub command_link {
 }
 
 sub do_wait_for_cert {
-	my ($response, $files) = @_;
-
-	my $exit_with_error = sub {
-		$files->{cleanup}->({ keep_key => 1 });
-		exit 1;
-	};
+	my ($response, $files, $new_key_filename) = @_;
 
 	print "You will soon receive an email at " . $response->{approver_email} . " from " . $response->{approval_from} . ". Follow the instructions in the email to verify your ownership of your domain. Once you've verified ownership, your certs will be automatically downloaded.\n\n";
 	print "If you'd rather do this later, you can hit Ctrl+C and your certs will be delivered over email instead.\n\n";
 	print "Waiting for ownership confirmation...\n";
 
-	my ($crt, $chain_crt) = wait_for_cert($response->{cert_instance_id}) or $exit_with_error->();
+	my ($crt, $chain_crt) = wait_for_cert($response->{cert_instance_id}) or exit 1;
 	$chain_crt //= '';
 
-	# write .crt file
-	truncate($files->{crt_file}, 0);
-	print {$files->{crt_file}} $crt;
-	close $files->{crt_file};
-
-	# write .chain.crt file
-	truncate($files->{chain_crt_file}, 0);
-	print {$files->{chain_crt_file}} $chain_crt;
-	close $files->{chain_crt_file};
-
-	# write .chained.crt file
-	truncate($files->{chained_crt_file}, 0);
-	print {$files->{chained_crt_file}} $crt;
-	print {$files->{chained_crt_file}} $chain_crt;
-	close $files->{chained_crt_file};
+	write_cert_files($files, $new_key_filename, $crt, $chain_crt);
 
 	print "\n";
 	print "Your certificate is ready for use!\n\n";
-	if ($files->{key_filename}) {
-		print "           Private key file: " . $files->{key_filename} . "\n";
-	}
+	print "           Private key file: " . $files->{key_filename} . "\n" if defined $new_key_filename;
 	print "           Certificate file: " . $files->{crt_filename} . "\n";
 	print "     Certificate chain file: " . $files->{chain_crt_filename} . "\n";
 	print "Certificate with chain file: " . $files->{chained_crt_filename} . "\n";
@@ -896,13 +853,16 @@ sub do_buy {
 	my ($cn, $years, $force, $auto_renew, $coupon_code, $batch, $approver_email) = @_;
 
 	my $dn = get_dn_from_server($cn) or exit 1;
-
 	# Future TODO: support reusing key file if one already exists
+	my $files = get_cert_paths($cn, 1);
 
-	my $files = open_cert_files(get_cert_paths($cn, 1), $force);
+	check_for_existing_files(@{$files}{qw{key_filename crt_filename chain_crt_filename chained_crt_filename}}) unless $force;
+
+	# Open the key file
+	$files->{key_file} = open_key_file($files->{key_filename}, $force);
 
 	my $exit_with_error = sub {
-		$files->{cleanup}->();
+		unlink($files->{key_filename});
 		exit 1;
 	};
 
@@ -937,7 +897,7 @@ sub do_buy {
 			print STDERR "WARNING: This certificate will not be valid for $www_cn.\n";
 			print STDERR "Would you rather generate a certificate that will work with both $www_cn AND $cn?\n\n";
 			if (prompt_yesno) {
-				$files->{cleanup}->();
+				unlink($files->{key_filename});
 				return do_buy($www_cn, $years, $force, $auto_renew, $coupon_code, $batch, $approver_email);
 			}
 		}
@@ -970,7 +930,7 @@ sub do_buy {
 	}
 
 	print "Order complete.\n\n";
-	return do_wait_for_cert($response, $files);
+	return do_wait_for_cert($response, $files, $files->{key_filename});
 }
 
 sub command_buy {
@@ -1104,10 +1064,14 @@ sub command_reissue {
 	init_default_paths;
 
 	my $dn = get_dn_from_server($cn) or exit 1;
-	my $files = open_cert_files(get_cert_paths($cn, 1), $force);
+	my $files = get_cert_paths($cn, 1);
+	my $new_key_filename = $files->{key_filename} . ".new";
+
+	check_for_existing_files($new_key_filename) unless $force;
+	$files->{key_file} = open_key_file($new_key_filename, $force);
 
 	my $exit_with_error = sub {
-		$files->{cleanup}->();
+		unlink($new_key_filename);
 		exit 1;
 	};
 
@@ -1117,7 +1081,7 @@ sub command_reissue {
 	close($files->{key_file});
 
 	# 2. Generate the CSR
-	my $csr = openssl_req($files->{key_filename}, $dn);
+	my $csr = openssl_req($new_key_filename, $dn);
 
 	# 3. Reissue the certificate from SSLMate
 	my $request = { account_id	=> get_config('account_id'),
@@ -1136,7 +1100,7 @@ sub command_reissue {
 	}
 
 	print "Reissue complete.\n\n";
-	return do_wait_for_cert($response, $files);
+	return do_wait_for_cert($response, $files, $new_key_filename);
 }
 
 sub command_revoke {
@@ -1216,18 +1180,16 @@ sub command_renew {
 		print "         sslmate renew '*.example.com'\n";
 		print "\n";
 		print "Valid options:\n";
-		print " -f, --force        overwrite existing files\n";
 		print " --coupon=CODE      use the given coupon code for a discount\n";
 		print " --batch            don't prompt for confirmation\n";
 		return 0;
 	}
 
 	my $coupon_code = undef;
-	my $force = 0;
 	my $batch = 0;
 	while (@args >= 1) {
 		if ($args[0] eq "-f" || $args[0] eq "--force") {
-			$force = 1;
+			# Ignored for backwards compatibility with pre-0.5.0
 			shift @args;
 		} elsif ($args[0] =~ /^--coupon=(.*)$/) {
 			$coupon_code = $1;
@@ -1270,10 +1232,13 @@ sub command_renew {
 
 	init_default_paths;
 
-	my $files = open_cert_files(get_cert_paths($cn, 0), $force);
+	my $files = get_cert_paths($cn, 1);
+	my $pubkey_hash = undef;
+	if (-f $files->{key_filename} && -r $files->{key_filename}) {
+		$pubkey_hash = sha256_hex(extract_pubkey_from_key($files->{key_filename}));
+	}
 
 	my $exit_with_error = sub {
-		$files->{cleanup}->();
 		exit 1;
 	};
 
@@ -1281,6 +1246,7 @@ sub command_renew {
 	my $request = { account_id	=> get_config('account_id'),
 			api_key		=> get_config('api_key'),
 			cn		=> $cn,
+			pubkey_hash	=> $pubkey_hash,
 			years		=> $years,
 			coupon_code	=> $coupon_code };
 
@@ -1633,20 +1599,25 @@ sub do_import {
 	my $dn = get_dn_from_server($cn) or exit 1;
 	my $csr = openssl_req($source_key_path, $dn);
 
-	# 4. Open the destination files
-	my $paths = get_cert_paths($cn, 1);
-	my $cleanup_params = {};
-	if (realpath($source_key_path) eq realpath($paths->{key_filename})) {
+	# 4. Prepare the destination files
+	my $files = get_cert_paths($cn, 1);
+	if (realpath($source_key_path) eq realpath($files->{key_filename})) {
 		# Don't bother to write the key because it's already in place
-		delete $paths->{key_filename};
+		delete $files->{key_filename};
 	}
-	if (realpath($source_crt_path) eq realpath($paths->{crt_filename})) {
-		$paths->{overwrite_crt} = 1;
-		$cleanup_params->{keep_crt} = 1;
+	unless ($force) {
+		my @check_files = qw{key_filename chain_crt_filename chained_crt_filename};
+		if (realpath($source_crt_path) ne realpath($files->{crt_filename})) {
+			# Only care if .crt file exists if it's not the same file we're importing
+			push @check_files, 'crt_filename';
+		}
+		check_for_existing_files(@{$files}{@check_files});
 	}
-	my $files = open_cert_files($paths, $force);
+
+	$files->{key_file} = open_key_file($files->{key_filename}, $force) if defined $files->{key_filename};
+
 	my $exit_with_error = sub {
-		$files->{cleanup}->($cleanup_params);
+		unlink($files->{key_filename}) if defined $files->{key_filename};
 		exit 1;
 	};
 
@@ -1667,7 +1638,7 @@ sub do_import {
 			print STDERR "WARNING: This certificate will not be valid for $www_cn when it renews.\n";
 			print STDERR "Would you rather import a certificate that will work with both $www_cn AND $cn?\n\n";
 			if (prompt_yesno) {
-				$files->{cleanup}->($cleanup_params);
+				unlink($files->{key_filename}) if defined $files->{key_filename};
 				return do_import($force, $auto_renew, $source_key_path, $source_crt_path, $www_cn, $batch, $approver_email);
 			}
 		}
@@ -1704,21 +1675,7 @@ sub do_import {
 		close $files->{key_file};
 	}
 
-	# write .crt file
-	truncate($files->{crt_file}, 0);
-	print {$files->{crt_file}} $crt;
-	close $files->{crt_file};
-
-	# write .chain.crt file
-	truncate($files->{chain_crt_file}, 0);
-	print {$files->{chain_crt_file}} $response->{chain};
-	close $files->{chain_crt_file};
-
-	# write .chained.crt file
-	truncate($files->{chained_crt_file}, 0);
-	print {$files->{chained_crt_file}} $crt;
-	print {$files->{chained_crt_file}} $response->{chain};
-	close $files->{chained_crt_file};
+	write_cert_files($files, undef, $crt, $response->{chain});
 
 	print "\n";
 	print "Your certificate has been imported to SSLMate.\n\n";
