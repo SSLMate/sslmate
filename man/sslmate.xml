@@ -28,8 +28,8 @@
 	-->
 	<refentryinfo>
 		<title>SSLMate</title>
-		<date>2014-10-27</date>
-		<productname>SSLMate 0.4.5</productname>
+		<date>2014-11-05</date>
+		<productname>SSLMate 0.5.0</productname>
 
 		<author>
 			<othername>SSLMate</othername>
@@ -160,6 +160,36 @@
 							</listitem>
 						</varlistentry>
 						<varlistentry>
+							<term><option>--batch</option></term>
+
+							<listitem>
+								<para>Don't prompt for approver email address or confirmation.  The approver email address must be specified with <option>--email=<replaceable>ADDRESS</replaceable></option> if you use this option.</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
+							<term><option>--email=<replaceable>ADDRESS</replaceable></option></term>
+
+							<listitem>
+								<para>
+									Send the domain ownership email to the given email address instead of prompting for one.
+									This address must be one of the addresses that is listed when you run
+									<command>sslmate buy</command> interactively.
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
+							<term><option>--no-wait</option></term>
+
+							<listitem>
+								<para>
+									Return immediately after placing the order instead of waiting for the certificate
+									to be issued. If this option is used, no certificate files are downloaded; instead
+									the certificate must be downloaded separately with the <command>sslmate download</command>
+									command.
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
 							<term><option>--coupon=<replaceable>CODE</replaceable></option></term>
 
 							<listitem>
@@ -184,11 +214,22 @@
 					</para>
 					<variablelist>
 						<varlistentry>
-							<term><option>-f</option></term>
-							<term><option>--force</option></term>
+							<term><option>--batch</option></term>
 
 							<listitem>
-								<para>Overwrite existing certificate files.</para>
+								<para>Don't prompt for confirmation.</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
+							<term><option>--no-wait</option></term>
+
+							<listitem>
+								<para>
+									Return immediately after placing the order instead of waiting for the new certificate
+									to be issued. If this option is used, no certificate files are downloaded; instead
+									the new certificate must be downloaded separately with the <command>sslmate download</command>
+									command.
+								</para>
 							</listitem>
 						</varlistentry>
 						<varlistentry>
@@ -225,6 +266,18 @@
 
 							<listitem>
 								<para>Overwrite existing files.</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
+							<term><option>--no-wait</option></term>
+
+							<listitem>
+								<para>
+									Return immediately after requesting the reissue instead of waiting for the new certificate
+									to be issued. If this option is used, no certificate files are downloaded; instead
+									the new certificate must be downloaded separately with the <command>sslmate download</command>
+									command.
+								</para>
 							</listitem>
 						</varlistentry>
 					</variablelist>
@@ -347,6 +400,24 @@
 									Enable or disable automatic renewal for this certificate.
 									If neither option is specified, your account's default auto-renewal
 									setting is used.
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
+							<term><option>- -batch</option></term>
+
+							<listitem>
+								<para>Don't prompt for approver email address or confirmation.  The approver email address must be specified with <option>- -email=<replaceable>ADDRESS</replaceable></option> if you use this option.</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
+							<term><option>- -email=<replaceable>ADDRESS</replaceable></option></term>
+
+							<listitem>
+								<para>
+									Send the domain ownership email to the given email address instead of prompting for one.
+									This address must be one of the addresses that is listed when you run
+									<command>sslmate import</command> interactively.
 								</para>
 							</listitem>
 						</varlistentry>
