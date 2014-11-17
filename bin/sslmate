@@ -753,7 +753,7 @@ sub prompt_for_order_confirmation {
 sub get_dn_from_server {
 	my ($cn) = @_;
 
-	my $response = api_call('GET', "/distinguished_name/$cn",
+	my $response = api_call('GET', "/distinguished_name/" . qs_escape($cn),
 				{ account_id => get_config('account_id'),
 				  api_key => get_config('api_key') });
 	return undef unless defined $response;
