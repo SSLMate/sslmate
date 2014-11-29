@@ -871,7 +871,7 @@ sub do_wait_for_cert {
 }
 
 sub do_buy {
-	my ($cn, $years, $force, $no_wait, $auto_renew, $coupon_code, $batch, $approver_email) = @_;
+	my ($cn, $years, $force, $no_wait, $auto_renew, $batch, $approver_email, %opts) = @_;
 
 	my $dn = get_dn_from_server($cn) or exit 1;
 	# Future TODO: support reusing key file if one already exists
@@ -901,8 +901,8 @@ sub do_buy {
 			csr		=> $csr,
 			years		=> $years,
 			auto_renew	=> $auto_renew,
-			coupon_code	=> $coupon_code,
-			approver_email	=> $batch ? $approver_email : undef };
+			approver_email	=> $batch ? $approver_email : undef,
+			%opts };
 
 	print STDERR "Submitting order...\n";
 	my $response = api_call('POST', '/buy', $request) or $exit_with_error->();
@@ -919,7 +919,7 @@ sub do_buy {
 			print STDERR "Would you rather generate a certificate that will work with both $www_cn AND $cn?\n\n";
 			if (prompt_yesno) {
 				unlink($files->{key_filename});
-				return do_buy($www_cn, $years, $force, $no_wait, $auto_renew, $coupon_code, $batch, $approver_email);
+				return do_buy($www_cn, $years, $force, $no_wait, $auto_renew, $batch, $approver_email, %opts);
 			}
 		}
 
@@ -963,18 +963,21 @@ sub command_buy {
 		print "         sslmate buy '*.example.com'\n";
 		print "\n";
 		print "Valid options:\n";
-		print " -f, --force        overwrite existing files\n";
-		print " --auto-renew       automatically renew this certificate before it expires\n";
-		print " --no-auto-renew    don't automatically renew this certificate\n";
-		print " --batch            don't prompt for confirmation\n";
-		print " --email=ADDRESS    use the given approver email address\n";
-		print " --no-wait          return immediately; don't wait for cert to be issued\n";
-		print " --coupon=CODE      use the given coupon code for a discount\n";
+		print " -f, --force          overwrite existing files\n";
+		print " --auto-renew         automatically renew this certificate before it expires\n";
+		print " --no-auto-renew      don't automatically renew this certificate\n";
+		print " --batch              don't prompt for confirmation\n";
+		print " --email=ADDRESS      use the given approver email address\n";
+		print " --no-wait            return immediately; don't wait for cert to be issued\n";
+		print " --coupon=CODE        use the given coupon code for a discount\n";
+		print " --invoice-note=NOTE  include the given note with the invoice\n";
+		print " --email-invoice-to=ADDRESS\n";
+		print "                      email an invoice to the given address\n";
 		return 0;
 	}
 
+	my %opts;
 	my $auto_renew = undef;
-	my $coupon_code = undef;
 	my $force = 0;
 	my $batch = 0;
 	my $approver_email = undef;
@@ -990,7 +993,13 @@ sub command_buy {
 			$auto_renew = 0;
 			shift @args;
 		} elsif ($args[0] =~ /^--coupon=(.*)$/) {
-			$coupon_code = $1;
+			$opts{coupon_code} = $1;
+			shift @args;
+		} elsif ($args[0] =~ /^--email-invoice-to=(.*)$/) {
+			$opts{email_invoice_to} = $1;
+			shift @args;
+		} elsif ($args[0] =~ /^--invoice-note=(.*)$/) {
+			$opts{invoice_note} = $1;
 			shift @args;
 		} elsif ($args[0] eq "--batch") {
 			$batch = 1;
@@ -1043,7 +1052,7 @@ sub command_buy {
 	}
 
 	init_default_paths;
-	do_buy($cn, $years, $force, $no_wait, $auto_renew, $coupon_code, $batch, $approver_email);
+	do_buy($cn, $years, $force, $no_wait, $auto_renew, $batch, $approver_email, %opts);
 	return 0;
 }
 
@@ -1211,13 +1220,16 @@ sub command_renew {
 		print "         sslmate renew '*.example.com'\n";
 		print "\n";
 		print "Valid options:\n";
-		print " --batch            don't prompt for confirmation\n";
-		print " --no-wait          return immediately; don't wait for new cert to be issued\n";
-		print " --coupon=CODE      use the given coupon code for a discount\n";
+		print " --batch              don't prompt for confirmation\n";
+		print " --no-wait            return immediately; don't wait for new cert to be issued\n";
+		print " --coupon=CODE        use the given coupon code for a discount\n";
+		print " --invoice-note=NOTE  include the given note with the invoice\n";
+		print " --email-invoice-to=ADDRESS\n";
+		print "                      email an invoice to the given address\n";
 		return 0;
 	}
 
-	my $coupon_code = undef;
+	my %opts;
 	my $batch = 0;
 	my $no_wait = 0;
 	while (@args >= 1) {
@@ -1225,7 +1237,13 @@ sub command_renew {
 			# Ignored for backwards compatibility with pre-0.5.0
 			shift @args;
 		} elsif ($args[0] =~ /^--coupon=(.*)$/) {
-			$coupon_code = $1;
+			$opts{coupon_code} = $1;
+			shift @args;
+		} elsif ($args[0] =~ /^--email-invoice-to=(.*)$/) {
+			$opts{email_invoice_to} = $1;
+			shift @args;
+		} elsif ($args[0] =~ /^--invoice-note=(.*)$/) {
+			$opts{invoice_note} = $1;
 			shift @args;
 		} elsif ($args[0] eq "--batch") {
 			$batch = 1;
@@ -1284,7 +1302,7 @@ sub command_renew {
 			cn		=> $cn,
 			pubkey_hash	=> $pubkey_hash,
 			years		=> $years,
-			coupon_code	=> $coupon_code };
+			%opts };
 
 	print STDERR "Submitting order...\n";
 	my $response = api_call('POST', '/renew', $request) or $exit_with_error->();
