@@ -36,6 +36,7 @@
 use 5.010;	# 5.10
 use strict;
 use warnings;
+use Getopt::Long;
 use Errno;
 use Fcntl;
 use POSIX ":sys_wait_h";
@@ -77,6 +78,7 @@ sub print_usage {
 	print $out " sslmate revoke [-a] HOSTNAME     Revoke the certificate for given hostname\n";
 	print $out " sslmate download HOSTNAME        Download the certificate for given hostname\n";
 	#print $out " sslmate import KEYFILE CERTFILE  Import this certificate to your account\n";
+	print $out " sslmate test HOSTNAME            Check if the certificate is properly installed\n";
 	print $out " sslmate link                     Link this system with your SSLMate account\n";
 	print $out " sslmate help                     Display help\n";
 	print $out " sslmate version                  Print the version of SSLMate that's installed\n";
@@ -1542,6 +1544,89 @@ sub command_download {
 	return 0;
 }
 
+sub command_test {
+	my @args = @_;
+
+	if (@args >= 1 && $args[0] eq "-?") {
+		print "Usage: sslmate test [OPTIONS] COMMONNAME\n";
+		print "Example: sslmate test www.example.com\n";
+		print "\n";
+		print "Valid options:\n";
+		print " -p, --port=NUMBER   test the given port number (default: 443)\n";
+		print " -h, --host=HOSTNAME test the given host (defaults to the common name)\n";
+		return 0;
+	}
+
+	my $port = 443;
+	my @hostname;
+
+	local @ARGV = @args;
+	my $getopt = Getopt::Long::Parser->new;
+	$getopt->configure(qw(no_ignore_case permute bundling));
+	$getopt->getoptions('port|p=i', \$port,
+			    'host|h=s', \@hostname) or return 2;
+
+	if (@ARGV == 0) {
+		print STDERR "Error: you must specify the name of the certificate to test.\n";
+		print STDERR "Example: sslmate test www.example.com\n";
+		return 2;
+	}
+
+	my $cn = $ARGV[0];
+
+	load_config;
+	if (!is_linked) {
+		unless (-t STDIN) {
+			print STDERR "Error: you have not yet linked this system with your SSLMate account.\n";
+			print STDERR "Please run 'sslmate link'.\n";
+			return 1;
+		}
+		do_link or return 1;
+	}
+
+	my $response = api_call('GET', '/test/' . qs_escape($cn),
+				{ account_id => get_config('account_id'),
+				  api_key => get_config('api_key'),
+				  port => $port,
+				  hostname => \@hostname }) or return 1;
+
+	if ($response->{status} eq 'error') {
+		print STDERR "Error: $cn: " . $response->{message} . "\n";
+		return 1;
+	} elsif ($response->{status} ne 'success') {
+		print STDERR "Error: unknown response from server when testing certificate $cn\n";
+		return 1;
+	}
+
+	if (not @{$response->{result}}) {
+		print STDERR "Error: could not resolve hostname.\n";
+		print STDERR "To specify a hostname, use the --host option.\n" unless @hostname;
+		return 1;
+	}
+
+	my $num_errors = 0;
+	for my $result (@{$response->{result}}) {
+		print $result->{hostname} . " (" . $result->{ip_address} . "): ";
+		if ($result->{error}) {
+			print "Error: " . $result->{error};
+			++$num_errors;
+		} elsif (not $result->{correct}) {
+			print "Incorrect certificate installed";
+			++$num_errors;
+		} elsif (not $result->{trusted}) {
+			print "Chain certificate not installed";
+			++$num_errors;
+		} else {
+			print "Good";
+		}
+		print "\n";
+
+	}
+
+	return 11 unless $num_errors == 0;
+	return 0;
+}
+
 sub command_import {
 	my @args = @_;
 
@@ -1816,6 +1901,8 @@ sub main {
 		return command_req @args;
 	} elsif ($command eq 'download') {
 		return command_download @args;
+	} elsif ($command eq 'test') {
+		return command_test @args;
 	} elsif ($command eq 'import') {
 		return command_import @args;
 	} elsif ($command eq 'link') {
