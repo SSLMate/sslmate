@@ -583,7 +583,7 @@ sub openssl_req {
 	return $csr_data;
 }
 
-sub extract_cn_from_crt {
+sub extract_crt_from_file {
 	my ($crt_filename) = @_;
 
 	pipe(my $openssl_reader, my $openssl_writer) or die "Error: pipe failed: $!";
@@ -593,16 +593,26 @@ sub extract_cn_from_crt {
 		open(STDIN, '<', '/dev/null');
 		open(STDOUT, '>&', $openssl_writer) or die "Error: dup failed: $!";
 		close($openssl_reader);
-		exec('openssl', 'x509', '-in', $crt_filename, '-noout', '-subject');
+		exec('openssl', 'x509', '-in', $crt_filename, '-subject');
 		die "Error: Unable to run 'openssl x509' command: " . ($!{ENOENT} ? 'openssl command not found' : $!) . "\n";
 	}
 	close($openssl_writer);
 
+	my $crt = '';
 	my $cn = undef;
+	my $inside_crt = 0;
 	while (defined(my $line = <$openssl_reader>)) {
-		chomp $line;
-		if ($line =~ /^subject=\s*(.*\/)?CN=([^\/,]+)/) {
-			$cn = $2;
+		if ($inside_crt) {
+			$crt .= $line;
+			$inside_crt = 0 if $line eq "-----END CERTIFICATE-----\n";
+		} elsif ($line eq "-----BEGIN CERTIFICATE-----\n") {
+			$crt .= $line;
+			$inside_crt = 1;
+		} else {
+			chomp $line;
+			if ($line =~ /^subject=\s*(.*\/)?CN=([^\/,]+)/) {
+				$cn = $2;
+			}
 		}
 	}
 	close($openssl_reader);
@@ -610,7 +620,7 @@ sub extract_cn_from_crt {
 	waitpid($openssl_pid, 0) or die "waitpid failed: $!";
 	die "Error: 'openssl x509' command failed - is $crt_filename a valid certificate file?\n" unless $? == 0;
 
-	return $cn;
+	return ($crt, $cn);
 }
 
 sub extract_pubkey_from_key {
@@ -1719,17 +1729,17 @@ sub command_import {
 sub do_import {
 	my ($force, $auto_renew, $source_key_path, $source_crt_path, $cn, $batch, $approver_email) = @_;
 
-	# 1. Open the source key and crt files
+	# 1. Read the key
 	open(my $source_key_file, '<', $source_key_path) or die "Error: Unable to open $source_key_path: $!\n";
-	open(my $source_crt_file, '<', $source_crt_path) or die "Error: Unable to open $source_crt_path: $!\n";
 	my $key = do { local $/; <$source_key_file> };
-	my $crt = read_first_crt($source_crt_file);
 	close($source_key_file);
-	close($source_crt_file);
 
-	# 2. Extract the CN from the certificate, if not already known
-	$cn //= extract_cn_from_crt($source_crt_path)
-			or die "Error: Unable to parse $source_crt_path - is it a valid certificate file?\n";
+	# 2. Read the crt
+	-f $source_crt_path && -r $source_crt_path or die "Error: No such file: $source_crt_path\n";
+	my $crt;
+	($crt, defined($cn) ? undef : $cn) = extract_crt_from_file($source_crt_path);
+	defined($crt) or die "Error: Unable to parse $source_crt_path - is it a valid certificate file?\n";
+	defined($cn) or die "Error: $source_crt_path does not have a common name\n";
 	print STDERR "Importing certificate for $cn...\n";
 
 	# 3. Generate the CSR
