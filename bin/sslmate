@@ -845,7 +845,7 @@ sub command_link {
 
 	load_config;
 
-	print STDERR "Note: sslmate has already been linked with an account.\nContinue to link it with a different account, or press Ctrl+C to exit.\n" if is_linked;
+	print "Note: sslmate has already been linked with an account.\nContinue to link it with a different account, or press Ctrl+C to exit.\n" if is_linked;
 
 	do_link(1) or return 1;
 
@@ -925,9 +925,9 @@ sub do_buy {
 		}
 		if ($response->{cn_is_bare_domain}) {
 			my $www_cn = "www.$cn";
-			print STDERR "\n";
-			print STDERR "WARNING: This certificate will not be valid for $www_cn.\n";
-			print STDERR "Would you rather generate a certificate that will work with both $www_cn AND $cn?\n\n";
+			print "\n";
+			print "WARNING: This certificate will not be valid for $www_cn.\n";
+			print "Would you rather generate a certificate that will work with both $www_cn AND $cn?\n\n";
 			if (prompt_yesno) {
 				unlink($files->{key_filename});
 				return do_buy($www_cn, $years, $force, $no_wait, $auto_renew, $batch, $approver_email, %opts);
@@ -1782,9 +1782,9 @@ sub do_import {
 	while (not($batch) && $response->{status} eq 'need_approver_email') {
 		if ($response->{cn_is_bare_domain}) {
 			my $www_cn = "www.$cn";
-			print STDERR "\n";
-			print STDERR "WARNING: This certificate will not be valid for $www_cn when it renews.\n";
-			print STDERR "Would you rather import a certificate that will work with both $www_cn AND $cn?\n\n";
+			print "\n";
+			print "WARNING: This certificate will not be valid for $www_cn when it renews.\n";
+			print "Would you rather import a certificate that will work with both $www_cn AND $cn?\n\n";
 			if (prompt_yesno) {
 				unlink($files->{key_filename}) if defined $files->{key_filename};
 				return do_import($force, $auto_renew, $source_key_path, $source_crt_path, $www_cn, $batch, $approver_email);
