@@ -1635,21 +1635,19 @@ sub command_test {
 
 	my $num_errors = 0;
 	for my $result (@{$response->{result}}) {
-		print $result->{hostname} . " (" . $result->{ip_address} . "): ";
+		my $host = $result->{hostname} . " (" . $result->{ip_address} . ")";
 		if ($result->{error}) {
-			print "Error: " . $result->{error};
+			print STDERR "$host: Error: " . $result->{error} . "\n";
 			++$num_errors;
 		} elsif (not $result->{correct}) {
-			print "Incorrect certificate installed";
+			print STDERR "$host: Incorrect certificate installed\n";
 			++$num_errors;
 		} elsif (not $result->{trusted}) {
-			print "Chain certificate not installed";
+			print STDERR "$host: Chain certificate not installed\n";
 			++$num_errors;
 		} else {
-			print "Good";
+			print "$host: Good\n";
 		}
-		print "\n";
-
 	}
 
 	return 11 unless $num_errors == 0;
