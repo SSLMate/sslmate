@@ -79,6 +79,7 @@ sub print_usage {
 	print $out " sslmate download HOSTNAME        Download the certificate for given hostname\n";
 	#print $out " sslmate import KEYFILE CERTFILE  Import this certificate to your account\n";
 	print $out " sslmate test HOSTNAME            Check if the certificate is properly installed\n";
+	print $out " sslmate mkconfig TEMPLATE NAME   Generate configuration for the certificate\n";
 	print $out " sslmate link                     Link this system with your SSLMate account\n";
 	print $out " sslmate help                     Display help\n";
 	print $out " sslmate version                  Print the version of SSLMate that's installed\n";
@@ -1832,6 +1833,84 @@ sub do_import {
 	print "Certificate with chain file: " . $files->{chained_crt_filename} . "\n";
 }
 
+sub command_mkconfig {
+	local @ARGV = @_;
+	my $getopt = Getopt::Long::Parser->new;
+	$getopt->configure(qw(no_ignore_case permute bundling));
+
+	my $help_opt = 0;
+	my $templates_opt = 0;
+	$getopt->getoptions('templates', \$templates_opt,
+			    'help|?', \$help_opt) or return 2;
+
+	if ($help_opt) {
+		print "Usage: sslmate mkconfig TEMPLATE COMMONNAME\n";
+		print "   or: sslmate mkconfig --templates\n";
+		print "Example: sslmate mkconfig apache www.example.com\n";
+		print "\n";
+		print "Valid options:\n";
+		print " --templates  output a list of available config templates\n";
+		return 0;
+	}
+
+	load_config;
+
+	if ($templates_opt) {
+		my $response = api_call('GET', '/config_templates') or return 1;
+		if ($response->{status} eq 'error') {
+			print STDERR "Error: " . $response->{message} . "\n";
+			return 1;
+		} elsif ($response->{status} ne 'success') {
+			print STDERR "Error: unknown response from server\n";
+			return 1;
+		}
+
+		print join("\n", sort(keys $response->{config_templates}), '');
+
+		return 0;
+	}
+
+	if (@ARGV != 2) {
+		print STDERR "Error: you must specify the template and certificate name.\n";
+		print STDERR "Example: sslmate mkconfig apache www.example.com\n";
+		print STDERR "Run 'sslmate help mkconfig' for help.\n";
+		return 2;
+	}
+
+	my ($template_name, $common_name) = @ARGV;
+
+	my $response = api_call('GET', '/config_templates/' . qs_escape($template_name)) or return 1;
+
+	if ($response->{status} eq 'error') {
+		if ($response->{reason} // '' eq 'template_not_found') {
+			print STDERR "Error: $template_name: Unknown configuration template.\n";
+			print STDERR "Run 'sslmate mkconfig --templates' for a list for available templates.\n";
+			return 1;
+		}
+
+		print STDERR "Error: $template_name: " . $response->{message} . "\n";
+		return 1;
+	} elsif ($response->{status} ne 'success') {
+		print STDERR "Error: unknown response from server\n";
+		return 1;
+	}
+
+	my $paths = get_cert_paths($common_name, 1);
+	my %vars = ('__KEY_PATH__'	=> $paths->{key_filename},
+		    '__CERT_PATH__'	=> $paths->{crt_filename},
+		    '__CHAIN_PATH__'	=> $paths->{chain_crt_filename},
+		    '__CHAINED_PATH__'	=> $paths->{chained_crt_filename});
+
+	my $template = $response->{template};
+	for my $var (keys %vars) {
+		my $value = $vars{$var};
+		$template =~ s/$var/$value/g;
+	}
+
+	print $template;
+	return 0;
+}
+
 sub command_help {
 	my @args = @_;
 
@@ -1935,6 +2014,8 @@ sub main {
 		return command_import @args;
 	} elsif ($command eq 'link') {
 		return command_link @args;
+	} elsif ($command eq 'mkconfig') {
+		return command_mkconfig @args;
 	} elsif ($command eq 'help') {
 		return command_help @args;
 	} elsif ($command eq 'version') {
