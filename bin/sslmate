@@ -540,27 +540,22 @@ sub api_call {
 sub openssl_genrsa {
 	my ($key_file, $nbits) = @_;
 
-	print STDERR "Generating private key... ";
-	STDERR->flush;
 	my $openssl_pid = fork;
 	die "Error: fork failed: $!" unless defined $openssl_pid;
 	if ($openssl_pid == 0) {
 		open(STDIN, '<', '/dev/null');
 		open(STDOUT, '>&', $key_file) or die "Error: dup failed: $!";
+		open(STDERR, '>', '/dev/null');
 		exec('openssl', 'genrsa', $nbits);
 		die "Error: Unable to run 'openssl genrsa' command: " . ($!{ENOENT} ? 'openssl command not found' : $!) . "\n";
 	}
 	waitpid($openssl_pid, 0) or die "waitpid failed: $!";
 	die "Error: 'openssl genrsa' command failed.\n" unless $? == 0;
-
-	print STDERR "Done.\n";
 }
 
 sub openssl_req {
 	my ($key_filename, $dn) = @_;
 
-	print STDERR "Generating CSR... ";
-	STDERR->flush;
 	my $openssl_req_cnf = make_openssl_req_cnf($dn);
 	pipe(my $openssl_reader, my $openssl_writer) or die "Error: pipe failed: $!";
 	my $openssl_pid = fork;
@@ -580,7 +575,6 @@ sub openssl_req {
 	waitpid($openssl_pid, 0) or die "Error: waitpid failed: $!";
 	die "Error: 'openssl req' command failed - is $key_filename a valid key file?\n" unless $? == 0;
 
-	print STDERR "Done.\n";
 	return $csr_data;
 }
 
@@ -680,7 +674,7 @@ sub wait_for_cert {
 				$retry_after = 1 if $retry_after < 1; # lower bound of 1 second
 			} elsif ($now < $timeout_after) {
 				if (not $warned) {
-					print STDERR "Sorry, your certificate isn't ready yet. I'll keep waiting, but if you'd rather do this later, you can hit Ctrl+C and we'll send you an email when it's ready.\n";
+					print "Sorry, your certificate isn't ready yet. I'll keep waiting, but if you'd rather do this later, you can hit Ctrl+C and we'll send you an email when it's ready.\n";
 					$warned = 1;
 				}
 				$retry_after = 10 if $retry_after < 10; # lower bound of 10 seconds
@@ -899,12 +893,16 @@ sub do_buy {
 	};
 
 	# 1. Generate an RSA key
+	print "Generating private key... "; STDOUT->flush;
 	truncate($files->{key_file}, 0);
 	openssl_genrsa($files->{key_file}, 2048);
 	close($files->{key_file});
+	print "Done.\n";
 
 	# 2. Generate the CSR
+	print "Generating CSR... "; STDOUT->flush;
 	my $csr = openssl_req($files->{key_filename}, $dn);
+	print "Done.\n";
 
 	# 3. Buy the certificate from SSLMate
 	my $request = { account_id	=> get_config('account_id'),
@@ -915,7 +913,7 @@ sub do_buy {
 			approver_email	=> $batch ? $approver_email : undef,
 			%opts };
 
-	print STDERR "Submitting order...\n";
+	print "Submitting order...\n";
 	my $response = api_call('POST', '/buy', $request) or $exit_with_error->();
 
 	while (not($batch) && $response->{status} eq 'need_confirmation') {
@@ -949,7 +947,7 @@ sub do_buy {
 		$request->{authorized_charge} = $response->{amount_due};
 		$request->{authorized_charge_currency} = $response->{currency};
 		$request->{approver_email} = $approver_email;
-		print STDERR "Placing order...\n";
+		print "Placing order...\n";
 		$response = api_call('POST', '/buy', $request) or $exit_with_error->();
 	}
 
@@ -1127,19 +1125,23 @@ sub command_reissue {
 	};
 
 	# 1. Generate an RSA key
+	print "Generating private key... "; STDOUT->flush;
 	truncate($files->{key_file}, 0);
 	openssl_genrsa($files->{key_file}, 2048);
 	close($files->{key_file});
+	print "Done.\n";
 
 	# 2. Generate the CSR
+	print "Generating CSR... "; STDOUT->flush;
 	my $csr = openssl_req($new_key_filename, $dn);
+	print "Done.\n";
 
 	# 3. Reissue the certificate from SSLMate
 	my $request = { account_id	=> get_config('account_id'),
 			api_key		=> get_config('api_key'),
 			csr		=> $csr };
 
-	print STDERR "Reissuing cert...\n";
+	print "Reissuing cert...\n";
 	my $response = api_call('POST', '/reissue', $request) or $exit_with_error->();
 
 	if ($response->{status} eq 'error') {
@@ -1192,7 +1194,7 @@ sub command_revoke {
 		do_link or return 1;
 	}
 
-	print STDERR "Revoking cert...\n";
+	print "Revoking cert...\n";
 
 	my $response = api_call('POST', '/revoke',
 				{ account_id =>	get_config('account_id'),
@@ -1315,7 +1317,7 @@ sub command_renew {
 			years		=> $years,
 			%opts };
 
-	print STDERR "Submitting order...\n";
+	print "Submitting order...\n";
 	my $response = api_call('POST', '/renew', $request) or $exit_with_error->();
 
 	# TODO: if in batch mode, don't require a second hit to the server to confirm order
@@ -1402,12 +1404,16 @@ sub command_req {
 	}
 
 	# 1. Generate an RSA key
+	print "Generating private key... "; STDOUT->flush;
 	openssl_genrsa($key_file, 2048);
 	close($key_file);
+	print "$cn.key\n";
 
 	# 2. Generate the CSR
+	print "Generating CSR... "; STDOUT->flush;
 	print $csr_file openssl_req("$cn.key", { CN => $cn, C => $country_code, ST => 'Some-State', O => 'Internet Widgits Pty Ltd' });
 	close($csr_file);
+	print "$cn.csr\n";
 
 	return 0;
 }
@@ -1739,7 +1745,7 @@ sub do_import {
 	($crt, defined($cn) ? undef : $cn) = extract_crt_from_file($source_crt_path);
 	defined($crt) or die "Error: Unable to parse $source_crt_path - is it a valid certificate file?\n";
 	defined($cn) or die "Error: $source_crt_path does not have a common name\n";
-	print STDERR "Importing certificate for $cn...\n";
+	print "Importing certificate for $cn...\n";
 
 	# 3. Generate the CSR
 	my $dn = get_dn_from_server($cn) or exit 1;
@@ -1768,7 +1774,7 @@ sub do_import {
 	};
 
 	# 5. Upload the CSR and CRT to SSLMate:
-	print STDERR "Uploading $source_crt_path...\n";
+	print "Uploading $source_crt_path...\n";
 	my $request = { account_id =>	get_config('account_id'),
 			api_key =>	get_config('api_key'),
 			auto_renew =>	$auto_renew,
