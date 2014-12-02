@@ -1428,15 +1428,19 @@ sub command_download {
 		print "         sslmate download --all\n";
 		print "\n";
 		print "Valid options:\n";
-		print " -a, --all      download certificate for every key in the SSLMate keys directory\n";
+		print " -a, --all    download certificate for every key in the SSLMate keys directory\n";
+		print " --temp       download a temporary certificate if real certificate is not ready\n";
 		return 0;
 	}
 
 	my $all = 0;
-	my $accept_dummy = 0; # TODO: command line option for dummy certs
+	my $accept_dummy = 0;
 	while (@args >= 1) {
 		if ($args[0] eq "-a" || $args[0] eq "--all") {
 			$all = 1;
+			shift @args;
+		} elsif ($args[0] eq "--temp") {
+			$accept_dummy = 1;
 			shift @args;
 		} else {
 			last;
@@ -1566,12 +1570,17 @@ sub command_download {
 		                 $response->{crt},
 		                 $response->{chain});
 
-		print "The certificate for $cn has been downloaded.\n\n";
-		#print "Notice: this is a dummy cert!\n" if $response->{dummy}; # TODO: message if this is a dummy cert
+		my $extra_info = '';
+		if ($response->{dummy}) {
+			print "A temporary certificate for $cn has been downloaded.\n\n";
+			$extra_info = " (temporary)";
+		} else {
+			print "The certificate for $cn has been downloaded.\n\n";
+		}
 		print "           Private key file: " . $paths->{key_filename} . "\n" if $has_new_key;
-		print "           Certificate file: " . $paths->{crt_filename} . "\n";
-		print "     Certificate chain file: " . $paths->{chain_crt_filename} . "\n";
-		print "Certificate with chain file: " . $paths->{chained_crt_filename} . "\n";
+		print "           Certificate file: " . $paths->{crt_filename} . "$extra_info\n";
+		print "     Certificate chain file: " . $paths->{chain_crt_filename} . "$extra_info\n";
+		print "Certificate with chain file: " . $paths->{chained_crt_filename} . "$extra_info\n";
 		print "\n";
 	}
 	if ($errors) {
