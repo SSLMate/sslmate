@@ -876,7 +876,7 @@ sub do_wait_for_cert {
 
 	my $extra_info = '';
 	if ($is_dummy) {
-		print "A temporary certificate has been downloaded.\n\n";
+		print "A temporary, self-signed, certificate has been downloaded.\n\n";
 		$extra_info = " (temporary)";
 	} else {
 		print "Your certificate is ready for use!\n\n";
@@ -1594,7 +1594,7 @@ sub command_download {
 
 		my $extra_info = '';
 		if ($response->{dummy}) {
-			print "A temporary certificate for $cn has been downloaded.\n\n";
+			print "A temporary, self-signed, certificate for $cn has been downloaded.\n\n";
 			$extra_info = " (temporary)";
 		} else {
 			print "The certificate for $cn has been downloaded.\n\n";
