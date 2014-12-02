@@ -59,6 +59,7 @@ our $has_curl = eval { require WWW::Curl::Easy; 1 };
 use version; our $VERSION = version->declare('0.5.0');
 our $API_ENDPOINT = 'https://sslmate.com/api/v1';
 
+our $quiet = 0;
 our $config_profile;
 our %global_config;
 our %personal_config;
@@ -1469,7 +1470,7 @@ sub command_download {
 		closedir($dh);
 
 		if (@args == 0) {
-			print "No certificates to download.\n";
+			print "No certificates to download.\n" unless $quiet;
 			return 10;
 		}
 	}
@@ -1550,7 +1551,7 @@ sub command_download {
 
 	if (@certs == 0) {
 		return 1 if $errors;
-		print "All certificate files already downloaded and up-to-date.\n";
+		print "All certificate files already downloaded and up-to-date.\n" unless $quiet;
 		return 10;
 	}
 
