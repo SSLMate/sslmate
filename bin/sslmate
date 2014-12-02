@@ -645,7 +645,7 @@ sub extract_pubkey_from_key {
 }
 
 sub wait_for_cert {
-	my ($cert_instance_id) = @_;
+	my ($cert_instance_id, $accept_dummy) = @_;
 
 	my $start_time = time;
 	my $warn_after = $start_time + 180;
@@ -654,20 +654,24 @@ sub wait_for_cert {
 
 	while (1) {
 		my $now = time;
-		my $poll = 0;
-		if ($now < $warn_after) {
-			$poll = $warn_after - $now;
-		} elsif ($now < $timeout_after) {
-			$poll = $timeout_after - $now;
-		}
+		my $poll;
+		unless ($accept_dummy) {
+			if ($now < $warn_after) {
+				$poll = $warn_after - $now;
+			} elsif ($now < $timeout_after) {
+				$poll = $timeout_after - $now;
+			} else {
+				$poll = 0;
+			}
 
-		$poll = 180 if $poll > 180; # upper bound of 180 seconds
+			$poll = 180 if $poll > 180; # upper bound of 180 seconds
+		}
 		
-		my $response = api_call('GET', "/download/$cert_instance_id", { account_id => get_config('account_id'), api_key => get_config('api_key'), poll => $poll });
+		my $response = api_call('GET', "/download/$cert_instance_id", { account_id => get_config('account_id'), api_key => get_config('api_key'), poll => $poll, dummy => $accept_dummy });
 		return unless defined $response; # TODO: repeat ? b/c this could be a timeout situation
 
 		if ($response->{status} eq 'success') {
-			return ($response->{crt}, $response->{chain});
+			return ($response->{crt}, $response->{chain}, $response->{dummy});
 		} elsif ($response->{status} eq 'not_ready') {
 			my $now = time;
 			my $retry_after = $response->{retry_after};
@@ -848,36 +852,46 @@ sub command_link {
 }
 
 sub do_wait_for_cert {
-	my ($response, $no_wait, $files, $new_key_filename) = @_;
+	my ($response, $no_wait, $accept_dummy, $files, $new_key_filename) = @_;
 
 	print "You will soon receive an email at " . $response->{approver_email} . " from " . $response->{approval_from} . ". Follow the instructions in the email to verify your ownership of your domain.\n\n";
 
 	if ($no_wait) {
 		print "Once you've verified ownership, you will be able to download your certificate with the 'sslmate download' command.\n";
 		return 0;
+	} elsif ($accept_dummy) {
+		print "Once you've verified ownership, you will be able to download your certificate with the 'sslmate download' command.  In the meantime, you can configure your server with the temporary certificate, but this certificate will NOT be trusted by clients.\n";
 	} else {
 		print "Once you've verified ownership, your certificate will be automatically downloaded.  If you'd rather do this later, press Ctrl+C and download your certificate with the 'sslmate download' command instead.\n\n";
 	}
 
-	print "Waiting for ownership confirmation...\n";
+	print "Waiting for ownership confirmation...\n" unless $accept_dummy;
 
-	my ($crt, $chain_crt) = wait_for_cert($response->{cert_instance_id}) or exit 1;
+	my ($crt, $chain_crt, $is_dummy) = wait_for_cert($response->{cert_instance_id}, $accept_dummy) or exit 1;
 	$chain_crt //= '';
 
 	write_cert_files($files, $new_key_filename, $crt, $chain_crt);
 
 	print "\n";
-	print "Your certificate is ready for use!\n\n";
+
+	my $extra_info = '';
+	if ($is_dummy) {
+		print "A temporary certificate has been downloaded.\n\n";
+		$extra_info = " (temporary)";
+	} else {
+		print "Your certificate is ready for use!\n\n";
+	}
+
 	print "           Private key file: " . $files->{key_filename} . "\n" if defined $new_key_filename;
-	print "           Certificate file: " . $files->{crt_filename} . "\n";
-	print "     Certificate chain file: " . $files->{chain_crt_filename} . "\n";
-	print "Certificate with chain file: " . $files->{chained_crt_filename} . "\n";
+	print "           Certificate file: " . $files->{crt_filename} . "$extra_info\n";
+	print "     Certificate chain file: " . $files->{chain_crt_filename} . "$extra_info\n";
+	print "Certificate with chain file: " . $files->{chained_crt_filename} . "$extra_info\n";
 	#print "\n";
 	#print "(" . $files->{chained_crt_filename} . " is the concatenation of " . $files->{crt_filename} . " and " . $files->{chain_crt_filename} . "; consult your program's documentation to determine whether you specify the certificate and chain in separate files or in one file.)\n";
 }
 
 sub do_buy {
-	my ($cn, $years, $force, $no_wait, $auto_renew, $batch, $approver_email, %opts) = @_;
+	my ($cn, $years, $force, $no_wait, $accept_dummy, $auto_renew, $batch, $approver_email, %opts) = @_;
 
 	my $dn = get_dn_from_server($cn) or exit 1;
 	# Future TODO: support reusing key file if one already exists
@@ -929,7 +943,7 @@ sub do_buy {
 			print "Would you rather generate a certificate that will work with both $www_cn AND $cn?\n\n";
 			if (prompt_yesno) {
 				unlink($files->{key_filename});
-				return do_buy($www_cn, $years, $force, $no_wait, $auto_renew, $batch, $approver_email, %opts);
+				return do_buy($www_cn, $years, $force, $no_wait, $accept_dummy, $auto_renew, $batch, $approver_email, %opts);
 			}
 		}
 
@@ -961,7 +975,7 @@ sub do_buy {
 	}
 
 	print "Order complete.\n\n";
-	return do_wait_for_cert($response, $no_wait, $files, $files->{key_filename});
+	return do_wait_for_cert($response, $no_wait, $accept_dummy, $files, $files->{key_filename});
 }
 
 sub command_buy {
@@ -979,6 +993,7 @@ sub command_buy {
 		print " --batch              don't prompt for confirmation\n";
 		print " --email=ADDRESS      use the given approver email address\n";
 		print " --no-wait            return immediately; don't wait for cert to be issued\n";
+		print " --temp               return immediately with a temporary certificate\n";
 		print " --coupon=CODE        use the given coupon code for a discount\n";
 		print " --invoice-note=NOTE  include the given note with the invoice\n";
 		print " --email-invoice-to=ADDRESS\n";
@@ -992,6 +1007,7 @@ sub command_buy {
 	my $batch = 0;
 	my $approver_email = undef;
 	my $no_wait = 0;
+	my $accept_dummy = 0;
 	while (@args >= 1) {
 		if ($args[0] eq "-f" || $args[0] eq "--force") {
 			$force = 1;
@@ -1020,6 +1036,9 @@ sub command_buy {
 		} elsif ($args[0] eq "--no-wait") {
 			$no_wait = 1;
 			shift @args;
+		} elsif ($args[0] eq "--temp") {
+			$accept_dummy = 1;
+			shift @args;
 		} else {
 			last;
 		}
@@ -1032,7 +1051,10 @@ sub command_buy {
 		print STDERR "See 'sslmate help buy' for help.\n";
 		return 2;
 	}
-
+	if ($no_wait && $accept_dummy) {
+		print STDERR "Error: --no-wait and --temp are mutually exclusive.\n";
+		return 2;
+	}
 	if ($batch && not defined($approver_email)) {
 		print STDERR "Error: in batch mode, you must specify the approver email with --email.\n";
 		print STDERR "See 'sslmate help buy' for help.\n";
@@ -1062,7 +1084,7 @@ sub command_buy {
 	}
 
 	init_default_paths;
-	do_buy($cn, $years, $force, $no_wait, $auto_renew, $batch, $approver_email, %opts);
+	do_buy($cn, $years, $force, $no_wait, $accept_dummy, $auto_renew, $batch, $approver_email, %opts);
 	return 0;
 }
 
@@ -1154,7 +1176,7 @@ sub command_reissue {
 	}
 
 	print "Reissue complete.\n\n";
-	return do_wait_for_cert($response, $no_wait, $files, $new_key_filename);
+	return do_wait_for_cert($response, $no_wait, 0, $files, $new_key_filename);
 }
 
 sub command_revoke {
@@ -1349,7 +1371,7 @@ sub command_renew {
 	}
 
 	print "Renewal complete.\n\n";
-	return do_wait_for_cert($response, $no_wait, $files);
+	return do_wait_for_cert($response, $no_wait, 0, $files);
 }
 
 sub command_req {
