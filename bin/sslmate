@@ -1981,11 +1981,6 @@ sub command_version {
 sub main {
 	my @args = @_;
 
-	if (@args == 0) {
-		print_usage(*STDERR);
-		return 2;
-	}
-
 	while (@args >= 1) {
 		if ($args[0] eq "-p" && @args >= 2) {
 			shift @args;
@@ -1997,6 +1992,11 @@ sub main {
 		} else {
 			last;
 		}
+	}
+
+	if (@args == 0) {
+		print_usage(*STDERR);
+		return 2;
 	}
 
 	my $command = shift @args;
