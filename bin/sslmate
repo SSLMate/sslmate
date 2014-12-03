@@ -1910,7 +1910,7 @@ sub command_mkconfig {
 			return 1;
 		}
 
-		print join("\n", sort(keys $response->{config_templates}), '');
+		print join("\n", sort(keys %{$response->{config_templates}}), '');
 
 		return 0;
 	}
