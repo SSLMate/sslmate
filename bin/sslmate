@@ -1687,9 +1687,11 @@ sub command_test {
 		} elsif (not $result->{correct}) {
 			print "$host: Incorrect certificate installed\n";
 			++$num_errors;
-		} elsif (not $result->{trusted}) {
+		} elsif (not $result->{chained}) {
 			print "$host: Chain certificate not installed\n";
 			++$num_errors;
+		} elsif ($result->{dummy}) {
+			print "$host: Good (temporary, self-signed certificate)\n";
 		} else {
 			print "$host: Good\n";
 		}
