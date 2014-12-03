@@ -36,6 +36,7 @@
 use 5.010;	# 5.10
 use strict;
 use warnings;
+use Getopt::Long;
 use Errno;
 use Fcntl;
 use POSIX ":sys_wait_h";
@@ -55,9 +56,10 @@ use Term::ReadKey;		# libterm-readkey-perl		perl-TermReadKey
 
 our $has_curl = eval { require WWW::Curl::Easy; 1 };
 
-use version; our $VERSION = version->declare('0.5.0');
+use version; our $VERSION = version->declare('0.6.0');
 our $API_ENDPOINT = 'https://sslmate.com/api/v1';
 
+our $quiet = 0;
 our $config_profile;
 our %global_config;
 our %personal_config;
@@ -77,6 +79,8 @@ sub print_usage {
 	print $out " sslmate revoke [-a] HOSTNAME     Revoke the certificate for given hostname\n";
 	print $out " sslmate download HOSTNAME        Download the certificate for given hostname\n";
 	#print $out " sslmate import KEYFILE CERTFILE  Import this certificate to your account\n";
+	print $out " sslmate test HOSTNAME            Check if the certificate is properly installed\n";
+	print $out " sslmate mkconfig TEMPLATE NAME   Generate configuration for the certificate\n";
 	print $out " sslmate link                     Link this system with your SSLMate account\n";
 	print $out " sslmate help                     Display help\n";
 	print $out " sslmate version                  Print the version of SSLMate that's installed\n";
@@ -493,7 +497,19 @@ sub api_call {
 
 	if (ref($request_data) eq 'HASH') {
 		# Convert into a query string
-		$request_data = join('&', map { defined($request_data->{$_}) ? qs_escape($_) . '=' . qs_escape($request_data->{$_}) : () } keys %$request_data);
+		my @elts;
+		for my $key (keys %$request_data) {
+			next unless defined $request_data->{$key};
+			if (ref($request_data->{$key}) eq 'ARRAY') {
+				for my $value (@{$request_data->{$key}}) {
+					next unless defined $value;
+					push @elts, qs_escape($key) . '=' . qs_escape($value);
+				}
+			} else {
+				push @elts, qs_escape($key) . '=' . qs_escape($request_data->{$key});
+			}
+		}
+		$request_data = join('&', @elts);
 	}
 
 	my ($http_status, $content_type, $response_data) = $has_curl ?
@@ -525,27 +541,22 @@ sub api_call {
 sub openssl_genrsa {
 	my ($key_file, $nbits) = @_;
 
-	print STDERR "Generating private key... ";
-	STDERR->flush;
 	my $openssl_pid = fork;
 	die "Error: fork failed: $!" unless defined $openssl_pid;
 	if ($openssl_pid == 0) {
 		open(STDIN, '<', '/dev/null');
 		open(STDOUT, '>&', $key_file) or die "Error: dup failed: $!";
+		open(STDERR, '>', '/dev/null');
 		exec('openssl', 'genrsa', $nbits);
 		die "Error: Unable to run 'openssl genrsa' command: " . ($!{ENOENT} ? 'openssl command not found' : $!) . "\n";
 	}
 	waitpid($openssl_pid, 0) or die "waitpid failed: $!";
 	die "Error: 'openssl genrsa' command failed.\n" unless $? == 0;
-
-	print STDERR "Done.\n";
 }
 
 sub openssl_req {
 	my ($key_filename, $dn) = @_;
 
-	print STDERR "Generating CSR... ";
-	STDERR->flush;
 	my $openssl_req_cnf = make_openssl_req_cnf($dn);
 	pipe(my $openssl_reader, my $openssl_writer) or die "Error: pipe failed: $!";
 	my $openssl_pid = fork;
@@ -565,11 +576,10 @@ sub openssl_req {
 	waitpid($openssl_pid, 0) or die "Error: waitpid failed: $!";
 	die "Error: 'openssl req' command failed - is $key_filename a valid key file?\n" unless $? == 0;
 
-	print STDERR "Done.\n";
 	return $csr_data;
 }
 
-sub extract_cn_from_crt {
+sub extract_crt_from_file {
 	my ($crt_filename) = @_;
 
 	pipe(my $openssl_reader, my $openssl_writer) or die "Error: pipe failed: $!";
@@ -579,16 +589,26 @@ sub extract_cn_from_crt {
 		open(STDIN, '<', '/dev/null');
 		open(STDOUT, '>&', $openssl_writer) or die "Error: dup failed: $!";
 		close($openssl_reader);
-		exec('openssl', 'x509', '-in', $crt_filename, '-noout', '-subject');
+		exec('openssl', 'x509', '-in', $crt_filename, '-subject');
 		die "Error: Unable to run 'openssl x509' command: " . ($!{ENOENT} ? 'openssl command not found' : $!) . "\n";
 	}
 	close($openssl_writer);
 
+	my $crt = '';
 	my $cn = undef;
+	my $inside_crt = 0;
 	while (defined(my $line = <$openssl_reader>)) {
-		chomp $line;
-		if ($line =~ /^subject=\s*(.*\/)?CN=([^\/,]+)/) {
-			$cn = $2;
+		if ($inside_crt) {
+			$crt .= $line;
+			$inside_crt = 0 if $line eq "-----END CERTIFICATE-----\n";
+		} elsif ($line eq "-----BEGIN CERTIFICATE-----\n") {
+			$crt .= $line;
+			$inside_crt = 1;
+		} else {
+			chomp $line;
+			if ($line =~ /^subject=\s*(.*\/)?CN=([^\/,]+)/) {
+				$cn = $2;
+			}
 		}
 	}
 	close($openssl_reader);
@@ -596,7 +616,7 @@ sub extract_cn_from_crt {
 	waitpid($openssl_pid, 0) or die "waitpid failed: $!";
 	die "Error: 'openssl x509' command failed - is $crt_filename a valid certificate file?\n" unless $? == 0;
 
-	return $cn;
+	return ($crt, $cn);
 }
 
 sub extract_pubkey_from_key {
@@ -625,7 +645,7 @@ sub extract_pubkey_from_key {
 }
 
 sub wait_for_cert {
-	my ($cert_instance_id) = @_;
+	my ($cert_instance_id, $accept_dummy) = @_;
 
 	my $start_time = time;
 	my $warn_after = $start_time + 180;
@@ -634,20 +654,24 @@ sub wait_for_cert {
 
 	while (1) {
 		my $now = time;
-		my $poll = 0;
-		if ($now < $warn_after) {
-			$poll = $warn_after - $now;
-		} elsif ($now < $timeout_after) {
-			$poll = $timeout_after - $now;
-		}
+		my $poll;
+		unless ($accept_dummy) {
+			if ($now < $warn_after) {
+				$poll = $warn_after - $now;
+			} elsif ($now < $timeout_after) {
+				$poll = $timeout_after - $now;
+			} else {
+				$poll = 0;
+			}
 
-		$poll = 180 if $poll > 180; # upper bound of 180 seconds
+			$poll = 180 if $poll > 180; # upper bound of 180 seconds
+		}
 		
-		my $response = api_call('GET', "/download/$cert_instance_id", { account_id => get_config('account_id'), api_key => get_config('api_key'), poll => $poll });
+		my $response = api_call('GET', "/download/$cert_instance_id", { account_id => get_config('account_id'), api_key => get_config('api_key'), poll => $poll, dummy => $accept_dummy });
 		return unless defined $response; # TODO: repeat ? b/c this could be a timeout situation
 
 		if ($response->{status} eq 'success') {
-			return ($response->{crt}, $response->{chain});
+			return ($response->{crt}, $response->{chain}, $response->{dummy});
 		} elsif ($response->{status} eq 'not_ready') {
 			my $now = time;
 			my $retry_after = $response->{retry_after};
@@ -655,7 +679,7 @@ sub wait_for_cert {
 				$retry_after = 1 if $retry_after < 1; # lower bound of 1 second
 			} elsif ($now < $timeout_after) {
 				if (not $warned) {
-					print STDERR "Sorry, your certificate isn't ready yet. I'll keep waiting, but if you'd rather do this later, you can hit Ctrl+C and we'll send you an email when it's ready.\n";
+					print "Sorry, your certificate isn't ready yet. I'll keep waiting, but if you'd rather do this later, you can hit Ctrl+C and we'll send you an email when it's ready.\n";
 					$warned = 1;
 				}
 				$retry_after = 10 if $retry_after < 10; # lower bound of 10 seconds
@@ -753,7 +777,7 @@ sub prompt_for_order_confirmation {
 sub get_dn_from_server {
 	my ($cn) = @_;
 
-	my $response = api_call('GET', "/distinguished_name/$cn",
+	my $response = api_call('GET', "/distinguished_name/" . qs_escape($cn),
 				{ account_id => get_config('account_id'),
 				  api_key => get_config('api_key') });
 	return undef unless defined $response;
@@ -776,7 +800,11 @@ sub do_link {
 	my $username = prompt_user("Enter your SSLMate username: ");
 	my $password = prompt_password("Enter your SSLMate password: ");
 	return 0 if not defined $password;
-	print "Linking account... ";
+	if ($persistent) {
+		print "Linking account... ";
+	} else {
+		print "Authenticating... ";
+	}
 	STDOUT->flush;
 
 	my $response = api_call('POST', '/link', { account_username => $username, account_password => $password });
@@ -796,6 +824,9 @@ sub do_link {
 			$ephemeral_config{"api_key"} = $response->{api_key};
 		}
 		print "Done.\n";
+		unless ($persistent) {
+			print "Tip: if you don't want to have to type your password every time, you can run 'sslmate link' to link this system with your account.\n\n";
+		}
 		return 1;
 	} elsif ($response->{status} eq 'error') {
 		print STDERR "Error: " . $response->{message} . "\n";
@@ -820,7 +851,7 @@ sub command_link {
 
 	load_config;
 
-	print STDERR "Note: sslmate has already been linked with an account.\nContinue to link it with a different account, or press Ctrl+C to exit.\n" if is_linked;
+	print "Note: sslmate has already been linked with an account.\nContinue to link it with a different account, or press Ctrl+C to exit.\n" if is_linked;
 
 	do_link(1) or return 1;
 
@@ -828,36 +859,46 @@ sub command_link {
 }
 
 sub do_wait_for_cert {
-	my ($response, $no_wait, $files, $new_key_filename) = @_;
+	my ($response, $no_wait, $accept_dummy, $files, $new_key_filename) = @_;
 
 	print "You will soon receive an email at " . $response->{approver_email} . " from " . $response->{approval_from} . ". Follow the instructions in the email to verify your ownership of your domain.\n\n";
 
 	if ($no_wait) {
 		print "Once you've verified ownership, you will be able to download your certificate with the 'sslmate download' command.\n";
 		return 0;
+	} elsif ($accept_dummy) {
+		print "Once you've verified ownership, you will be able to download your certificate with the 'sslmate download' command.  In the meantime, you can configure your server with the temporary certificate, but this certificate will NOT be trusted by clients.\n";
 	} else {
 		print "Once you've verified ownership, your certificate will be automatically downloaded.  If you'd rather do this later, press Ctrl+C and download your certificate with the 'sslmate download' command instead.\n\n";
 	}
 
-	print "Waiting for ownership confirmation...\n";
+	print "Waiting for ownership confirmation...\n" unless $accept_dummy;
 
-	my ($crt, $chain_crt) = wait_for_cert($response->{cert_instance_id}) or exit 1;
+	my ($crt, $chain_crt, $is_dummy) = wait_for_cert($response->{cert_instance_id}, $accept_dummy) or exit 1;
 	$chain_crt //= '';
 
 	write_cert_files($files, $new_key_filename, $crt, $chain_crt);
 
 	print "\n";
-	print "Your certificate is ready for use!\n\n";
+
+	my $extra_info = '';
+	if ($is_dummy) {
+		print "A temporary, self-signed, certificate has been downloaded.\n\n";
+		$extra_info = " (temporary)";
+	} else {
+		print "Your certificate is ready for use!\n\n";
+	}
+
 	print "           Private key file: " . $files->{key_filename} . "\n" if defined $new_key_filename;
-	print "           Certificate file: " . $files->{crt_filename} . "\n";
-	print "     Certificate chain file: " . $files->{chain_crt_filename} . "\n";
-	print "Certificate with chain file: " . $files->{chained_crt_filename} . "\n";
+	print "           Certificate file: " . $files->{crt_filename} . "$extra_info\n";
+	print "     Certificate chain file: " . $files->{chain_crt_filename} . "$extra_info\n";
+	print "Certificate with chain file: " . $files->{chained_crt_filename} . "$extra_info\n";
 	#print "\n";
 	#print "(" . $files->{chained_crt_filename} . " is the concatenation of " . $files->{crt_filename} . " and " . $files->{chain_crt_filename} . "; consult your program's documentation to determine whether you specify the certificate and chain in separate files or in one file.)\n";
 }
 
 sub do_buy {
-	my ($cn, $years, $force, $no_wait, $auto_renew, $coupon_code, $batch, $approver_email) = @_;
+	my ($cn, $years, $force, $no_wait, $accept_dummy, $auto_renew, $batch, $approver_email, %opts) = @_;
 
 	my $dn = get_dn_from_server($cn) or exit 1;
 	# Future TODO: support reusing key file if one already exists
@@ -874,12 +915,16 @@ sub do_buy {
 	};
 
 	# 1. Generate an RSA key
+	print "Generating private key... "; STDOUT->flush;
 	truncate($files->{key_file}, 0);
 	openssl_genrsa($files->{key_file}, 2048);
 	close($files->{key_file});
+	print "Done.\n";
 
 	# 2. Generate the CSR
+	print "Generating CSR... "; STDOUT->flush;
 	my $csr = openssl_req($files->{key_filename}, $dn);
+	print "Done.\n";
 
 	# 3. Buy the certificate from SSLMate
 	my $request = { account_id	=> get_config('account_id'),
@@ -887,10 +932,10 @@ sub do_buy {
 			csr		=> $csr,
 			years		=> $years,
 			auto_renew	=> $auto_renew,
-			coupon_code	=> $coupon_code,
-			approver_email	=> $batch ? $approver_email : undef };
+			approver_email	=> $batch ? $approver_email : undef,
+			%opts };
 
-	print STDERR "Submitting order...\n";
+	print "Submitting order...\n";
 	my $response = api_call('POST', '/buy', $request) or $exit_with_error->();
 
 	while (not($batch) && $response->{status} eq 'need_confirmation') {
@@ -900,12 +945,12 @@ sub do_buy {
 		}
 		if ($response->{cn_is_bare_domain}) {
 			my $www_cn = "www.$cn";
-			print STDERR "\n";
-			print STDERR "WARNING: This certificate will not be valid for $www_cn.\n";
-			print STDERR "Would you rather generate a certificate that will work with both $www_cn AND $cn?\n\n";
+			print "\n";
+			print "WARNING: This certificate will not be valid for $www_cn.\n";
+			print "Would you rather generate a certificate that will work with both $www_cn AND $cn?\n\n";
 			if (prompt_yesno) {
 				unlink($files->{key_filename});
-				return do_buy($www_cn, $years, $force, $no_wait, $auto_renew, $coupon_code, $batch, $approver_email);
+				return do_buy($www_cn, $years, $force, $no_wait, $accept_dummy, $auto_renew, $batch, $approver_email, %opts);
 			}
 		}
 
@@ -924,7 +969,7 @@ sub do_buy {
 		$request->{authorized_charge} = $response->{amount_due};
 		$request->{authorized_charge_currency} = $response->{currency};
 		$request->{approver_email} = $approver_email;
-		print STDERR "Placing order...\n";
+		print "Placing order...\n";
 		$response = api_call('POST', '/buy', $request) or $exit_with_error->();
 	}
 
@@ -937,7 +982,7 @@ sub do_buy {
 	}
 
 	print "Order complete.\n\n";
-	return do_wait_for_cert($response, $no_wait, $files, $files->{key_filename});
+	return do_wait_for_cert($response, $no_wait, $accept_dummy, $files, $files->{key_filename});
 }
 
 sub command_buy {
@@ -949,22 +994,27 @@ sub command_buy {
 		print "         sslmate buy '*.example.com'\n";
 		print "\n";
 		print "Valid options:\n";
-		print " -f, --force        overwrite existing files\n";
-		print " --auto-renew       automatically renew this certificate before it expires\n";
-		print " --no-auto-renew    don't automatically renew this certificate\n";
-		print " --batch            don't prompt for confirmation\n";
-		print " --email=ADDRESS    use the given approver email address\n";
-		print " --no-wait          return immediately; don't wait for cert to be issued\n";
-		print " --coupon=CODE      use the given coupon code for a discount\n";
+		print " -f, --force          overwrite existing files\n";
+		print " --auto-renew         automatically renew this certificate before it expires\n";
+		print " --no-auto-renew      don't automatically renew this certificate\n";
+		print " --batch              don't prompt for confirmation\n";
+		print " --email=ADDRESS      use the given approver email address\n";
+		print " --no-wait            return immediately; don't wait for cert to be issued\n";
+		print " --temp               return immediately with a temporary certificate\n";
+		print " --coupon=CODE        use the given coupon code for a discount\n";
+		print " --invoice-note=NOTE  include the given note with the invoice\n";
+		print " --email-invoice-to=ADDRESS\n";
+		print "                      email an invoice to the given address\n";
 		return 0;
 	}
 
+	my %opts;
 	my $auto_renew = undef;
-	my $coupon_code = undef;
 	my $force = 0;
 	my $batch = 0;
 	my $approver_email = undef;
 	my $no_wait = 0;
+	my $accept_dummy = 0;
 	while (@args >= 1) {
 		if ($args[0] eq "-f" || $args[0] eq "--force") {
 			$force = 1;
@@ -976,7 +1026,13 @@ sub command_buy {
 			$auto_renew = 0;
 			shift @args;
 		} elsif ($args[0] =~ /^--coupon=(.*)$/) {
-			$coupon_code = $1;
+			$opts{coupon_code} = $1;
+			shift @args;
+		} elsif ($args[0] =~ /^--email-invoice-to=(.*)$/) {
+			$opts{email_invoice_to} = $1;
+			shift @args;
+		} elsif ($args[0] =~ /^--invoice-note=(.*)$/) {
+			$opts{invoice_note} = $1;
 			shift @args;
 		} elsif ($args[0] eq "--batch") {
 			$batch = 1;
@@ -986,6 +1042,9 @@ sub command_buy {
 			shift @args;
 		} elsif ($args[0] eq "--no-wait") {
 			$no_wait = 1;
+			shift @args;
+		} elsif ($args[0] eq "--temp") {
+			$accept_dummy = 1;
 			shift @args;
 		} else {
 			last;
@@ -999,7 +1058,10 @@ sub command_buy {
 		print STDERR "See 'sslmate help buy' for help.\n";
 		return 2;
 	}
-
+	if ($no_wait && $accept_dummy) {
+		print STDERR "Error: --no-wait and --temp are mutually exclusive.\n";
+		return 2;
+	}
 	if ($batch && not defined($approver_email)) {
 		print STDERR "Error: in batch mode, you must specify the approver email with --email.\n";
 		print STDERR "See 'sslmate help buy' for help.\n";
@@ -1029,7 +1091,7 @@ sub command_buy {
 	}
 
 	init_default_paths;
-	do_buy($cn, $years, $force, $no_wait, $auto_renew, $coupon_code, $batch, $approver_email);
+	do_buy($cn, $years, $force, $no_wait, $accept_dummy, $auto_renew, $batch, $approver_email, %opts);
 	return 0;
 }
 
@@ -1093,19 +1155,23 @@ sub command_reissue {
 	};
 
 	# 1. Generate an RSA key
+	print "Generating private key... "; STDOUT->flush;
 	truncate($files->{key_file}, 0);
 	openssl_genrsa($files->{key_file}, 2048);
 	close($files->{key_file});
+	print "Done.\n";
 
 	# 2. Generate the CSR
+	print "Generating CSR... "; STDOUT->flush;
 	my $csr = openssl_req($new_key_filename, $dn);
+	print "Done.\n";
 
 	# 3. Reissue the certificate from SSLMate
 	my $request = { account_id	=> get_config('account_id'),
 			api_key		=> get_config('api_key'),
 			csr		=> $csr };
 
-	print STDERR "Reissuing cert...\n";
+	print "Reissuing cert...\n";
 	my $response = api_call('POST', '/reissue', $request) or $exit_with_error->();
 
 	if ($response->{status} eq 'error') {
@@ -1117,7 +1183,7 @@ sub command_reissue {
 	}
 
 	print "Reissue complete.\n\n";
-	return do_wait_for_cert($response, $no_wait, $files, $new_key_filename);
+	return do_wait_for_cert($response, $no_wait, 0, $files, $new_key_filename);
 }
 
 sub command_revoke {
@@ -1158,7 +1224,7 @@ sub command_revoke {
 		do_link or return 1;
 	}
 
-	print STDERR "Revoking cert...\n";
+	print "Revoking cert...\n";
 
 	my $response = api_call('POST', '/revoke',
 				{ account_id =>	get_config('account_id'),
@@ -1197,13 +1263,16 @@ sub command_renew {
 		print "         sslmate renew '*.example.com'\n";
 		print "\n";
 		print "Valid options:\n";
-		print " --batch            don't prompt for confirmation\n";
-		print " --no-wait          return immediately; don't wait for new cert to be issued\n";
-		print " --coupon=CODE      use the given coupon code for a discount\n";
+		print " --batch              don't prompt for confirmation\n";
+		print " --no-wait            return immediately; don't wait for new cert to be issued\n";
+		print " --coupon=CODE        use the given coupon code for a discount\n";
+		print " --invoice-note=NOTE  include the given note with the invoice\n";
+		print " --email-invoice-to=ADDRESS\n";
+		print "                      email an invoice to the given address\n";
 		return 0;
 	}
 
-	my $coupon_code = undef;
+	my %opts;
 	my $batch = 0;
 	my $no_wait = 0;
 	while (@args >= 1) {
@@ -1211,7 +1280,13 @@ sub command_renew {
 			# Ignored for backwards compatibility with pre-0.5.0
 			shift @args;
 		} elsif ($args[0] =~ /^--coupon=(.*)$/) {
-			$coupon_code = $1;
+			$opts{coupon_code} = $1;
+			shift @args;
+		} elsif ($args[0] =~ /^--email-invoice-to=(.*)$/) {
+			$opts{email_invoice_to} = $1;
+			shift @args;
+		} elsif ($args[0] =~ /^--invoice-note=(.*)$/) {
+			$opts{invoice_note} = $1;
 			shift @args;
 		} elsif ($args[0] eq "--batch") {
 			$batch = 1;
@@ -1270,9 +1345,9 @@ sub command_renew {
 			cn		=> $cn,
 			pubkey_hash	=> $pubkey_hash,
 			years		=> $years,
-			coupon_code	=> $coupon_code };
+			%opts };
 
-	print STDERR "Submitting order...\n";
+	print "Submitting order...\n";
 	my $response = api_call('POST', '/renew', $request) or $exit_with_error->();
 
 	# TODO: if in batch mode, don't require a second hit to the server to confirm order
@@ -1303,7 +1378,7 @@ sub command_renew {
 	}
 
 	print "Renewal complete.\n\n";
-	return do_wait_for_cert($response, $no_wait, $files);
+	return do_wait_for_cert($response, $no_wait, 0, $files);
 }
 
 sub command_req {
@@ -1359,12 +1434,16 @@ sub command_req {
 	}
 
 	# 1. Generate an RSA key
+	print "Generating private key... "; STDOUT->flush;
 	openssl_genrsa($key_file, 2048);
 	close($key_file);
+	print "$cn.key\n";
 
 	# 2. Generate the CSR
+	print "Generating CSR... "; STDOUT->flush;
 	print $csr_file openssl_req("$cn.key", { CN => $cn, C => $country_code, ST => 'Some-State', O => 'Internet Widgits Pty Ltd' });
 	close($csr_file);
+	print "$cn.csr\n";
 
 	return 0;
 }
@@ -1378,15 +1457,19 @@ sub command_download {
 		print "         sslmate download --all\n";
 		print "\n";
 		print "Valid options:\n";
-		print " -a, --all      download certificate for every key in the SSLMate keys directory\n";
+		print " -a, --all    download certificate for every key in the SSLMate keys directory\n";
+		print " --temp       download a temporary certificate if real certificate is not ready\n";
 		return 0;
 	}
 
 	my $all = 0;
-	my $accept_dummy = 0; # TODO: command line option for dummy certs
+	my $accept_dummy = 0;
 	while (@args >= 1) {
 		if ($args[0] eq "-a" || $args[0] eq "--all") {
 			$all = 1;
+			shift @args;
+		} elsif ($args[0] eq "--temp") {
+			$accept_dummy = 1;
 			shift @args;
 		} else {
 			last;
@@ -1420,7 +1503,7 @@ sub command_download {
 		closedir($dh);
 
 		if (@args == 0) {
-			print "No certificates to download.\n";
+			print "No certificates to download.\n" unless $quiet;
 			return 10;
 		}
 	}
@@ -1501,7 +1584,7 @@ sub command_download {
 
 	if (@certs == 0) {
 		return 1 if $errors;
-		print "All certificate files already downloaded and up-to-date.\n";
+		print "All certificate files already downloaded and up-to-date.\n" unless $quiet;
 		return 10;
 	}
 
@@ -1516,17 +1599,105 @@ sub command_download {
 		                 $response->{crt},
 		                 $response->{chain});
 
-		print "The certificate for $cn has been downloaded.\n\n";
-		#print "Notice: this is a dummy cert!\n" if $response->{dummy}; # TODO: message if this is a dummy cert
+		my $extra_info = '';
+		if ($response->{dummy}) {
+			print "A temporary, self-signed, certificate for $cn has been downloaded.\n\n";
+			$extra_info = " (temporary)";
+		} else {
+			print "The certificate for $cn has been downloaded.\n\n";
+		}
 		print "           Private key file: " . $paths->{key_filename} . "\n" if $has_new_key;
-		print "           Certificate file: " . $paths->{crt_filename} . "\n";
-		print "     Certificate chain file: " . $paths->{chain_crt_filename} . "\n";
-		print "Certificate with chain file: " . $paths->{chained_crt_filename} . "\n";
+		print "           Certificate file: " . $paths->{crt_filename} . "$extra_info\n";
+		print "     Certificate chain file: " . $paths->{chain_crt_filename} . "$extra_info\n";
+		print "Certificate with chain file: " . $paths->{chained_crt_filename} . "$extra_info\n";
 		print "\n";
 	}
 	if ($errors) {
 		print "Some new certificates were downloaded, but other certificates had errors. See above.\n";
 	}
+	return 0;
+}
+
+sub command_test {
+	my @args = @_;
+
+	if (@args >= 1 && $args[0] eq "-?") {
+		print "Usage: sslmate test [OPTIONS] COMMONNAME\n";
+		print "Example: sslmate test www.example.com\n";
+		print "\n";
+		print "Valid options:\n";
+		print " -p, --port=NUMBER   test the given port number (default: 443)\n";
+		print " -h, --host=HOSTNAME test the given host (defaults to the common name)\n";
+		return 0;
+	}
+
+	my $port = 443;
+	my @hostname;
+
+	local @ARGV = @args;
+	my $getopt = Getopt::Long::Parser->new;
+	$getopt->configure(qw(no_ignore_case permute bundling));
+	$getopt->getoptions('port|p=i', \$port,
+			    'host|h=s', \@hostname) or return 2;
+
+	if (@ARGV == 0) {
+		print STDERR "Error: you must specify the name of the certificate to test.\n";
+		print STDERR "Example: sslmate test www.example.com\n";
+		return 2;
+	}
+
+	my $cn = $ARGV[0];
+
+	load_config;
+	if (!is_linked) {
+		unless (-t STDIN) {
+			print STDERR "Error: you have not yet linked this system with your SSLMate account.\n";
+			print STDERR "Please run 'sslmate link'.\n";
+			return 1;
+		}
+		do_link or return 1;
+	}
+
+	my $response = api_call('GET', '/test/' . qs_escape($cn),
+				{ account_id => get_config('account_id'),
+				  api_key => get_config('api_key'),
+				  port => $port,
+				  hostname => \@hostname }) or return 1;
+
+	if ($response->{status} eq 'error') {
+		print STDERR "Error: $cn: " . $response->{message} . "\n";
+		return 1;
+	} elsif ($response->{status} ne 'success') {
+		print STDERR "Error: unknown response from server when testing certificate $cn\n";
+		return 1;
+	}
+
+	if (not @{$response->{result}}) {
+		print STDERR "Error: could not resolve hostname.\n";
+		print STDERR "To specify a hostname, use the --host option.\n" unless @hostname;
+		return 1;
+	}
+
+	my $num_errors = 0;
+	for my $result (@{$response->{result}}) {
+		my $host = $result->{hostname} . " (" . $result->{ip_address} . ")";
+		if ($result->{error}) {
+			print "$host: Error: " . $result->{error} . "\n";
+			++$num_errors;
+		} elsif (not $result->{correct}) {
+			print "$host: Incorrect certificate installed\n";
+			++$num_errors;
+		} elsif (not $result->{chained}) {
+			print "$host: Chain certificate not installed\n";
+			++$num_errors;
+		} elsif ($result->{dummy}) {
+			print "$host: Good (temporary, self-signed certificate)\n";
+		} else {
+			print "$host: Good\n";
+		}
+	}
+
+	return 11 unless $num_errors == 0;
 	return 0;
 }
 
@@ -1604,18 +1775,18 @@ sub command_import {
 sub do_import {
 	my ($force, $auto_renew, $source_key_path, $source_crt_path, $cn, $batch, $approver_email) = @_;
 
-	# 1. Open the source key and crt files
+	# 1. Read the key
 	open(my $source_key_file, '<', $source_key_path) or die "Error: Unable to open $source_key_path: $!\n";
-	open(my $source_crt_file, '<', $source_crt_path) or die "Error: Unable to open $source_crt_path: $!\n";
 	my $key = do { local $/; <$source_key_file> };
-	my $crt = read_first_crt($source_crt_file);
 	close($source_key_file);
-	close($source_crt_file);
 
-	# 2. Extract the CN from the certificate, if not already known
-	$cn //= extract_cn_from_crt($source_crt_path)
-			or die "Error: Unable to parse $source_crt_path - is it a valid certificate file?\n";
-	print STDERR "Importing certificate for $cn...\n";
+	# 2. Read the crt
+	-f $source_crt_path && -r $source_crt_path or die "Error: No such file: $source_crt_path\n";
+	my $crt;
+	($crt, defined($cn) ? undef : $cn) = extract_crt_from_file($source_crt_path);
+	defined($crt) or die "Error: Unable to parse $source_crt_path - is it a valid certificate file?\n";
+	defined($cn) or die "Error: $source_crt_path does not have a common name\n";
+	print "Importing certificate for $cn...\n";
 
 	# 3. Generate the CSR
 	my $dn = get_dn_from_server($cn) or exit 1;
@@ -1644,7 +1815,7 @@ sub do_import {
 	};
 
 	# 5. Upload the CSR and CRT to SSLMate:
-	print STDERR "Uploading $source_crt_path...\n";
+	print "Uploading $source_crt_path...\n";
 	my $request = { account_id =>	get_config('account_id'),
 			api_key =>	get_config('api_key'),
 			auto_renew =>	$auto_renew,
@@ -1656,9 +1827,9 @@ sub do_import {
 	while (not($batch) && $response->{status} eq 'need_approver_email') {
 		if ($response->{cn_is_bare_domain}) {
 			my $www_cn = "www.$cn";
-			print STDERR "\n";
-			print STDERR "WARNING: This certificate will not be valid for $www_cn when it renews.\n";
-			print STDERR "Would you rather import a certificate that will work with both $www_cn AND $cn?\n\n";
+			print "\n";
+			print "WARNING: This certificate will not be valid for $www_cn when it renews.\n";
+			print "Would you rather import a certificate that will work with both $www_cn AND $cn?\n\n";
 			if (prompt_yesno) {
 				unlink($files->{key_filename}) if defined $files->{key_filename};
 				return do_import($force, $auto_renew, $source_key_path, $source_crt_path, $www_cn, $batch, $approver_email);
@@ -1705,6 +1876,84 @@ sub do_import {
 	print "           Certificate file: " . $files->{crt_filename} . "\n";
 	print "     Certificate chain file: " . $files->{chain_crt_filename} . "\n";
 	print "Certificate with chain file: " . $files->{chained_crt_filename} . "\n";
+}
+
+sub command_mkconfig {
+	local @ARGV = @_;
+	my $getopt = Getopt::Long::Parser->new;
+	$getopt->configure(qw(no_ignore_case permute bundling));
+
+	my $help_opt = 0;
+	my $templates_opt = 0;
+	$getopt->getoptions('templates', \$templates_opt,
+			    'help|?', \$help_opt) or return 2;
+
+	if ($help_opt) {
+		print "Usage: sslmate mkconfig TEMPLATE COMMONNAME\n";
+		print "   or: sslmate mkconfig --templates\n";
+		print "Example: sslmate mkconfig apache www.example.com\n";
+		print "\n";
+		print "Valid options:\n";
+		print " --templates  output a list of available config templates\n";
+		return 0;
+	}
+
+	load_config;
+
+	if ($templates_opt) {
+		my $response = api_call('GET', '/config_templates') or return 1;
+		if ($response->{status} eq 'error') {
+			print STDERR "Error: " . $response->{message} . "\n";
+			return 1;
+		} elsif ($response->{status} ne 'success') {
+			print STDERR "Error: unknown response from server\n";
+			return 1;
+		}
+
+		print join("\n", sort(keys $response->{config_templates}), '');
+
+		return 0;
+	}
+
+	if (@ARGV != 2) {
+		print STDERR "Error: you must specify the template and certificate name.\n";
+		print STDERR "Example: sslmate mkconfig apache www.example.com\n";
+		print STDERR "Run 'sslmate help mkconfig' for help.\n";
+		return 2;
+	}
+
+	my ($template_name, $common_name) = @ARGV;
+
+	my $response = api_call('GET', '/config_templates/' . qs_escape($template_name)) or return 1;
+
+	if ($response->{status} eq 'error') {
+		if ($response->{reason} // '' eq 'template_not_found') {
+			print STDERR "Error: $template_name: Unknown configuration template.\n";
+			print STDERR "Run 'sslmate mkconfig --templates' for a list for available templates.\n";
+			return 1;
+		}
+
+		print STDERR "Error: $template_name: " . $response->{message} . "\n";
+		return 1;
+	} elsif ($response->{status} ne 'success') {
+		print STDERR "Error: unknown response from server\n";
+		return 1;
+	}
+
+	my $paths = get_cert_paths($common_name, 1);
+	my %vars = ('__KEY_PATH__'	=> $paths->{key_filename},
+		    '__CERT_PATH__'	=> $paths->{crt_filename},
+		    '__CHAIN_PATH__'	=> $paths->{chain_crt_filename},
+		    '__CHAINED_PATH__'	=> $paths->{chained_crt_filename});
+
+	my $template = $response->{template};
+	for my $var (keys %vars) {
+		my $value = $vars{$var};
+		$template =~ s/$var/$value/g;
+	}
+
+	print $template;
+	return 0;
 }
 
 sub command_help {
@@ -1772,11 +2021,6 @@ sub command_version {
 sub main {
 	my @args = @_;
 
-	if (@args == 0) {
-		print_usage(*STDERR);
-		return 2;
-	}
-
 	while (@args >= 1) {
 		if ($args[0] eq "-p" && @args >= 2) {
 			shift @args;
@@ -1788,6 +2032,11 @@ sub main {
 		} else {
 			last;
 		}
+	}
+
+	if (@args == 0) {
+		print_usage(*STDERR);
+		return 2;
 	}
 
 	my $command = shift @args;
@@ -1804,10 +2053,14 @@ sub main {
 		return command_req @args;
 	} elsif ($command eq 'download') {
 		return command_download @args;
+	} elsif ($command eq 'test') {
+		return command_test @args;
 	} elsif ($command eq 'import') {
 		return command_import @args;
 	} elsif ($command eq 'link') {
 		return command_link @args;
+	} elsif ($command eq 'mkconfig') {
+		return command_mkconfig @args;
 	} elsif ($command eq 'help') {
 		return command_help @args;
 	} elsif ($command eq 'version') {
