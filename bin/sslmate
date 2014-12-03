@@ -800,7 +800,11 @@ sub do_link {
 	my $username = prompt_user("Enter your SSLMate username: ");
 	my $password = prompt_password("Enter your SSLMate password: ");
 	return 0 if not defined $password;
-	print "Linking account... ";
+	if ($persistent) {
+		print "Linking account... ";
+	} else {
+		print "Authenticating... ";
+	}
 	STDOUT->flush;
 
 	my $response = api_call('POST', '/link', { account_username => $username, account_password => $password });
@@ -820,6 +824,9 @@ sub do_link {
 			$ephemeral_config{"api_key"} = $response->{api_key};
 		}
 		print "Done.\n";
+		unless ($persistent) {
+			print "Tip: if you don't want to have to type your password every time, you can run 'sslmate link' to link this system with your account.\n\n";
+		}
 		return 1;
 	} elsif ($response->{status} eq 'error') {
 		print STDERR "Error: " . $response->{message} . "\n";
