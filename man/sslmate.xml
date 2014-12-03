@@ -75,6 +75,12 @@
 		<cmdsynopsis>
 			<command>sslmate download <arg choice="plain">--all</arg></command>
 		</cmdsynopsis>
+		<cmdsynopsis>
+			<command>sslmate test <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
+		</cmdsynopsis>
+		<cmdsynopsis>
+			<command>sslmate mkconfig <arg choice="plain"><replaceable>TEMPLATE</replaceable></arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
+		</cmdsynopsis>
 		<!--
 		<cmdsynopsis>
 			<command>sslmate import <arg choice="plain"><replaceable>KEYFILE</replaceable></arg> <arg choice="plain"><replaceable>CERTFILE</replaceable></arg></command>
@@ -190,11 +196,49 @@
 							</listitem>
 						</varlistentry>
 						<varlistentry>
+							<term><option>--temp</option></term>
+
+							<listitem>
+								<para>
+									Instead of waiting for the certificate to be issued, install a temporary, self-signed,
+									certificate and return immediately.  The temporary certificate will not be trusted
+									by clients, but it can be used to configure your server software while waiting for
+									the real certificate to be issued.
+								</para>
+								<para>
+									When the real certificate is issued, it can be downloaded
+									with the <command>sslmate download</command> command.
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
 							<term><option>--coupon=<replaceable>CODE</replaceable></option></term>
 
 							<listitem>
 								<para>
 									Use the given coupon code for a discount.
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
+							<term><option>--invoice-note=<replaceable>NOTE</replaceable></option></term>
+
+							<listitem>
+								<para>
+									Include the given note with the invoice for this purchase.
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
+							<term><option>--email-invoice-to=<replaceable>ADDRESS</replaceable></option></term>
+
+							<listitem>
+								<para>
+									Email the invoice for this purchase to the given address.
+								</para>
+								<para>
+									By default, invoices are not emailed, but can be downloaded from your
+									<ulink url="https://sslmate.com/dashboard">online SSLMate dashboard</ulink>.
 								</para>
 							</listitem>
 						</varlistentry>
@@ -357,6 +401,17 @@
 								</para>
 							</listitem>
 						</varlistentry>
+						<varlistentry>
+							<term><option>--temp</option></term>
+
+							<listitem>
+								<para>
+									If the certificate has not been issued yet, download a temporary,
+									self-signed, certificate instead.  See the documentation for <command>sslmate buy</command>
+									for more information about temporary certificates.
+								</para>
+							</listitem>
+						</varlistentry>
 					</variablelist>
 				</listitem>
 			</varlistentry>
@@ -425,6 +480,78 @@
 				</listitem>
 			</varlistentry>
 			-->
+
+			<varlistentry>
+				<term><option>test <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></option></term>
+				<listitem>
+					<para>
+						Test whether your certificate for <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg>
+						has been correctly installed.
+					</para>
+					<para>
+						This command works by connecting to the host specified in the certificate
+						and checking that the server returns both the correct certificate and the correct certificate chain.
+						The results of the test are printed to standard out.  There may be more than one test result if
+						<arg choice="plain"><replaceable>HOSTNAME</replaceable></arg> resolves to more than one IP address.
+						This command exits with status 0 if all tests were successful, 11 if one or more tests failed,
+						and some other exit code if there was an error that prevented the test from running.
+					</para>
+					<para>
+						The following options are understood:
+					</para>
+					<variablelist>
+						<varlistentry>
+							<term><option>-p <replaceable>PORTNUMBER</replaceable></option></term>
+							<term><option>--port=<replaceable>PORTNUMBER</replaceable></option></term>
+
+							<listitem>
+								<para>
+									Test the server on the given port number. (Default: 443)
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
+							<term><option>-h <replaceable>HOSTNAME</replaceable></option></term>
+							<term><option>--host=<replaceable>HOSTNAME</replaceable></option></term>
+
+							<listitem>
+								<para>
+									Test the server running on the given hostname.  Defaults to the
+									certificate's common name.
+								</para>
+							</listitem>
+						</varlistentry>
+					</variablelist>
+				</listitem>
+			</varlistentry>
+
+			<varlistentry>
+				<term><option>mkconfig <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>TEMPLATE</replaceable></arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></option></term>
+				<listitem>
+					<para>
+						Output the configuration directives necessary to use the given certificate with the server
+						software (such as Apache, nginx, etc.) specified by the
+						<arg choice="plain"><replaceable>TEMPLATE</replaceable></arg> argument.  For a list of
+						server software for which configuration templates are available,
+						pass the <option>--templates</option> option.
+					</para>
+					<para>
+						The following options are understood:
+					</para>
+					<variablelist>
+						<varlistentry>
+							<term><option>--templates</option></term>
+
+							<listitem>
+								<para>
+									Output a list of available configuration templates.  No other arguments are
+									required if you use this option.
+								</para>
+							</listitem>
+						</varlistentry>
+					</variablelist>
+				</listitem>
+			</varlistentry>
 
 			<varlistentry>
 				<term><option>link</option></term>

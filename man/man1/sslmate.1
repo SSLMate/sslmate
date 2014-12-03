@@ -45,6 +45,10 @@ sslmate \- buy and manage SSL certificates
 \fBsslmate download \fR\fB\fIHOSTNAME\fR...\fR
 .HP \w'\fBsslmate\ download\ \fR\fB\-\-all\fR\ 'u
 \fBsslmate download \fR\fB\-\-all\fR
+.HP \w'\fBsslmate\ test\ \fR\fB\fIHOSTNAME\fR\fR\ 'u
+\fBsslmate test \fR\fB\fIHOSTNAME\fR\fR
+.HP \w'\fBsslmate\ mkconfig\ \fR\fB\fITEMPLATE\fR\fR\fB\ \fR\fB\fIHOSTNAME\fR\fR\ 'u
+\fBsslmate mkconfig \fR\fB\fITEMPLATE\fR\fR\fB \fR\fB\fIHOSTNAME\fR\fR
 .HP \w'\fBsslmate\ link\fR\ 'u
 \fBsslmate link\fR
 .SH "DESCRIPTION"
@@ -108,9 +112,31 @@ Return immediately after placing the order instead of waiting for the certificat
 command\&.
 .RE
 .PP
+\fB\-\-temp\fR
+.RS 4
+Instead of waiting for the certificate to be issued, install a temporary, self\-signed, certificate and return immediately\&. The temporary certificate will not be trusted by clients, but it can be used to configure your server software while waiting for the real certificate to be issued\&.
+.sp
+When the real certificate is issued, it can be downloaded with the
+\fBsslmate download\fR
+command\&.
+.RE
+.PP
 \fB\-\-coupon=\fR\fB\fICODE\fR\fR
 .RS 4
 Use the given coupon code for a discount\&.
+.RE
+.PP
+\fB\-\-invoice\-note=\fR\fB\fINOTE\fR\fR
+.RS 4
+Include the given note with the invoice for this purchase\&.
+.RE
+.PP
+\fB\-\-email\-invoice\-to=\fR\fB\fIADDRESS\fR\fR
+.RS 4
+Email the invoice for this purchase to the given address\&.
+.sp
+By default, invoices are not emailed, but can be downloaded from your
+\m[blue]\fBonline SSLMate dashboard\fR\m[]\&\s-2\u[1]\d\s+2\&.
 .RE
 .RE
 .PP
@@ -221,6 +247,52 @@ if run as non\-root)\&.
 .sp
 If this option is used, specific hostnames cannot be specified on the command line\&.
 .RE
+.PP
+\fB\-\-temp\fR
+.RS 4
+If the certificate has not been issued yet, download a temporary, self\-signed, certificate instead\&. See the documentation for
+\fBsslmate buy\fR
+for more information about temporary certificates\&.
+.RE
+.RE
+.PP
+\fBtest \fR\fB[\fIOPTIONS\fR]\fR\fB \fR\fB\fIHOSTNAME\fR\fR
+.RS 4
+Test whether your certificate for
+\fIHOSTNAME\fR
+has been correctly installed\&.
+.sp
+This command works by connecting to the host specified in the certificate and checking that the server returns both the correct certificate and the correct certificate chain\&. The results of the test are printed to standard out\&. There may be more than one test result if
+\fIHOSTNAME\fR
+resolves to more than one IP address\&. This command exits with status 0 if all tests were successful, 11 if one or more tests failed, and some other exit code if there was an error that prevented the test from running\&.
+.sp
+The following options are understood:
+.PP
+\fB\-p \fR\fB\fIPORTNUMBER\fR\fR, \fB\-\-port=\fR\fB\fIPORTNUMBER\fR\fR
+.RS 4
+Test the server on the given port number\&. (Default: 443)
+.RE
+.PP
+\fB\-h \fR\fB\fIHOSTNAME\fR\fR, \fB\-\-host=\fR\fB\fIHOSTNAME\fR\fR
+.RS 4
+Test the server running on the given hostname\&. Defaults to the certificate\*(Aqs common name\&.
+.RE
+.RE
+.PP
+\fBmkconfig \fR\fB[\fIOPTIONS\fR]\fR\fB \fR\fB\fITEMPLATE\fR\fR\fB \fR\fB\fIHOSTNAME\fR\fR
+.RS 4
+Output the configuration directives necessary to use the given certificate with the server software (such as Apache, nginx, etc\&.) specified by the
+\fITEMPLATE\fR
+argument\&. For a list of server software for which configuration templates are available, pass the
+\fB\-\-templates\fR
+option\&.
+.sp
+The following options are understood:
+.PP
+\fB\-\-templates\fR
+.RS 4
+Output a list of available configuration templates\&. No other arguments are required if you use this option\&.
+.RE
 .RE
 .PP
 \fBlink\fR
@@ -303,7 +375,7 @@ The following options are understood:
 \fBaccount_id \fR\fB\fIID\fR\fR, \fBapi_key \fR\fB\fIKEY\fR\fR
 .RS 4
 Your API credentials, which can be found on your
-\m[blue]\fBonline SSLMate account page\fR\m[]\&\s-2\u[1]\d\s+2\&. These options are automatically set when you run
+\m[blue]\fBonline SSLMate account page\fR\m[]\&\s-2\u[2]\d\s+2\&. These options are automatically set when you run
 \fBsslmate link\fR\&.
 .RE
 .PP
@@ -410,15 +482,20 @@ $HOME/\&.sslmate\&.
 .SH "SEE ALSO"
 .PP
 
-\m[blue]\fBOnline SSLMate Help\fR\m[]\&\s-2\u[2]\d\s+2,
+\m[blue]\fBOnline SSLMate Help\fR\m[]\&\s-2\u[3]\d\s+2,
 \fBopenssl\fR(1)
 .SH "NOTES"
 .IP " 1." 4
+online SSLMate dashboard
+.RS 4
+\%https://sslmate.com/dashboard
+.RE
+.IP " 2." 4
 online SSLMate account page
 .RS 4
 \%https://sslmate.com/account
 .RE
-.IP " 2." 4
+.IP " 3." 4
 Online SSLMate Help
 .RS 4
 \%https://sslmate.com/help
