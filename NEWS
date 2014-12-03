@@ -1,3 +1,20 @@
+v0.6.0 (2014-12-03)
+  * Add `sslmate test` command for testing the installation of a
+    certificate.
+  * Add `sslmate mkconfig` command for generating server configuration
+    for a certificate.
+  * Add --temp option to `sslmate buy` and `sslmate download`.  If
+    specified, a temporary, self-signed, certificate will be installed
+    instead of waiting for the real cert to be issued.  This temporary
+    cert won't be trusted by clients, but can be used for configuring
+    your server while you wait for your real cert to be issued.
+  * Add --invoice-note and --email-invoice-to options to `sslmate buy`
+    for customizing invoices.
+  * Output non-error informational messages to stdout instead of stderr.
+    stderr is now reserved for error messages only.
+  * Strip private key and other cruft from certificate before importing.
+  * Minor bug fixes.
+
 v0.5.0 (2014-11-05)
   * Allow buy, import, and renew commands to be used non-interactively:
     - The --batch option disables prompting for confirmation.
