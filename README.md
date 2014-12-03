@@ -22,18 +22,19 @@ SSLMate can run on other Unix-based operating systems provided the following sof
 * Perl v5.10.0 or newer.
 * The following Perl modules, which can be installed by running `cpan MODULENAME` or by installing the corresponding distro package.
 
-    Module Name         Debian/Ubuntu Package        RHEL/CentOS Package
-    -------------------------------------------------------------------------
-    URI                 liburi-perl                  perl-URI
-    Term::ReadKey       libterm-readkey-perl         perl-TermReadKey
-    JSON::PP (*)        libjson-perl                 perl-JSON
-    WWW::Curl (**)      libwww-curl-perl             perl-WWW-Curl
-
+```
+Module Name         Debian/Ubuntu Package        RHEL/CentOS Package
+-------------------------------------------------------------------------
+URI                 liburi-perl                  perl-URI
+Term::ReadKey       libterm-readkey-perl         perl-TermReadKey
+JSON::PP (*)        libjson-perl                 perl-JSON
+WWW::Curl (**)      libwww-curl-perl             perl-WWW-Curl
+```
 
 Notes:
 
-* JSON::PP is included with Perl 5.14 and later.
-* WWW::Curl is optional; if not available SSLMate will fall back to executing the `curl` command directly.
+* `JSON::PP` is included with Perl 5.14 and later.
+* `WWW::Curl` is optional; if not available SSLMate will fall back to executing the `curl` command directly.
 
 
 ## Installation
