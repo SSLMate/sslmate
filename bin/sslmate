@@ -1835,6 +1835,24 @@ sub do_import {
 				return do_import($force, $auto_renew, $source_key_path, $source_crt_path, $www_cn, $batch, $approver_email);
 			}
 		}
+		if ($response->{has_nondns_sans}) {
+			print "\n";
+			print "WARNING: This certificate contains non-DNS subject alternative names.\n";
+			print "SSLMate does not support non-DNS subject alternative names.  When this\n";
+			print "certificate renews, the non-DNS subject alternative names will be dropped.\n\n";
+			print "Do you understand and want to import this certificate anyways?\n\n";
+			$exit_with_error->() unless prompt_yesno();
+		}
+		if (@{$response->{disallowed_sans}}) {
+			print "\n";
+			print "WARNING: This certificate contains the following subject alternative names:\n\n";
+			for my $san (@{$response->{disallowed_sans}}) {
+				print "\t$san\n";
+			}
+			print "\nWhen this certificate renews, these subject alternative names will be dropped.\n";
+			print "Do you understand and want to import this certificate anyways?\n\n";
+			$exit_with_error->() unless prompt_yesno();
+		}
 
 		unless (defined $approver_email) {
 			# Prompt user to choose an approver email address:
