@@ -1713,6 +1713,7 @@ sub command_import {
 		print " -f, --force        overwrite existing files\n";
 		print " --auto-renew       automatically renew this certificate before it expires\n";
 		print " --no-auto-renew    don't automatically renew this certificate\n";
+		print " --no-install       don't copy the key/cert to the local key/cert directories\n";
 		print " --batch            don't prompt for confirmation\n";
 		print " --email=ADDRESS    use the given approver email address\n";
 		return 0;
@@ -1720,6 +1721,7 @@ sub command_import {
 
 	my $force = 0;
 	my $auto_renew = undef;
+	my $install = 1;
 	my $batch = 0;
 	my $approver_email = undef;
 	while (@args >= 1) {
@@ -1731,6 +1733,9 @@ sub command_import {
 			shift @args;
 		} elsif ($args[0] eq "--no-auto-renew") {
 			$auto_renew = 0;
+			shift @args;
+		} elsif ($args[0] eq "--no-install") {
+			$install = 0;
 			shift @args;
 		} elsif ($args[0] eq "--batch") {
 			$batch = 1;
@@ -1768,12 +1773,12 @@ sub command_import {
 
 	init_default_paths;
 
-	do_import($force, $auto_renew, $args[0], $args[1], undef, $batch, $approver_email);
+	do_import($force, $auto_renew, $install, $args[0], $args[1], undef, $batch, $approver_email);
 	return 0;
 }
 
 sub do_import {
-	my ($force, $auto_renew, $source_key_path, $source_crt_path, $cn, $batch, $approver_email) = @_;
+	my ($force, $auto_renew, $install_locally, $source_key_path, $source_crt_path, $cn, $batch, $approver_email) = @_;
 
 	# 1. Read the key
 	open(my $source_key_file, '<', $source_key_path) or die "Error: Unable to open $source_key_path: $!\n";
@@ -1793,24 +1798,27 @@ sub do_import {
 	my $csr = openssl_req($source_key_path, $dn);
 
 	# 4. Prepare the destination files
-	my $files = get_cert_paths($cn, 1);
-	if (realpath($source_key_path) eq realpath($files->{key_filename})) {
-		# Don't bother to write the key because it's already in place
-		delete $files->{key_filename};
-	}
-	unless ($force) {
-		my @check_files = qw{key_filename chain_crt_filename chained_crt_filename};
-		if (realpath($source_crt_path) ne realpath($files->{crt_filename})) {
-			# Only care if .crt file exists if it's not the same file we're importing
-			push @check_files, 'crt_filename';
+	my $files;
+	if ($install_locally) {
+		$files = get_cert_paths($cn, 1);
+		if (realpath($source_key_path) eq realpath($files->{key_filename})) {
+			# Don't bother to write the key because it's already in place
+			delete $files->{key_filename};
 		}
-		check_for_existing_files(@{$files}{@check_files});
-	}
+		unless ($force) {
+			my @check_files = qw{key_filename chain_crt_filename chained_crt_filename};
+			if (realpath($source_crt_path) ne realpath($files->{crt_filename})) {
+				# Only care if .crt file exists if it's not the same file we're importing
+				push @check_files, 'crt_filename';
+			}
+			check_for_existing_files(@{$files}{@check_files});
+		}
 
-	$files->{key_file} = open_key_file($files->{key_filename}, $force) if defined $files->{key_filename};
+		$files->{key_file} = open_key_file($files->{key_filename}, $force) if defined $files->{key_filename};
+	}
 
 	my $exit_with_error = sub {
-		unlink($files->{key_filename}) if defined $files->{key_filename};
+		unlink($files->{key_filename}) if $install_locally && defined $files->{key_filename};
 		exit 1;
 	};
 
@@ -1831,8 +1839,8 @@ sub do_import {
 			print "WARNING: This certificate will not be valid for $www_cn when it renews.\n";
 			print "Would you rather import a certificate that will work with both $www_cn AND $cn?\n\n";
 			if (prompt_yesno) {
-				unlink($files->{key_filename}) if defined $files->{key_filename};
-				return do_import($force, $auto_renew, $source_key_path, $source_crt_path, $www_cn, $batch, $approver_email);
+				unlink($files->{key_filename}) if $install_locally && defined $files->{key_filename};
+				return do_import($force, $auto_renew, $install_locally, $source_key_path, $source_crt_path, $www_cn, $batch, $approver_email);
 			}
 		}
 		if ($response->{has_nondns_sans}) {
@@ -1879,21 +1887,25 @@ sub do_import {
 	# 6. Write the key, crt, and chain to the destination directory
 	$response->{chain} //= '';
 
-	if (defined $files->{key_file}) {
-		# write .key file
-		truncate($files->{key_file}, 0);
-		print {$files->{key_file}} $key;
-		close $files->{key_file};
-	}
+	if ($install_locally) {
+		if (defined $files->{key_file}) {
+			# write .key file
+			truncate($files->{key_file}, 0);
+			print {$files->{key_file}} $key;
+			close $files->{key_file};
+		}
 
-	write_cert_files($files, undef, $crt, $response->{chain});
+		write_cert_files($files, undef, $crt, $response->{chain});
+	}
 
 	print "\n";
 	print "Your certificate has been imported to SSLMate.\n\n";
-	print "           Private key file: " . ($files->{key_filename} // $source_key_path) . "\n";
-	print "           Certificate file: " . $files->{crt_filename} . "\n";
-	print "     Certificate chain file: " . $files->{chain_crt_filename} . "\n";
-	print "Certificate with chain file: " . $files->{chained_crt_filename} . "\n";
+	if ($install_locally) {
+		print "           Private key file: " . ($files->{key_filename} // $source_key_path) . "\n";
+		print "           Certificate file: " . $files->{crt_filename} . "\n";
+		print "     Certificate chain file: " . $files->{chain_crt_filename} . "\n";
+		print "Certificate with chain file: " . $files->{chained_crt_filename} . "\n";
+	}
 }
 
 sub command_mkconfig {

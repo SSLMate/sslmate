@@ -459,6 +459,17 @@
 							</listitem>
 						</varlistentry>
 						<varlistentry>
+							<term><option>- -no-install</option></term>
+
+							<listitem>
+								<para>
+									Don't install the key and certificate files to the local key and certificate directories.
+									(By default, keys and certificates are copied there, as if the certificate had just been
+									purchased with the <command>sslmate buy</command> command.)
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
 							<term><option>- -batch</option></term>
 
 							<listitem>
