@@ -540,11 +540,17 @@
 				<term><option>mkconfig <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>TEMPLATE</replaceable></arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></option></term>
 				<listitem>
 					<para>
-						Output the configuration directives necessary to use the given certificate with the server
-						software (such as Apache, nginx, etc.) specified by the
-						<arg choice="plain"><replaceable>TEMPLATE</replaceable></arg> argument.  For a list of
-						server software for which configuration templates are available,
+						Output the configuration directives necessary to securely use the given certificate
+						with the server software (such as Apache, nginx, etc.) specified by the
+						<arg choice="plain"><replaceable>TEMPLATE</replaceable></arg> argument.
+						For a list of server software for which configuration templates are available,
 						pass the <option>--templates</option> option.
+					</para>
+					<para>
+						By default, <command>sslmate mkconfig</command> includes the "intermediate compatibility" security settings
+						recommended by <ulink url="https://wiki.mozilla.org/Security/Server_Side_TLS">Mozilla's Server Side
+						TLS Guide</ulink>.  These settings enable forward secrecy and disable broken ciphers and protocols,
+						while supporting a broad range of clients.
 					</para>
 					<para>
 						The following options are understood:
@@ -557,6 +563,16 @@
 								<para>
 									Output a list of available configuration templates.  No other arguments are
 									required if you use this option.
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
+							<term><option>--no-security</option></term>
+
+							<listitem>
+								<para>
+									Don't include recommended security settings.  Output only the bare minimum
+									configuration needed to use the certificate.
 								</para>
 							</listitem>
 						</varlistentry>
