@@ -1915,16 +1915,19 @@ sub command_mkconfig {
 
 	my $help_opt = 0;
 	my $templates_opt = 0;
+	my $no_security_opt = 0;
 	$getopt->getoptions('templates', \$templates_opt,
+			    'no-security', \$no_security_opt,
 			    'help|?', \$help_opt) or return 2;
 
 	if ($help_opt) {
-		print "Usage: sslmate mkconfig TEMPLATE COMMONNAME\n";
+		print "Usage: sslmate mkconfig [--no-security] TEMPLATE COMMONNAME\n";
 		print "   or: sslmate mkconfig --templates\n";
 		print "Example: sslmate mkconfig apache www.example.com\n";
 		print "\n";
 		print "Valid options:\n";
-		print " --templates  output a list of available config templates\n";
+		print " --templates    output a list of available config templates\n";
+		print " --no-security  don't include recommended security settings\n";
 		return 0;
 	}
 
@@ -1954,7 +1957,9 @@ sub command_mkconfig {
 
 	my ($template_name, $common_name) = @ARGV;
 
-	my $response = api_call('GET', '/config_templates/' . qs_escape($template_name)) or return 1;
+	my $cmd = '/config_templates/' . qs_escape($template_name);
+	$cmd .= '?include_security_settings=1' unless $no_security_opt;
+	my $response = api_call('GET', $cmd) or return 1;
 
 	if ($response->{status} eq 'error') {
 		if ($response->{reason} // '' eq 'template_not_found') {
