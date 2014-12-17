@@ -859,7 +859,7 @@ sub command_link {
 }
 
 sub do_wait_for_cert {
-	my ($response, $no_wait, $accept_dummy, $files, $new_key_filename) = @_;
+	my ($cn, $response, $no_wait, $accept_dummy, $files, $new_key_filename) = @_;
 
 	print "You will soon receive an email at " . $response->{approver_email} . " from " . $response->{approval_from} . ". Follow the instructions in the email to verify your ownership of your domain.\n\n";
 
@@ -895,6 +895,9 @@ sub do_wait_for_cert {
 	print "Certificate with chain file: " . $files->{chained_crt_filename} . "$extra_info\n";
 	#print "\n";
 	#print "(" . $files->{chained_crt_filename} . " is the concatenation of " . $files->{crt_filename} . " and " . $files->{chain_crt_filename} . "; consult your program's documentation to determine whether you specify the certificate and chain in separate files or in one file.)\n";
+	print "\n";
+	print "Tip: generate configuration for this cert with the 'sslmate mkconfig' command.\n";
+	print "Tip: test this cert's installation by running 'sslmate test $cn'.\n";
 }
 
 sub do_buy {
@@ -982,7 +985,7 @@ sub do_buy {
 	}
 
 	print "Order complete.\n\n";
-	return do_wait_for_cert($response, $no_wait, $accept_dummy, $files, $files->{key_filename});
+	return do_wait_for_cert($cn, $response, $no_wait, $accept_dummy, $files, $files->{key_filename});
 }
 
 sub command_buy {
@@ -1183,7 +1186,7 @@ sub command_reissue {
 	}
 
 	print "Reissue complete.\n\n";
-	return do_wait_for_cert($response, $no_wait, 0, $files, $new_key_filename);
+	return do_wait_for_cert($cn, $response, $no_wait, 0, $files, $new_key_filename);
 }
 
 sub command_revoke {
@@ -1378,7 +1381,7 @@ sub command_renew {
 	}
 
 	print "Renewal complete.\n\n";
-	return do_wait_for_cert($response, $no_wait, 0, $files);
+	return do_wait_for_cert($cn, $response, $no_wait, 0, $files);
 }
 
 sub command_req {
