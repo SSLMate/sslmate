@@ -1,3 +1,11 @@
+v0.6.2 (2014-12-18)
+  * Include recommended security settings when running `sslmate
+    mkconfig`, unless --no-security option is specified.
+    Recommendations are from the Mozilla Server Side TLS Guide.
+  * Fix bug that could prevent full key/cert paths from appearing in
+    mkconfig output.
+  * Display a tip about mkconfig and test commands after buying a cert.
+
 v0.6.1 (2014-12-03)
   * Fix an error with newer versions of Perl.
 

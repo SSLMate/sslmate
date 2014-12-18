@@ -56,7 +56,7 @@ use Term::ReadKey;		# libterm-readkey-perl		perl-TermReadKey
 
 our $has_curl = eval { require WWW::Curl::Easy; 1 };
 
-use version; our $VERSION = version->declare('0.6.1');
+use version; our $VERSION = version->declare('0.6.2');
 our $API_ENDPOINT = 'https://sslmate.com/api/v1';
 
 our $quiet = 0;
@@ -239,10 +239,12 @@ sub is_linked {
 }
 
 sub init_default_paths {
+	my ($do_mkdir) = @_;
+	$do_mkdir //= 1;
 	if (!config_has("key_directory") && !config_has("cert_directory")) {
 		if ($> == 0) {
 			my $default_directory = '/etc/sslmate' . ($config_profile ? "-$config_profile" : "");
-			if (!mkdir($default_directory, 0755)) {
+			if ($do_mkdir && !mkdir($default_directory, 0755)) {
 				die "Error: Unable to create $default_directory: $!\n" unless $!{EEXIST};
 			}
 			$global_config{'key_directory'} = $default_directory;
@@ -859,7 +861,7 @@ sub command_link {
 }
 
 sub do_wait_for_cert {
-	my ($response, $no_wait, $accept_dummy, $files, $new_key_filename) = @_;
+	my ($cn, $response, $no_wait, $accept_dummy, $files, $new_key_filename) = @_;
 
 	print "You will soon receive an email at " . $response->{approver_email} . " from " . $response->{approval_from} . ". Follow the instructions in the email to verify your ownership of your domain.\n\n";
 
@@ -895,6 +897,9 @@ sub do_wait_for_cert {
 	print "Certificate with chain file: " . $files->{chained_crt_filename} . "$extra_info\n";
 	#print "\n";
 	#print "(" . $files->{chained_crt_filename} . " is the concatenation of " . $files->{crt_filename} . " and " . $files->{chain_crt_filename} . "; consult your program's documentation to determine whether you specify the certificate and chain in separate files or in one file.)\n";
+	print "\n";
+	print "Tip: generate configuration for this cert with the 'sslmate mkconfig' command.\n";
+	print "Tip: test this cert's installation by running 'sslmate test $cn'.\n";
 }
 
 sub do_buy {
@@ -982,7 +987,7 @@ sub do_buy {
 	}
 
 	print "Order complete.\n\n";
-	return do_wait_for_cert($response, $no_wait, $accept_dummy, $files, $files->{key_filename});
+	return do_wait_for_cert($cn, $response, $no_wait, $accept_dummy, $files, $files->{key_filename});
 }
 
 sub command_buy {
@@ -1183,7 +1188,7 @@ sub command_reissue {
 	}
 
 	print "Reissue complete.\n\n";
-	return do_wait_for_cert($response, $no_wait, 0, $files, $new_key_filename);
+	return do_wait_for_cert($cn, $response, $no_wait, 0, $files, $new_key_filename);
 }
 
 sub command_revoke {
@@ -1378,7 +1383,7 @@ sub command_renew {
 	}
 
 	print "Renewal complete.\n\n";
-	return do_wait_for_cert($response, $no_wait, 0, $files);
+	return do_wait_for_cert($cn, $response, $no_wait, 0, $files);
 }
 
 sub command_req {
@@ -1713,6 +1718,7 @@ sub command_import {
 		print " -f, --force        overwrite existing files\n";
 		print " --auto-renew       automatically renew this certificate before it expires\n";
 		print " --no-auto-renew    don't automatically renew this certificate\n";
+		print " --no-install       don't copy the key/cert to the local key/cert directories\n";
 		print " --batch            don't prompt for confirmation\n";
 		print " --email=ADDRESS    use the given approver email address\n";
 		return 0;
@@ -1720,6 +1726,7 @@ sub command_import {
 
 	my $force = 0;
 	my $auto_renew = undef;
+	my $install = 1;
 	my $batch = 0;
 	my $approver_email = undef;
 	while (@args >= 1) {
@@ -1731,6 +1738,9 @@ sub command_import {
 			shift @args;
 		} elsif ($args[0] eq "--no-auto-renew") {
 			$auto_renew = 0;
+			shift @args;
+		} elsif ($args[0] eq "--no-install") {
+			$install = 0;
 			shift @args;
 		} elsif ($args[0] eq "--batch") {
 			$batch = 1;
@@ -1768,12 +1778,12 @@ sub command_import {
 
 	init_default_paths;
 
-	do_import($force, $auto_renew, $args[0], $args[1], undef, $batch, $approver_email);
+	do_import($force, $auto_renew, $install, $args[0], $args[1], undef, $batch, $approver_email);
 	return 0;
 }
 
 sub do_import {
-	my ($force, $auto_renew, $source_key_path, $source_crt_path, $cn, $batch, $approver_email) = @_;
+	my ($force, $auto_renew, $install_locally, $source_key_path, $source_crt_path, $cn, $batch, $approver_email) = @_;
 
 	# 1. Read the key
 	open(my $source_key_file, '<', $source_key_path) or die "Error: Unable to open $source_key_path: $!\n";
@@ -1793,24 +1803,27 @@ sub do_import {
 	my $csr = openssl_req($source_key_path, $dn);
 
 	# 4. Prepare the destination files
-	my $files = get_cert_paths($cn, 1);
-	if (realpath($source_key_path) eq realpath($files->{key_filename})) {
-		# Don't bother to write the key because it's already in place
-		delete $files->{key_filename};
-	}
-	unless ($force) {
-		my @check_files = qw{key_filename chain_crt_filename chained_crt_filename};
-		if (realpath($source_crt_path) ne realpath($files->{crt_filename})) {
-			# Only care if .crt file exists if it's not the same file we're importing
-			push @check_files, 'crt_filename';
+	my $files;
+	if ($install_locally) {
+		$files = get_cert_paths($cn, 1);
+		if (realpath($source_key_path) eq realpath($files->{key_filename})) {
+			# Don't bother to write the key because it's already in place
+			delete $files->{key_filename};
 		}
-		check_for_existing_files(@{$files}{@check_files});
-	}
+		unless ($force) {
+			my @check_files = qw{key_filename chain_crt_filename chained_crt_filename};
+			if (realpath($source_crt_path) ne realpath($files->{crt_filename})) {
+				# Only care if .crt file exists if it's not the same file we're importing
+				push @check_files, 'crt_filename';
+			}
+			check_for_existing_files(@{$files}{@check_files});
+		}
 
-	$files->{key_file} = open_key_file($files->{key_filename}, $force) if defined $files->{key_filename};
+		$files->{key_file} = open_key_file($files->{key_filename}, $force) if defined $files->{key_filename};
+	}
 
 	my $exit_with_error = sub {
-		unlink($files->{key_filename}) if defined $files->{key_filename};
+		unlink($files->{key_filename}) if $install_locally && defined $files->{key_filename};
 		exit 1;
 	};
 
@@ -1831,9 +1844,27 @@ sub do_import {
 			print "WARNING: This certificate will not be valid for $www_cn when it renews.\n";
 			print "Would you rather import a certificate that will work with both $www_cn AND $cn?\n\n";
 			if (prompt_yesno) {
-				unlink($files->{key_filename}) if defined $files->{key_filename};
-				return do_import($force, $auto_renew, $source_key_path, $source_crt_path, $www_cn, $batch, $approver_email);
+				unlink($files->{key_filename}) if $install_locally && defined $files->{key_filename};
+				return do_import($force, $auto_renew, $install_locally, $source_key_path, $source_crt_path, $www_cn, $batch, $approver_email);
 			}
+		}
+		if ($response->{has_nondns_sans}) {
+			print "\n";
+			print "WARNING: This certificate contains non-DNS subject alternative names.\n";
+			print "SSLMate does not support non-DNS subject alternative names.  When this\n";
+			print "certificate renews, the non-DNS subject alternative names will be dropped.\n\n";
+			print "Do you understand and want to import this certificate anyways?\n\n";
+			$exit_with_error->() unless prompt_yesno();
+		}
+		if (@{$response->{disallowed_sans}}) {
+			print "\n";
+			print "WARNING: This certificate contains the following subject alternative names:\n\n";
+			for my $san (@{$response->{disallowed_sans}}) {
+				print "\t$san\n";
+			}
+			print "\nWhen this certificate renews, these subject alternative names will be dropped.\n";
+			print "Do you understand and want to import this certificate anyways?\n\n";
+			$exit_with_error->() unless prompt_yesno();
 		}
 
 		unless (defined $approver_email) {
@@ -1861,21 +1892,25 @@ sub do_import {
 	# 6. Write the key, crt, and chain to the destination directory
 	$response->{chain} //= '';
 
-	if (defined $files->{key_file}) {
-		# write .key file
-		truncate($files->{key_file}, 0);
-		print {$files->{key_file}} $key;
-		close $files->{key_file};
-	}
+	if ($install_locally) {
+		if (defined $files->{key_file}) {
+			# write .key file
+			truncate($files->{key_file}, 0);
+			print {$files->{key_file}} $key;
+			close $files->{key_file};
+		}
 
-	write_cert_files($files, undef, $crt, $response->{chain});
+		write_cert_files($files, undef, $crt, $response->{chain});
+	}
 
 	print "\n";
 	print "Your certificate has been imported to SSLMate.\n\n";
-	print "           Private key file: " . ($files->{key_filename} // $source_key_path) . "\n";
-	print "           Certificate file: " . $files->{crt_filename} . "\n";
-	print "     Certificate chain file: " . $files->{chain_crt_filename} . "\n";
-	print "Certificate with chain file: " . $files->{chained_crt_filename} . "\n";
+	if ($install_locally) {
+		print "           Private key file: " . ($files->{key_filename} // $source_key_path) . "\n";
+		print "           Certificate file: " . $files->{crt_filename} . "\n";
+		print "     Certificate chain file: " . $files->{chain_crt_filename} . "\n";
+		print "Certificate with chain file: " . $files->{chained_crt_filename} . "\n";
+	}
 }
 
 sub command_mkconfig {
@@ -1885,20 +1920,24 @@ sub command_mkconfig {
 
 	my $help_opt = 0;
 	my $templates_opt = 0;
+	my $no_security_opt = 0;
 	$getopt->getoptions('templates', \$templates_opt,
+			    'no-security', \$no_security_opt,
 			    'help|?', \$help_opt) or return 2;
 
 	if ($help_opt) {
-		print "Usage: sslmate mkconfig TEMPLATE COMMONNAME\n";
+		print "Usage: sslmate mkconfig [--no-security] TEMPLATE COMMONNAME\n";
 		print "   or: sslmate mkconfig --templates\n";
 		print "Example: sslmate mkconfig apache www.example.com\n";
 		print "\n";
 		print "Valid options:\n";
-		print " --templates  output a list of available config templates\n";
+		print " --templates    output a list of available config templates\n";
+		print " --no-security  don't include recommended security settings\n";
 		return 0;
 	}
 
 	load_config;
+	init_default_paths(0);
 
 	if ($templates_opt) {
 		my $response = api_call('GET', '/config_templates') or return 1;
@@ -1924,7 +1963,9 @@ sub command_mkconfig {
 
 	my ($template_name, $common_name) = @ARGV;
 
-	my $response = api_call('GET', '/config_templates/' . qs_escape($template_name)) or return 1;
+	my $cmd = '/config_templates/' . qs_escape($template_name);
+	$cmd .= '?include_security_settings=1' unless $no_security_opt;
+	my $response = api_call('GET', $cmd) or return 1;
 
 	if ($response->{status} eq 'error') {
 		if ($response->{reason} // '' eq 'template_not_found') {
