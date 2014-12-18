@@ -239,10 +239,12 @@ sub is_linked {
 }
 
 sub init_default_paths {
+	my ($do_mkdir) = @_;
+	$do_mkdir //= 1;
 	if (!config_has("key_directory") && !config_has("cert_directory")) {
 		if ($> == 0) {
 			my $default_directory = '/etc/sslmate' . ($config_profile ? "-$config_profile" : "");
-			if (!mkdir($default_directory, 0755)) {
+			if ($do_mkdir && !mkdir($default_directory, 0755)) {
 				die "Error: Unable to create $default_directory: $!\n" unless $!{EEXIST};
 			}
 			$global_config{'key_directory'} = $default_directory;
@@ -1935,6 +1937,7 @@ sub command_mkconfig {
 	}
 
 	load_config;
+	init_default_paths(0);
 
 	if ($templates_opt) {
 		my $response = api_call('GET', '/config_templates') or return 1;
