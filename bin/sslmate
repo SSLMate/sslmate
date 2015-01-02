@@ -624,16 +624,21 @@ sub extract_crt_from_file {
 sub extract_pubkey_from_key {
 	my ($key_filename) = @_;
 
+	# The pkey command is only available in OpenSSL 1.0.0 and higher. But older versions of
+	# OpenSSL don't support ECC anyways, so it's OK to just use the rsa command instead.
+	my $has_pkey_command = grep /^pkey$/, `openssl list-standard-commands`;
+	my $pkey_command = $has_pkey_command ? 'pkey' : 'rsa';
+
 	pipe(my $openssl_reader, my $openssl_writer) or die "Error: pipe failed: $!";
 	my $openssl_pid = fork;
 	die "Error: fork failed: $!" unless defined $openssl_pid;
 	if ($openssl_pid == 0) {
 		open(STDIN, '<', '/dev/null');
 		open(STDOUT, '>&', $openssl_writer) or die "Error: dup failed: $!";
-		open(STDERR, '>', '/dev/null');
+		open(STDERR, '>', '/dev/null') if $pkey_command eq 'rsa'; # rsa command outputs spurious text to stderr
 		close($openssl_reader);
-		exec('openssl', 'rsa', '-in', $key_filename, '-pubout', '-outform', 'DER');
-		die "Error: Unable to run 'openssl rsa' command: " . ($!{ENOENT} ? 'openssl command not found' : $!) . "\n";
+		exec('openssl', $pkey_command, '-in', $key_filename, '-pubout', '-outform', 'DER');
+		die "Error: Unable to run 'openssl $pkey_command' command: " . ($!{ENOENT} ? 'openssl command not found' : $!) . "\n";
 	}
 	close($openssl_writer);
 
