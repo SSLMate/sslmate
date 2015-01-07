@@ -1616,7 +1616,7 @@ sub command_download {
 		} else {
 			print "The certificate for $cn has been downloaded.\n\n";
 		}
-		print "           Private key file: " . $paths->{key_filename} . "\n" if $has_new_key;
+		print "           Private key file: " . $paths->{key_filename} . "\n" if -f $paths->{key_filename};
 		print "           Certificate file: " . $paths->{crt_filename} . "$extra_info\n";
 		print "     Certificate chain file: " . $paths->{chain_crt_filename} . "$extra_info\n";
 		print "Certificate with chain file: " . $paths->{chained_crt_filename} . "$extra_info\n";
