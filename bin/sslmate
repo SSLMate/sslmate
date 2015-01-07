@@ -741,7 +741,7 @@ sub prompt_for_order_confirmation {
 
 	print "\n";
 	print "============ Order summary ============\n";
-	print "     Host Name: " . $data->{cn};
+	print "      Hostname: " . $data->{cn};
 	if ($data->{cn} =~ /^www\.(.*)$/) {
 		print " and $1";
 	}
