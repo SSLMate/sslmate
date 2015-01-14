@@ -765,8 +765,8 @@ sub prompt_for_order_confirmation {
 	if ($data->{amount_due}) {
 		print " Credit Card: " . $data->{cc_type} . " ending in " . $data->{cc_last4} . "\n";
 	}
-	if ($data->{coupon_discount}) {
-		print "    Discount: " . format_money($data->{coupon_discount}) . " (USD)\n";
+	if ($data->{discount}) {
+		print "    Discount: " . format_money($data->{discount}) . " (USD)\n";
 	}
 	print "  Amount Due: " . format_money($data->{amount_due}) . " (USD)\n";
 	print "\n";
