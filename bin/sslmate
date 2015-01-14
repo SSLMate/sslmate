@@ -763,12 +763,20 @@ sub prompt_for_order_confirmation {
 	print "\n";
 	print "=========== Payment details ===========\n";
 	if ($data->{amount_due}) {
-		print " Credit Card: " . $data->{cc_type} . " ending in " . $data->{cc_last4} . "\n";
+		print "Payment Method: ";
+		if ($data->{payment_method} eq 'credit_card') {
+			print $data->{cc_type} . " ending in " . $data->{cc_last4};
+		} elsif ($data->{payment_method} eq 'balance') {
+			print "Account Balance";
+		} else {
+			print "Other";
+		}
+		print "\n";
 	}
 	if ($data->{discount}) {
-		print "    Discount: " . format_money($data->{discount}) . " (USD)\n";
+		print "      Discount: " . format_money($data->{discount}) . " (USD)\n";
 	}
-	print "  Amount Due: " . format_money($data->{amount_due}) . " (USD)\n";
+	print "    Amount Due: " . format_money($data->{amount_due}) . " (USD)\n";
 	print "\n";
 
 	while (1) {
