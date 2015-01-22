@@ -208,13 +208,18 @@ The following options are understood:
 .RS 4
 Revoke
 \fIall\fR
-certificates for this host, including the most recent active certificate\&. If this option is omitted, all but the most recent active certificate are revoked\&. Generally, if you want to revoke a certificate, you should first reissue it with the
+certificates for this hostname, including the most recent active certificate\&. If this option is omitted, all but the most recent active certificate are revoked\&.
+.sp
+WARNING: if you use this option, SSLMate will no longer be able to issue new certificates for this hostname unless you buy a brand new certificate\&. Generally, to revoke a certificate, you should first reissue it with the
 \fBreissue\fR
 command and then use
 \fBrevoke\fR
-without the
-\fB\-a\fR
-option\&.
+\fIwithout\fR
+the
+\fB\-\-all\fR
+option\&. Only use
+\fB\-\-all\fR
+if you no longer need any certificates for a hostname\&.
 .RE
 .RE
 .PP

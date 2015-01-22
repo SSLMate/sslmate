@@ -351,11 +351,17 @@
 
 							<listitem>
 								<para>
-									Revoke <emphasis>all</emphasis> certificates for this host, including the
+									Revoke <emphasis>all</emphasis> certificates for this hostname, including the
 									most recent active certificate.  If this option is omitted, all but
-									the most recent active certificate are revoked.  Generally, if you want to
-									revoke a certificate, you should first reissue it with the <command>reissue</command>
-									command and then use <command>revoke</command> without the <option>-a</option> option.
+									the most recent active certificate are revoked.
+								</para>
+								<para>
+									WARNING: if you use this option, SSLMate will no longer be able to
+									issue new certificates for this hostname unless you buy a brand new
+									certificate.  Generally, to revoke a certificate, you should first reissue it with the
+									<command>reissue</command> command and then use <command>revoke</command>
+									<emphasis>without</emphasis> the <option>--all</option> option.  Only use
+									<option>--all</option> if you no longer need any certificates for a hostname.
 								</para>
 							</listitem>
 						</varlistentry>
