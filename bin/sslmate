@@ -1028,6 +1028,15 @@ sub do_buy {
 
 	my $cert_instance;
 	($status, $cert_instance) = authed_api_call('POST', '/certs/' . qs_escape($cn) . '/buy', undef, $request) or $exit_with_error->();
+	if ($status != 200 && $cert_instance->{reason} eq 'daily_buy_limit_exceeded') {
+		print STDERR "Error: this purchase would exceed your daily spending limit.\n";
+		print STDERR "To change your limit, visit https://sslmate.com/account\n";
+		$exit_with_error->() if $batch;
+		my $password = prompt_password("Enter your SSLMate password to approve this purchase: ");
+		my ($account_id, undef) = split('_', get_config('api_key'));
+		($status, $cert_instance) = api_call('POST', '/certs/' . qs_escape($cn) . '/buy', { username => $account_id, password => $password }, undef, $request) or $exit_with_error->();
+	}
+
 	if ($status != 200) {
 		if ($cert_instance->{reason} eq 'price_not_authorized') {
 			print STDERR "Error: the price of this certificate has changed. Please run 'sslmate buy' again.\n";
