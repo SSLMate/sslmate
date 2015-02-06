@@ -2070,7 +2070,8 @@ sub command_mkconfig {
 	my ($template_name, $common_name) = @ARGV;
 
 	my ($status, $response) = anon_api_call('GET', '/config_templates/' . qs_escape($template_name),
-						{ include_security_settings => $no_security_opt ? undef : 1 }) or return 1;
+						{ expand => [ 'template' ],
+						  include_security_settings => $no_security_opt ? undef : 1 }) or return 1;
 
 	if ($status != 200) {
 		if ($response->{reason} // '' eq 'template_not_found') {
