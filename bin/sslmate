@@ -39,13 +39,14 @@ use warnings;
 use Getopt::Long;
 use Errno;
 use Fcntl;
-use POSIX ":sys_wait_h";
+use POSIX qw(:sys_wait_h strftime);
 use Cwd qw(realpath);
 use Digest::SHA qw(sha256_hex);
 use File::Basename;
 use File::Temp;
 use IO::Handle;
 use IPC::Open2;
+use List::Util qw(max sum);
 
 				# Debian/Ubuntu package		RHEL/CentOS package
 				# --------------------------------------------------
@@ -79,6 +80,7 @@ sub print_usage {
 	print $out " sslmate revoke [-a] HOSTNAME     Revoke the certificate for given hostname\n";
 	print $out " sslmate download HOSTNAME        Download the certificate for given hostname\n";
 	#print $out " sslmate import KEYFILE CERTFILE  Import this certificate to your account\n";
+	print $out " sslmate list                     List certificates in your SSLMate account\n";
 	print $out " sslmate test HOSTNAME            Check if the certificate is properly installed\n";
 	print $out " sslmate mkconfig TEMPLATE NAME   Generate configuration for the certificate\n";
 	print $out " sslmate link                     Link this system with your SSLMate account\n";
@@ -1712,6 +1714,173 @@ sub command_download {
 	return 0;
 }
 
+sub print_row {
+	my ($data, $widths) = @_;
+
+	for my $i (0..@$data-1) {
+		print "  " if $i > 0;
+		printf "%*s", -$widths->[$i], ($data->[$i] // '-');
+	}
+	print "\n";
+}
+
+sub make_cert_info {
+	local *format_hash = sub {
+		my ($raw_hash) = @_;
+		return undef unless defined($raw_hash);
+		$raw_hash =~ s/([0-9a-zA-z][0-9a-zA-Z])/:\U$1\E/g;
+		return substr($raw_hash, 1);
+	};
+	local *format_status = sub {
+		my ($raw_status) = @_;
+		return 'Active' if $raw_status eq 'active';
+		return 'Expired' if $raw_status eq 'expired';
+		return 'Revoked' if $raw_status eq 'revoked';
+		return 'Pending' if $raw_status eq 'pending';
+		return 'Canceled' if $raw_status eq 'canceled';
+		return $raw_status;
+	};
+	local *format_type = sub {
+		my ($raw_type) = @_;
+		return 'DV' if $raw_type eq 'dv';
+		return $raw_type;
+	};
+	local *format_installed_status = sub {
+		my ($has_local_anything, $has_local_keys, $has_local_crts) = @_;
+		return "Yes" if $has_local_keys && $has_local_crts;
+		return "Partially" if $has_local_anything;
+		return "No";
+	};
+	my ($cert) = @_;
+
+	my $local_paths = get_cert_paths($cert->{cn});
+	my $has_local_anything = -e $local_paths->{key_filename} ||
+				 -e $local_paths->{crt_filename} ||
+				 -e $local_paths->{chain_crt_filename} ||
+				 -e $local_paths->{chained_crt_filename};
+	my $has_local_keys = -e $local_paths->{key_filename};
+	my $has_local_crts = -e $local_paths->{crt_filename} &&
+			     -e $local_paths->{chain_crt_filename} &&
+			     -e $local_paths->{chained_crt_filename};
+	return {
+		name => $cert->{cn},
+		status => format_status($cert->{latest}->{state}),
+		expiration => $cert->{latest}->{expiration} ? strftime('%Y-%m-%d', localtime($cert->{latest}->{expiration})) : undef,
+		has_local_anything => $has_local_anything,
+		has_local_keys => $has_local_keys,
+		has_local_crts => $has_local_crts,
+		installed => format_installed_status($has_local_anything, $has_local_keys, $has_local_crts),
+		fingerprint => format_hash($cert->{latest}->{sha1_fingerprint}),
+		sha256_fingerprint => format_hash($cert->{latest}->{sha256_fingerprint}),
+		auto_renew => $cert->{auto_renew} ? "Yes" : "No",
+		type => format_type($cert->{latest}->{type}),
+		approver_email => $cert->{approver_email},
+		approval_email_from => $cert->{latest}->{approval_email_from},
+	};
+}
+
+sub command_list {
+	my @args = @_;
+
+	if (@args >= 1 && $args[0] eq "-?") {
+		print "Usage: sslmate list [OPTIONS]\n";
+		print "\n";
+		print "Valid options:\n";
+		print " --local             display only certificates that are installed locally\n";
+		print " --no-local          exclude certificates that are installed locally\n";
+		print " -c, --columns=COLS  include the given columns, where COLS is comma-separated\n";
+		print " -z                  separate columns and terminate lines with a NUL character\n";
+		print "\n";
+		print "Valid columns:\n";
+		print " name, status, expiration, installed, fingerprint, sha256_fingerprint,\n";
+		print " auto_renew, type, approver_email, approval_email_from\n";
+		return 0;
+	}
+
+	my $local;
+	my $columns;
+	my $machine_output;
+
+	local @ARGV = @args;
+	my $getopt = Getopt::Long::Parser->new;
+	$getopt->configure(qw(no_ignore_case permute bundling));
+	$getopt->getoptions('local!', \$local,
+			    'columns|c=s', \$columns,
+			    'z', \$machine_output) or return 2;
+
+	if ($machine_output && !defined($columns)) {
+		print STDERR "Error: --columns option is required if -z is used.\n";
+		return 2;
+	}
+
+	my @columns = defined($columns) ? split(/,/, $columns) : qw/name status expiration installed/;
+	my %column_titles = (
+				name =>			'Name',
+			        status =>		'Status',
+			        expiration =>		'Expiration',
+			        installed => 		'Installed',
+			        fingerprint =>		'Fingerprint',
+			        sha256_fingerprint =>	'Fingerprint (SHA-256)',
+				auto_renew =>		'Auto-renew',
+				type =>			'Type',
+				approver_email =>	'Approver Email',
+				approval_email_from =>	'Approval Email From',
+			    );
+	for my $column (@columns) {
+		if (not exists $column_titles{$column}) {
+			print STDERR "Error: Invalid column: $column\n";
+			return 1;
+		}
+	}
+	if (not @columns) {
+		print STDERR "Error: no columns specified\n";
+		return 1;
+	}
+
+	load_config;
+	if (!is_linked) {
+		unless (-t STDIN) {
+			print STDERR "Error: you have not yet linked this system with your SSLMate account.\n";
+			print STDERR "Please run 'sslmate link'.\n";
+			return 1;
+		}
+		do_link or return 1;
+	}
+
+	my ($status, $response) = authed_api_call('GET', '/certs', { expand => ['latest'] }) or return 1;
+	if ($status != 200) {
+		print STDERR "Error: " . $response->{message} . "\n";
+		return 1;
+	}
+	my @rows;
+	for my $cert_obj (@{$response->{data}}) {
+		my $cert_info = make_cert_info($cert_obj);
+		if (defined $local) {
+			next if $local && !$cert_info->{has_local_anything};
+			next if !$local && $cert_info->{has_local_anything};
+		}
+		my @row = @{$cert_info}{@columns};
+		if ($machine_output) {
+			print join("\0", @row) . "\0";
+		} else {
+			push @rows, \@row;
+		}
+	}
+
+	if (not $machine_output) {
+		my @titles = @column_titles{@columns};
+		my @widths;
+		for my $i (0..@columns-1) {
+			push @widths, max(map { length($_->[$i] // '-') } \@titles, @rows);
+		}
+		print_row(\@titles, \@widths);
+		print '-' x (sum(@widths) + 2*(@columns-1)) . "\n";
+		print_row($_, \@widths) for @rows;
+	}
+
+	return 0;
+}
+
 sub command_test {
 	my @args = @_;
 
@@ -2192,6 +2361,8 @@ sub main {
 		return command_req @args;
 	} elsif ($command eq 'download') {
 		return command_download @args;
+	} elsif ($command eq 'list') {
+		return command_list @args;
 	} elsif ($command eq 'test') {
 		return command_test @args;
 	} elsif ($command eq 'import') {
