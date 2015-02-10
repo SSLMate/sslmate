@@ -1273,29 +1273,37 @@ sub command_revoke {
 	my @args = @_;
 
 	if (@args >= 1 && $args[0] eq "-?") {
-		print "Usage: sslmate revoke [-a] HOSTNAME\n";
-		print "By default, sslmate revokes all but the most recent certificate for HOSTNAME.\n";
-		print "To revoke all certificates, even the most recent, include the -a option.\n";
+		print "Usage: sslmate revoke [OPTIONS] HOSTNAME\n\n";
+		print "Example: sslmate revoke www.example.com\n";
+		print "\n";
+		print "Valid options:\n";
+		print " -a, --all    revoke ALL certificates, even the most recent\n";
+		print " --batch      don't prompt for confirmation if --all is used\n";
+		print "\n";
+		print "Note: By default, 'sslmate revoke' revokes all but the most recent certificate.\n";
+		print "      To revoke even the most recent certificate, use the --all option.\n";
+		print "\n";
+		print "Tip: To replace a compromised key, first reissue the cert with 'sslmate reissue'\n";
+		print "     and then revoke the old cert(s) with 'sslmate revoke' WITHOUT --all.\n";
 		return 0;
 	}
 
 	my $all = 0;
-	while (@args >= 1) {
-		if ($args[0] eq "-a" || $args[0] eq "--all") {
-			$all = 1;
-			shift @args;
-		} else {
-			last;
-		}
-	}
+	my $batch = 0;
 
-	if (@args != 1) {
+	local @ARGV = @args;
+	my $getopt = Getopt::Long::Parser->new;
+	$getopt->configure(qw(no_ignore_case permute bundling));
+	$getopt->getoptions('all|a', \$all,
+			    'batch', \$batch) or return 2;
+
+	if (@ARGV != 1) {
 		print STDERR "Error: you must specify the hostname of the certificate to revoke.\n";
 		print STDERR "Example: sslmate revoke www.example.com\n";
 		return 2;
 	}
 
-	my $cn = lc $args[0];
+	my $cn = lc $ARGV[0];
 
 	load_config;
 	if (!is_linked) {
@@ -1307,7 +1315,18 @@ sub command_revoke {
 		do_link or return 1;
 	}
 
-	# TODO: should really prompt for confirmation unless --batch specified
+	if ($all && !$batch) {
+		print "WARNING: ALL instances of this certificate will be revoked, even the most\n";
+		print "recent one.  You will not be able to use or reissue this certificate unless\n";
+		print "you purchase it again.\n\n";
+		if (-t STDIN) {
+			print "Do you understand and want to continue?\n\n";
+			exit 1 unless prompt_yesno();
+		} else {
+			print "Error: will not continue unless --batch option is specified.\n";
+			exit 1;
+		}
+	}
 
 	print "Revoking cert...\n";
 
@@ -1323,7 +1342,7 @@ sub command_revoke {
 		return 1;
 	} elsif ($response->{num_revoked} == 0) {
 		print STDERR "Error: the certificate for '$cn' is still in use.\n";
-		print STDERR "Before revoking this certificate, please re-issue it by running 'sslmate reissue $cn'.  Alternatively, if you want to revoke this certificate even though it's still in use, pass the -a option to 'sslmate revoke'.\n";
+		print STDERR "Before revoking this certificate, please reissue it by running 'sslmate reissue $cn'.  Alternatively, if you want to revoke this certificate even though it's still in use, pass the -a option to 'sslmate revoke'.\n";
 		return 1;
 	} else {
 		print "Successfully revoked the certificate for $cn.\n";
