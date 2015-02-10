@@ -304,15 +304,13 @@ EOF
 }
 
 sub get_cert_paths {
-	my ($cn, $key_too) = @_;
+	my ($cn) = @_;
 
 	my $key_directory = config_has("key_directory") ? get_config("key_directory") . "/" : "";
 	my $cert_directory = config_has("cert_directory") ? get_config("cert_directory") . "/" : "";
 
 	my $paths = {};
-	if ($key_too) {
-		$paths->{key_filename} = $key_directory . $cn . ".key";
-	}
+	$paths->{key_filename} = $key_directory . $cn . ".key";
 	$paths->{crt_filename} = $cert_directory . $cn . ".crt";
 	$paths->{chain_crt_filename} = $cert_directory . $cn . ".chain.crt";
 	$paths->{chained_crt_filename} = $cert_directory . $cn . ".chained.crt";
@@ -937,7 +935,7 @@ sub do_buy {
 	#
 	# 0. Make sure files don't already exist
 	#
-	my $files = get_cert_paths($cn, 1);
+	my $files = get_cert_paths($cn);
 	check_for_existing_files(@{$files}{qw{key_filename crt_filename chain_crt_filename chained_crt_filename}}) unless $force;
 
 	#
@@ -1228,7 +1226,7 @@ sub command_reissue {
 	}
 
 	# 2. Open the files
-	my $files = get_cert_paths($cn, 1);
+	my $files = get_cert_paths($cn);
 	my $new_key_filename = $files->{key_filename} . ".new";
 
 	check_for_existing_files($new_key_filename) unless $force;
@@ -1407,7 +1405,7 @@ sub command_renew {
 
 	init_default_paths;
 
-	my $files = get_cert_paths($cn, 1);
+	my $files = get_cert_paths($cn);
 	my $pubkey_hash = undef;
 	if (-f $files->{key_filename} && -r $files->{key_filename}) {
 		$pubkey_hash = sha256_hex(extract_pubkey_from_key($files->{key_filename}));
@@ -1613,7 +1611,7 @@ sub command_download {
 	my @certs;
 	my $errors = 0;
 	for my $cn (@args) {
-		my $paths = get_cert_paths($cn, 1);
+		my $paths = get_cert_paths($cn);
 
 		my $pubkey_hash;
 		if (-f $paths->{key_filename} && -r $paths->{key_filename}) {
@@ -1954,7 +1952,7 @@ sub do_import {
 	# 7. Prepare the destination files
 	my $files;
 	if ($install_locally) {
-		$files = get_cert_paths($cn, 1);
+		$files = get_cert_paths($cn);
 		if (realpath($source_key_path) eq realpath($files->{key_filename})) {
 			# Don't bother to write the key because it's already in place
 			delete $files->{key_filename};
@@ -2084,7 +2082,7 @@ sub command_mkconfig {
 		return 1;
 	}
 
-	my $paths = get_cert_paths($common_name, 1);
+	my $paths = get_cert_paths($common_name);
 	my %vars = ('__KEY_PATH__'	=> $paths->{key_filename},
 		    '__CERT_PATH__'	=> $paths->{crt_filename},
 		    '__CHAIN_PATH__'	=> $paths->{chain_crt_filename},
