@@ -1688,7 +1688,7 @@ sub command_download {
 			next;
 		}
 
-		if ($response->{state} ne 'active' && !$accept_dummy) {
+		if ($response->{state} ne 'active' && (!$accept_dummy || $response->{crt} eq '')) {
 			print STDERR "Error: The certificates for $cn" . ($pubkey_hash ? " (with private key " . $paths->{key_filename} . ")" : "") . " have not yet been issued. Please try again later.\n";
 			++$errors;
 			next;
