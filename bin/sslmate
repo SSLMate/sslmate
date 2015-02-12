@@ -537,29 +537,46 @@ sub api_call {
 
 	$query_string = make_query_string($query_string) if ref($query_string) eq 'HASH';
 	$post_data = make_query_string($post_data) if ref($post_data) eq 'HASH';
-
 	$command .= "?$query_string" if defined($query_string) && length($query_string);
 
-	my ($http_status, $content_type, $response_data) = $has_curl ?
-				native_api_call($method, $command, $creds, $post_data) :
-				external_api_call($method, $command, $creds, $post_data);
+	my $max_total_delay = 20;
+	my $next_retry_delay = 2;
 
-	return unless defined($http_status);
+	while (1) {
+		my ($http_status, $content_type, $response_data) = $has_curl ?
+					native_api_call($method, $command, $creds, $post_data) :
+					external_api_call($method, $command, $creds, $post_data);
 
-	$content_type //= '';
+		return unless defined($http_status);
 
-	if ($content_type ne 'application/json') {
-		print STDERR "Error: received unexpected response from SSLMate server: response not JSON (content-type=$content_type; status=$http_status)\n";
-		return;
-	}
+		$content_type //= '';
+
+		if ($content_type ne 'application/json') {
+			print STDERR "Error: received unexpected response from SSLMate server: response not JSON (content-type=$content_type; status=$http_status)\n";
+			return;
+		}
 	
-	my $response_obj = eval { decode_json($$response_data) };
-	if (!defined($response_obj)) {
-		chomp $@;
-		print STDERR "Error: received malformed response from SSLMate server: $@\n";
-		return;
+		my $response_obj = eval { decode_json($$response_data) };
+		if (!defined($response_obj)) {
+			chomp $@;
+			print STDERR "Error: received malformed response from SSLMate server: $@\n";
+			return;
+		}
+
+		if ($http_status == 503 && defined $response_obj->{retry_after}) {
+			# Service unavailable. Retry with exponential backoff, but never
+			# retry sooner than the retry_after specified by the server.
+			my $delay = max($next_retry_delay, $response_obj->{retry_after});
+			if ($delay <= $max_total_delay) {
+				$max_total_delay -= $delay;
+				$next_retry_delay *= 2;
+				sleep($delay);
+				next;
+			}
+		}
+
+		return ($http_status, $response_obj);
 	}
-	return ($http_status, $response_obj);
 }
 
 sub default_api_credentials {
