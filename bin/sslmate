@@ -41,7 +41,7 @@ use Errno;
 use Fcntl;
 use POSIX qw(:sys_wait_h strftime);
 use Cwd qw(realpath);
-use Digest::SHA qw(sha256_hex);
+use Digest::SHA qw(sha1_hex sha256_hex);
 use File::Basename;
 use File::Temp;
 use IO::Handle;
@@ -1807,7 +1807,36 @@ sub print_row {
 	print "\n";
 }
 
-sub make_cert_info {
+sub get_local_cert_info {
+	my ($paths) = @_;
+
+	my ($key_info, $crt_info);
+	if (-e $paths->{key_filename}) {
+		eval {
+			my $raw_pubkey = extract_pubkey_from_key($paths->{key_filename});
+			$key_info = {
+				pubkey_hash => sha256_hex($raw_pubkey),
+			};
+		}
+	}
+	if (-e $paths->{crt_filename}) {
+		eval {
+			my $raw_crt = extract_crt_from_file($paths->{crt_filename});
+			my $raw_pubkey = extract_pubkey_from_crt($paths->{crt_filename});
+			$crt_info = {
+				sha1_fingerprint => sha1_hex($raw_crt),
+				sha256_fingerprint => sha256_hex($raw_crt),
+				pubkey_hash => sha256_hex($raw_pubkey),
+			};
+		}
+	}
+
+	return { key => $key_info, crt => $crt_info };
+}
+
+sub format_cert_info {
+	my ($cert, $local_info) = @_;
+
 	local *format_hash = sub {
 		my ($raw_hash) = @_;
 		return undef unless defined($raw_hash);
@@ -1828,31 +1857,29 @@ sub make_cert_info {
 		return 'DV' if $raw_type eq 'dv';
 		return $raw_type;
 	};
-	local *format_installed_status = sub {
-		my ($has_local_anything, $has_local_keys, $has_local_crts) = @_;
-		return "Yes" if $has_local_keys && $has_local_crts;
-		return "Partially" if $has_local_anything;
-		return "No";
-	};
-	my ($cert) = @_;
 
-	my $local_paths = get_cert_paths($cert->{cn});
-	my $has_local_anything = -e $local_paths->{key_filename} ||
-				 -e $local_paths->{crt_filename} ||
-				 -e $local_paths->{chain_crt_filename} ||
-				 -e $local_paths->{chained_crt_filename};
-	my $has_local_keys = -e $local_paths->{key_filename};
-	my $has_local_crts = -e $local_paths->{crt_filename} &&
-			     -e $local_paths->{chain_crt_filename} &&
-			     -e $local_paths->{chained_crt_filename};
+	my $local_status = 'None';
+	if ($local_info->{crt}) {
+		if ($local_info->{crt}->{sha256_fingerprint} ne ($cert->{latest}->{sha256_fingerprint} // '')) {
+			$local_status = 'Out-of-date';
+		} elsif (not $local_info->{key}) {
+			$local_status = 'No key file';
+		} elsif ($local_info->{crt}->{pubkey_hash} ne $local_info->{key}->{pubkey_hash}) {
+			$local_status = 'Mismatched key';
+		} elsif ($cert->{latest}->{state} eq 'pending') {
+			$local_status = 'Temporary';
+		} else {
+			$local_status = 'Installed';
+		}
+	} elsif ($local_info->{key}) {
+		$local_status = 'No crt file';
+	}
+
 	return {
 		name => $cert->{cn},
 		status => format_status($cert->{latest}->{state}),
 		expiration => $cert->{latest}->{expiration} ? strftime('%Y-%m-%d', localtime($cert->{latest}->{expiration})) : undef,
-		has_local_anything => $has_local_anything,
-		has_local_keys => $has_local_keys,
-		has_local_crts => $has_local_crts,
-		installed => format_installed_status($has_local_anything, $has_local_keys, $has_local_crts),
+		local_status => $local_status,
 		fingerprint => format_hash($cert->{latest}->{sha1_fingerprint}),
 		sha256_fingerprint => format_hash($cert->{latest}->{sha256_fingerprint}),
 		auto_renew => $cert->{auto_renew} ? "Yes" : "No",
@@ -1875,7 +1902,7 @@ sub command_list {
 		print " -z                  separate columns and terminate lines with a NUL character\n";
 		print "\n";
 		print "Valid columns:\n";
-		print " name, status, expiration, installed, fingerprint, sha256_fingerprint,\n";
+		print " name, status, expiration, local_status, fingerprint, sha256_fingerprint,\n";
 		print " auto_renew, type, approver_email, approval_email_from\n";
 		return 0;
 	}
@@ -1896,12 +1923,12 @@ sub command_list {
 		return 2;
 	}
 
-	my @columns = defined($columns) ? split(/,/, $columns) : qw/name status expiration installed/;
+	my @columns = defined($columns) ? split(/,/, $columns) : qw/name status expiration local_status/;
 	my %column_titles = (
 				name =>			'Name',
 			        status =>		'Status',
 			        expiration =>		'Expiration',
-			        installed => 		'Installed',
+			        local_status => 	'Local Status',
 			        fingerprint =>		'Fingerprint',
 			        sha256_fingerprint =>	'Fingerprint (SHA-256)',
 				auto_renew =>		'Auto-renew',
@@ -1937,12 +1964,13 @@ sub command_list {
 	}
 	my @rows;
 	for my $cert_obj (@{$response->{data}}) {
-		my $cert_info = make_cert_info($cert_obj);
+		my $local_cert_info = get_local_cert_info(get_cert_paths($cert_obj->{cn}));
 		if (defined $local) {
-			next if $local && !$cert_info->{has_local_anything};
-			next if !$local && $cert_info->{has_local_anything};
+			my $is_local = $local_cert_info->{crt} || $local_cert_info->{key};
+			next if $local && !$is_local;
+			next if !$local && $is_local;
 		}
-		my @row = @{$cert_info}{@columns};
+		my @row = @{format_cert_info($cert_obj, $local_cert_info)}{@columns};
 		if ($machine_output) {
 			print join("\0", @row) . "\0";
 		} else {
