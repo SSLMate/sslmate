@@ -618,7 +618,9 @@ sub openssl_req {
 }
 
 sub extract_crt_from_file {
-	my ($crt_filename) = @_;
+	my ($crt_filename, $outform) = @_;
+
+	$outform //= 'DER';
 
 	pipe(my $openssl_reader, my $openssl_writer) or die "Error: pipe failed: $!";
 	my $openssl_pid = fork;
@@ -627,7 +629,7 @@ sub extract_crt_from_file {
 		open(STDIN, '<', '/dev/null');
 		open(STDOUT, '>&', $openssl_writer) or die "Error: dup failed: $!";
 		close($openssl_reader);
-		exec('openssl', 'x509', '-in', $crt_filename);
+		exec('openssl', 'x509', '-in', $crt_filename, '-outform', $outform);
 		die "Error: Unable to run 'openssl x509' command: " . ($!{ENOENT} ? 'openssl command not found' : $!) . "\n";
 	}
 	close($openssl_writer);
@@ -642,7 +644,9 @@ sub extract_crt_from_file {
 }
 
 sub extract_pubkey_from_key {
-	my ($key_filename) = @_;
+	my ($key_filename, $outform) = @_;
+
+	$outform //= 'DER';
 
 	# The pkey command is only available in OpenSSL 1.0.0 and higher. But older versions of
 	# OpenSSL don't support ECC anyways, so it's OK to just use the rsa command instead.
@@ -657,7 +661,7 @@ sub extract_pubkey_from_key {
 		open(STDOUT, '>&', $openssl_writer) or die "Error: dup failed: $!";
 		open(STDERR, '>', '/dev/null') if $pkey_command eq 'rsa'; # rsa command outputs spurious text to stderr
 		close($openssl_reader);
-		exec('openssl', $pkey_command, '-in', $key_filename, '-pubout', '-outform', 'DER');
+		exec('openssl', $pkey_command, '-in', $key_filename, '-pubout', '-outform', $outform);
 		die "Error: Unable to run 'openssl $pkey_command' command: " . ($!{ENOENT} ? 'openssl command not found' : $!) . "\n";
 	}
 	close($openssl_writer);
@@ -2193,7 +2197,7 @@ sub do_import {
 
 	# 2. Read the crt
 	-f $source_crt_path && -r $source_crt_path or die "Error: No such file: $source_crt_path\n";
-	my $crt = extract_crt_from_file($source_crt_path);
+	my $crt = extract_crt_from_file($source_crt_path, 'PEM');
 	defined($crt) or die "Error: Unable to parse $source_crt_path - is it a valid certificate file?\n";
 
 	# 3. Parse the crt
