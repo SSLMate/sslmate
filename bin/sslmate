@@ -1030,6 +1030,7 @@ sub do_buy {
 		print STDERR "Error: " . $cert->{message} . "\n";
 		exit 1;
 	}
+	$cn = $cert->{cn}; # So that we use the canonical CN
 
 	my $authorized_charge;
 	my $authorized_charge_currency;
@@ -1294,6 +1295,7 @@ sub command_reissue {
 		print STDERR "Error: " . $cert->{message} . "\n";
 		return 1;
 	}
+	$cn = $cert->{cn}; # So that we use the canonical CN
 
 	if (not $cert->{exists}) {
 		print STDERR "Error: $cn: there is no certificate in your account with this common name.\n";
@@ -1525,6 +1527,7 @@ sub command_renew {
 		print STDERR "Error: $cn: there is no certificate in your account with this common name.\n";
 		return 1;
 	}
+	$cn = $cert->{cn}; # So that we use the canonical CN
 	# TODO TODO: check to make sure cert is active, expiring soon, etc. ?
 
 	my $authorized_charge;
@@ -2324,6 +2327,7 @@ sub do_import {
 		print STDERR "Error: " . $cert_obj->{message} . "\n";
 		exit 1;
 	}
+	$cn = $cert_obj->{cn}; # So that we use the canonical CN
 
 	# 5. Get product info from the server, ask user to choose approver email (unless we're in batch mode)
 	unless ($batch) {
