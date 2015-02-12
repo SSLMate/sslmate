@@ -670,7 +670,7 @@ sub extract_pubkey_from_key {
 	close($openssl_reader);
 
 	waitpid($openssl_pid, 0) or die "waitpid failed: $!";
-	die "Error: 'openssl rsa' command failed - is $key_filename a valid private key file?\n" unless $? == 0;
+	die "Error: 'openssl $pkey_command' command failed - is $key_filename a valid private key file?\n" unless $? == 0;
 
 	return $pubkey;
 }
