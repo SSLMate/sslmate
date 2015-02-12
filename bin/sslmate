@@ -675,6 +675,64 @@ sub extract_pubkey_from_key {
 	return $pubkey;
 }
 
+sub extract_pubkey_from_crt {
+	my ($crt_filename, $outform) = @_;
+
+	$outform //= 'DER';
+
+	pipe(my $x509_reader, my $x509_writer) or die "Error: pipe failed: $!";
+	defined(my $x509_pid = fork) or die "Error: fork failed: $!";
+	if ($x509_pid == 0) {
+		open(STDIN, '<', '/dev/null');
+		open(STDOUT, '>&', $x509_writer) or die "Error: dup failed: $!";
+		close($x509_reader);
+		exec('openssl', 'x509', '-in', $crt_filename, '-pubkey', '-noout');
+		die "Error: Unable to run 'openssl x509' command: " . ($!{ENOENT} ? 'openssl command not found' : $!) . "\n";
+	}
+	close($x509_writer);
+
+	my ($pkey_pid, $pkey_command);
+	my $pubkey;
+	if ($outform eq 'PEM') {
+		$pubkey = do { local $/; <$x509_reader> };
+		close($x509_reader);
+	} else {
+		# The pkey command is only available in OpenSSL 1.0.0 and higher. But older versions of
+		# OpenSSL don't support ECC anyways, so it's OK to just use the rsa command instead.
+		my $has_pkey_command = grep /^pkey$/, `openssl list-standard-commands`;
+		$pkey_command = $has_pkey_command ? 'pkey' : 'rsa';
+
+		pipe(my $pkey_reader, my $pkey_writer) or die "Error: pipe failed: $!";
+		defined($pkey_pid = fork) or die "Error: fork failed: $!";
+
+		if ($pkey_pid == 0) {
+			open(STDIN, '<&', $x509_reader) or die "Error: dup failed: $!";
+			open(STDOUT, '>&', $pkey_writer) or die "Error: dup failed: $!";
+			open(STDERR, '>', '/dev/null') if $pkey_command eq 'rsa'; # rsa command outputs spurious text to stderr
+			close($pkey_reader);
+			exec('openssl', $pkey_command, '-pubin', '-pubout', '-outform', $outform);
+			die "Error: Unable to run 'openssl $pkey_command' command: " . ($!{ENOENT} ? 'openssl command not found' : $!) . "\n";
+		}
+		close($x509_reader);
+		close($pkey_writer);
+
+		$pubkey = do { local $/; <$pkey_reader> };
+		close($pkey_reader);
+	}
+
+	# Wait for 'openssl x509' first, because that's the command that could fail because of user error.
+	# (If 'openssl pkey' fails, it's because 'openssl x509' failed also, unless something really exceptional happened.)
+	waitpid($x509_pid, 0) or die "waitpid failed: $!";
+	die "Error: 'openssl x509' command failed - is $crt_filename a valid certificate file?\n" unless $? == 0;
+
+	if (defined $pkey_pid) {
+		waitpid($pkey_pid, 0) or die "waitpid failed: $!";
+		die "Error: 'openssl $pkey_command' command failed\n" unless $? == 0;
+	}
+
+	return $pubkey;
+}
+
 sub wait_for_cert {
 	my ($cn, $cert_instance_id, $accept_dummy) = @_;
 
