@@ -310,6 +310,10 @@ EOF
 sub get_cert_paths {
 	my ($cn) = @_;
 
+	if ($cn =~ /^[*]([.].*)$/ && config_has("wildcard_filename")) {
+		$cn = get_config("wildcard_filename") . $1;
+	}
+
 	my $key_directory = config_has("key_directory") ? get_config("key_directory") . "/" : "";
 	my $cert_directory = config_has("cert_directory") ? get_config("cert_directory") . "/" : "";
 
