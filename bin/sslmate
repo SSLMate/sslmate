@@ -95,6 +95,28 @@ sub print_usage {
 	print $out "Run 'sslmate help COMMAND' for more information on a specific command.\n";
 }
 
+# Decode user input according to the current locale. The result can be passed to uri_escape_utf8
+# and it will Do The Right Thing.
+sub decode_input {
+	my ($input) = @_;
+	my $locale_encoding = eval {
+		require I18N::Langinfo;
+		require Encode;
+		Encode::find_encoding(I18N::Langinfo::langinfo(I18N::Langinfo::CODESET()));
+	};
+	if (!defined $locale_encoding) {
+		chomp $@;
+		warn "Warning: Unable to determine input character encoding. Non-ASCII characters might not be interpreted correctly. (Details: $@)\n";
+		return $input;
+	}
+	my $output = eval { $locale_encoding->decode($input, 1) };
+	if (!defined $output) {
+		chomp $@;
+		die "Error: Input is not valid " . $locale_encoding->name . ". Please check your locale settings or try again with pure ASCII input. (Details: $@)\n";
+	}
+	return $output;
+}
+
 sub new_curl {
 	my $curl = WWW::Curl::Easy->new;
 	$curl->setopt(WWW::Curl::Easy::CURLOPT_PROTOCOLS(), 3);		# Only safe protocols (HTTP and HTTPS, not SMTP, SSH, etc.)
@@ -113,7 +135,7 @@ sub prompt_user {
 	my $answer = <STDIN>;
 	die "Error: Input ended prematurely.\n" unless defined($answer);
 	chomp $answer;
-	return $answer;
+	return decode_input($answer);
 }
 
 sub prompt_yesno {
@@ -160,7 +182,7 @@ sub prompt_password {
 	}
 	ReadMode(0);
 
-	return $password;
+	return $password; # XXX: should this be passed through decode_input?
 }
 
 sub config_has {
@@ -2655,4 +2677,4 @@ sub main {
 	}
 }
 
-exit main @ARGV;
+exit main map { decode_input $_ } @ARGV;
