@@ -81,7 +81,7 @@ sub print_usage {
 	print $out " sslmate download HOSTNAME        Download the certificate for given hostname\n";
 	#print $out " sslmate import KEYFILE CERTFILE  Import this certificate to your account\n";
 	print $out " sslmate list                     List certificates in your SSLMate account\n";
-	print $out " sslmate edit [OPTIONS] HOSTNAME  Edit certificate settings (e.g. auto-renew)\n";
+	print $out " sslmate edit OPTIONS HOSTNAME    Edit certificate settings (e.g. auto-renew)\n";
 	print $out " sslmate test HOSTNAME            Check if the certificate is properly installed\n";
 	print $out " sslmate mkconfig TEMPLATE NAME   Generate configuration for the certificate\n";
 	print $out " sslmate resend-email HOSTNAME    Resend the approval email for a pending cert\n";
@@ -1929,7 +1929,7 @@ sub command_list {
 		print "\n";
 		print "Valid columns:\n";
 		print " name, status, expiration, local_status, fingerprint, sha256_fingerprint,\n";
-		print " auto_renew, type, approver_email, approval_email_from\n";
+		print " auto_renew, approver_email\n";
 		return 0;
 	}
 
@@ -2022,10 +2022,10 @@ sub command_edit {
 	local *print_our_usage = sub {
 		my ($out) = @_;
 
-		print $out "Usage: sslmate edit [OPTIONS] HOSTNAME\n";
+		print $out "Usage: sslmate edit OPTIONS... HOSTNAME\n";
 		print $out "\n";
 		print $out "Valid options:\n";
-		print $out " --email=EMAIL       change the approver email of this cert\n";
+		print $out " --email=ADDRESS     change the approver email of this cert\n";
 		print $out " --auto-renew        enable auto-renew for this cert\n";
 		print $out " --no-auto-renew     disable auto-renew for this cert\n";
 	};
@@ -2093,7 +2093,7 @@ sub command_resend_email {
 		print $out "Usage: sslmate resend-email [OPTIONS] HOSTNAME\n";
 		print $out "\n";
 		print $out "Valid options:\n";
-		print $out " --email=EMAIL       send to the given address\n";
+		print $out " --email=ADDRESS     send to the given address\n";
 	};
 
 	my @args = @_;
