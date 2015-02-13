@@ -1882,15 +1882,17 @@ sub format_cert_info {
 		return $raw_type;
 	};
 
+	my $latest = $cert->{latest};
+
 	my $local_status = 'None';
 	if ($local_info->{crt}) {
-		if ($local_info->{crt}->{sha256_fingerprint} ne ($cert->{latest}->{sha256_fingerprint} // '')) {
+		if (not($latest) || $local_info->{crt}->{sha256_fingerprint} ne ($latest->{sha256_fingerprint} // '')) {
 			$local_status = 'Out-of-date';
 		} elsif (not $local_info->{key}) {
 			$local_status = 'No key file';
 		} elsif ($local_info->{crt}->{pubkey_hash} ne $local_info->{key}->{pubkey_hash}) {
 			$local_status = 'Mismatched key';
-		} elsif ($cert->{latest}->{state} eq 'pending') {
+		} elsif ($latest->{state} eq 'pending') {
 			$local_status = 'Temporary';
 		} else {
 			$local_status = 'Installed';
@@ -1901,15 +1903,15 @@ sub format_cert_info {
 
 	return {
 		name => $cert->{cn},
-		status => format_status($cert->{latest}->{state}),
-		expiration => $cert->{latest}->{expiration} ? strftime('%Y-%m-%d', localtime($cert->{latest}->{expiration})) : undef,
+		status => $latest ? format_status($latest->{state}) : undef,
+		expiration => $latest && $latest->{expiration} ? strftime('%Y-%m-%d', localtime($latest->{expiration})) : undef,
 		local_status => $local_status,
-		fingerprint => format_hash($cert->{latest}->{sha1_fingerprint}),
-		sha256_fingerprint => format_hash($cert->{latest}->{sha256_fingerprint}),
+		fingerprint => $latest ? format_hash($latest->{sha1_fingerprint}) : undef,
+		sha256_fingerprint => $latest ? format_hash($latest->{sha256_fingerprint}) : undef,
 		auto_renew => $cert->{auto_renew} ? "Yes" : "No",
-		type => format_type($cert->{latest}->{type}),
+		type => format_type($latest ? $latest->{type} : $cert->{type}),
 		approver_email => $cert->{approver_email},
-		approval_email_from => $cert->{latest}->{approval_email_from},
+		approval_email_from => $latest ? $latest->{approval_email_from} : undef,
 	};
 }
 
