@@ -1708,8 +1708,14 @@ sub command_download {
 		# scan the key directory, populate @args for every .key file
 		my $key_directory = get_config('key_directory') // '.';
 		opendir(my $dh, $key_directory) or die "Error: unable to read key directory: $key_directory: $!\n";
-		push @args, map { s/\.key$//; $_ } grep { /\.key$/ } readdir($dh);
+		my @cns = map { s/\.key$//; $_ } grep { /\.key$/ } readdir($dh);
 		closedir($dh);
+
+		if (defined(my $wildcard_filename = get_config('wildcard_filename'))) {
+			@cns = map { s/^$wildcard_filename\./*./; $_ } @cns;
+		}
+
+		push @args, @cns;
 
 		if (@args == 0) {
 			print "No certificates to download.\n" unless $quiet;
