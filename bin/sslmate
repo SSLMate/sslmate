@@ -877,9 +877,9 @@ sub prompt_for_order_confirmation {
 	if (length $product_info->{description}) {
 		$desc = $product_info->{description};
 	} elsif (defined $product_info->{years}) {
-		$desc = ($product_info->{is_wildcard} ? "Wildcard SSL" : "Standard SSL");
+		$desc = ($product_info->{wildcard} ? "Wildcard SSL" : "Standard SSL");
 	} else {
-		$desc = "1 Year " . ($product_info->{is_wildcard} ? "Wildcard SSL" : "Standard SSL");
+		$desc = "1 Year " . ($product_info->{wildcard} ? "Wildcard SSL" : "Standard SSL");
 	}
 	if (defined $product_info->{years}) {
 		print "       Product: $desc\n";
