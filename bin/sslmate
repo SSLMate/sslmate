@@ -1056,6 +1056,10 @@ sub do_buy {
 	}
 	$cn = $cert->{cn}; # So that we use the canonical CN
 
+	if (!$cert->{dn}) {
+		print STDERR "Error: your account has no contact details set. Please visit https://sslmate.com/account to update your account.\n";
+		exit 1;
+	}
 	#
 	# 1. Make sure files/certs don't already exist
 	#
@@ -1091,6 +1095,14 @@ sub do_buy {
 		my $product_info = get_product_info('dv', $cn, years => $years, coupon_code => $opts{coupon_code}) or exit 1;
 		if ($product_info->{price}->{currency} ne "USD") {
 			print STDERR "Error: this version of the sslmate command does not support non-USD currencies. Please download a new version as per the instructions at https://sslmate.com.\n";
+			exit 1;
+		}
+		if ($product_info->{payment} && $product_info->{payment}->{method} eq 'none') {
+			print STDERR "Error: your account has no payment method on file. Please visit https://sslmate.com/account to update your account.\n";
+			exit 1;
+		}
+		if ($product_info->{payment} && $product_info->{payment}->{method} eq 'credit_card' && $product_info->{payment}->{credit_card}->{expired}) {
+			print STDERR "Error: your credit card is expired. Please visit https://sslmate.com/account to update your credit card.\n";
 			exit 1;
 		}
 
@@ -1348,6 +1360,11 @@ sub command_reissue {
 	}
 	$cn = $cert->{cn}; # So that we use the canonical CN
 
+	if (!$cert->{dn}) {
+		print STDERR "Error: your account has no contact details set. Please visit https://sslmate.com/account to update your account.\n";
+		exit 1;
+	}
+
 	if (not $cert->{exists}) {
 		print STDERR "Error: $cn: there is no certificate in your account with this common name.\n";
 		return 1;
@@ -1584,6 +1601,11 @@ sub command_renew {
 	}
 	$cn = $cert->{cn}; # So that we use the canonical CN
 
+	if (!$cert->{dn}) {
+		print STDERR "Error: your account has no contact details set. Please visit https://sslmate.com/account to update your account.\n";
+		exit 1;
+	}
+
 	my $files = get_cert_paths($cn);
 	my $pubkey_hash = undef;
 	if (-f $files->{key_filename} && -r $files->{key_filename}) {
@@ -1618,6 +1640,14 @@ sub command_renew {
 		my $product_info = get_product_info($cert->{type}, $cn, years => $years, coupon_code => $opts{coupon_code}) or exit 1;
 		if ($product_info->{price}->{currency} ne "USD") {
 			print STDERR "Error: this version of the sslmate command does not support non-USD currencies. Please download a new version as per the instructions at https://sslmate.com.\n";
+			exit 1;
+		}
+		if ($product_info->{payment} && $product_info->{payment}->{method} eq 'none') {
+			print STDERR "Error: your account has no payment method on file. Please visit https://sslmate.com/account to update your account.\n";
+			exit 1;
+		}
+		if ($product_info->{payment} && $product_info->{payment}->{method} eq 'credit_card' && $product_info->{payment}->{credit_card}->{expired}) {
+			print STDERR "Error: your credit card is expired. Please visit https://sslmate.com/account to update your credit card.\n";
 			exit 1;
 		}
 
@@ -2512,7 +2542,7 @@ sub do_import {
 	}
 
 	# 7. Generate the CSR
-	my $csr = openssl_req($source_key_path, $cert_obj->{dn});
+	my $csr = openssl_req($source_key_path, $cert_obj->{dn} // make_dn($cn));
 
 	if ($install_locally) {
 		$files->{key_file} = open_key_file($files->{key_filename}, $force) if defined $files->{key_filename};
