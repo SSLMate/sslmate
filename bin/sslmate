@@ -347,19 +347,18 @@ sub get_cert_paths {
 	return $paths;
 }
 
-sub check_for_existing_files {
+sub has_existing_files {
 	my @filenames = @_;
 
 	my $already_exists = 0;
 	for my $filename (@filenames) {
 		if (defined $filename && -e $filename) {
+			#print STDERR "Error: a file named '$filename' already exists. Please move/remove" . (!config_has("key_directory") && !config_has("cert_directory") ? " or run sslmate from a different directory" : "") . ".\n";
 			print STDERR "Error: a file named '$filename' already exists.\n";
 			$already_exists++;
 		}
 	}
-	if ($already_exists) {
-		die "Please move/remove " . ($already_exists == 1 ? "this file" : "these files") . (!config_has("key_directory") && !config_has("cert_directory") ? " or run sslmate from a different directory" : "") . ".\n";
-	}
+	return $already_exists;
 }
 
 sub open_key_file {
@@ -1056,12 +1055,24 @@ sub do_buy {
 	# 1. Make sure files/certs don't already exist
 	#
 	my $files = get_cert_paths($cn);
-	check_for_existing_files(@{$files}{qw{key_filename crt_filename chain_crt_filename chained_crt_filename}}) unless $force;
+	unless ($force) {
+		my $errors = 0;
 
-	if (not($force) && defined($cert->{pending})) {
-		print STDERR "Error: a certificate for $cn is already pending issuance.\n";
-		print STDERR "Tip: to resend or change the approver email for this certificate, use 'sslmate resend-email'.\n";
-		exit 1;
+		$errors += has_existing_files(@{$files}{qw{key_filename crt_filename chain_crt_filename chained_crt_filename}});
+		if (defined($cert->{pending})) {
+			print STDERR "Error: a certificate for $cn is already pending issuance.\n";
+			print STDERR "Tip: to resend or change a certificate's approver email, use 'sslmate resend-email'.\n";
+			$errors++;
+		}
+		if (defined($cert->{current}) && !$cert->{current}->{expiring}) {
+			print STDERR "Error: your account already has an active certificate for $cn.\n";
+			print STDERR "Tip: to reissue an existing certificate, use 'sslmate reissue'.\n";
+			$errors++;
+		}
+		if ($errors) {
+			print STDERR "Tip: use --force to override the above error" . ($errors == 1 ? "" : "s") . ".\n";
+			exit 1;
+		}
 	}
 
 	my $authorized_charge;
@@ -1176,7 +1187,7 @@ sub command_buy {
 		print "         sslmate buy '*.example.com'\n";
 		print "\n";
 		print "Valid options:\n";
-		print " -f, --force          overwrite existing files\n";
+		print " -f, --force          replace existing files, certificates\n";
 		print " --auto-renew         automatically renew this certificate before it expires\n";
 		print " --no-auto-renew      don't automatically renew this certificate\n";
 		print " --batch              don't prompt for confirmation\n";
@@ -1349,7 +1360,9 @@ sub command_reissue {
 	my $files = get_cert_paths($cn);
 	my $new_key_filename = $files->{key_filename} . ".new";
 
-	check_for_existing_files($new_key_filename) unless $force;
+	unless ($force) {
+		exit 1 if has_existing_files($new_key_filename);
+	}
 	$files->{key_file} = open_key_file($new_key_filename, $force);
 
 	my $orig_csr = $cert->{csr};
@@ -1485,6 +1498,7 @@ sub command_renew {
 		print "         sslmate renew '*.example.com'\n";
 		print "\n";
 		print "Valid options:\n";
+		print " -f, --force          replace existing files, certificates\n";
 		print " --batch              don't prompt for confirmation\n";
 		print " --no-wait            return immediately; don't wait for new cert to be issued\n";
 		print " --coupon=CODE        use the given coupon code for a discount\n";
@@ -1571,10 +1585,23 @@ sub command_renew {
 		$pubkey_hash = sha256_hex(extract_pubkey_from_key($files->{key_filename}));
 	}
 
-	if (not($force) && defined($cert->{pending})) {
-		print STDERR "Error: a certificate for $cn is already pending issuance.\n";
-		print STDERR "Tip: to resend or change the approver email for this certificate, use 'sslmate resend-email'.\n";
-		return 1;
+	unless ($force) {
+		my $errors = 0;
+
+		if (defined($cert->{pending})) {
+			print STDERR "Error: a certificate for $cn is already pending issuance.\n";
+			print STDERR "Tip: to resend or change a certificate's approver email, use 'sslmate resend-email'.\n";
+			$errors++;
+		}
+		if (defined($cert->{current}) && !$cert->{current}->{expiring}) {
+			print STDERR "Error: the certificate for $cn is not about to expire.\n";
+			print STDERR "Tip: to reissue an existing certificate, use 'sslmate reissue'.\n";
+			$errors++;
+		}
+		if ($errors) {
+			print STDERR "Tip: use --force to override the above error" . ($errors == 1 ? "" : "s") . ".\n";
+			exit 1;
+		}
 	}
 
 	my $authorized_charge;
@@ -2301,7 +2328,7 @@ sub command_import {
 		print "Example: sslmate import www.example.com.key www.example.com.crt\n";
 		print "\n";
 		print "Valid options:\n";
-		print " -f, --force        overwrite existing files\n";
+		print " -f, --force        replace existing files, certificates\n";
 		print " --auto-renew       automatically renew this certificate before it expires\n";
 		print " --no-auto-renew    don't automatically renew this certificate\n";
 		print " --no-install       don't copy the key/cert to the local key/cert directories\n";
@@ -2405,7 +2432,37 @@ sub do_import {
 	}
 	$cn = $cert_obj->{cn}; # So that we use the canonical CN
 
-	# 5. Get product info from the server, ask user to choose approver email (unless we're in batch mode)
+	# 5. Check for existing files/certs
+	my $files;
+	if ($install_locally) {
+		$files = get_cert_paths($cn);
+		if (realpath($source_key_path) eq realpath($files->{key_filename})) {
+			# Don't bother to write the key because it's already in place
+			delete $files->{key_filename};
+		}
+	}
+	unless ($force) {
+		my $errors = 0;
+
+		if ($install_locally) {
+			my @check_files = qw{key_filename chain_crt_filename chained_crt_filename};
+			if (realpath($source_crt_path) ne realpath($files->{crt_filename})) {
+				# Only care if .crt file exists if it's not the same file we're importing
+				push @check_files, 'crt_filename';
+			}
+			$errors += has_existing_files(@{$files}{@check_files});
+		}
+		if (defined($cert_obj->{current}) && $cert_obj->{current}->{expiration} >= $crt_info->{expiration}) {
+			print STDERR "Error: your account already has an active certificate for $cn.\n";
+			$errors++;
+		}
+		if ($errors) {
+			print STDERR "Tip: use --force to override the above error" . ($errors == 1 ? "" : "s") . ".\n";
+			exit 1;
+		}
+	}
+
+	# 6. Get product info from the server, ask user to choose approver email (unless we're in batch mode)
 	unless ($batch) {
 		my $product_info = get_product_info('dv', $cn) or exit 1;
 
@@ -2449,26 +2506,10 @@ sub do_import {
 		}
 	}
 
-	# 6. Generate the CSR
+	# 7. Generate the CSR
 	my $csr = openssl_req($source_key_path, $cert_obj->{dn});
 
-	# 7. Prepare the destination files
-	my $files;
 	if ($install_locally) {
-		$files = get_cert_paths($cn);
-		if (realpath($source_key_path) eq realpath($files->{key_filename})) {
-			# Don't bother to write the key because it's already in place
-			delete $files->{key_filename};
-		}
-		unless ($force) {
-			my @check_files = qw{key_filename chain_crt_filename chained_crt_filename};
-			if (realpath($source_crt_path) ne realpath($files->{crt_filename})) {
-				# Only care if .crt file exists if it's not the same file we're importing
-				push @check_files, 'crt_filename';
-			}
-			check_for_existing_files(@{$files}{@check_files});
-		}
-
 		$files->{key_file} = open_key_file($files->{key_filename}, $force) if defined $files->{key_filename};
 	}
 
