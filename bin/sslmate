@@ -1042,13 +1042,7 @@ sub do_buy {
 	# Future TODO: support reusing key file if one already exists
 
 	#
-	# 0. Make sure files don't already exist
-	#
-	my $files = get_cert_paths($cn);
-	check_for_existing_files(@{$files}{qw{key_filename crt_filename chain_crt_filename chained_crt_filename}}) unless $force;
-
-	#
-	# 1. Retrieve the current cert object from the server
+	# 0. Retrieve the current cert object from the server
 	#
 	my ($status, $cert);
 	($status, $cert) = authed_api_call('GET', '/certs/' . qs_escape($cn), { expand => ['current','pending','csr'] }) or exit 1;
@@ -1057,6 +1051,12 @@ sub do_buy {
 		exit 1;
 	}
 	$cn = $cert->{cn}; # So that we use the canonical CN
+
+	#
+	# 1. Make sure files/certs don't already exist
+	#
+	my $files = get_cert_paths($cn);
+	check_for_existing_files(@{$files}{qw{key_filename crt_filename chain_crt_filename chained_crt_filename}}) unless $force;
 
 	if (not($force) && defined($cert->{pending})) {
 		print STDERR "Error: a certificate for $cn is already pending issuance.\n";
@@ -1552,13 +1552,6 @@ sub command_renew {
 
 	init_default_paths;
 
-	my $files = get_cert_paths($cn);
-	my $pubkey_hash = undef;
-	if (-f $files->{key_filename} && -r $files->{key_filename}) {
-		$pubkey_hash = sha256_hex(extract_pubkey_from_key($files->{key_filename}));
-	}
-
-	
 	# Retrieve the current cert object from the server
 	my ($status, $cert);
 	($status, $cert) = authed_api_call('GET', '/certs/' . qs_escape($cn), { expand => ['current','pending'] }) or exit 1;
@@ -1571,6 +1564,12 @@ sub command_renew {
 		return 1;
 	}
 	$cn = $cert->{cn}; # So that we use the canonical CN
+
+	my $files = get_cert_paths($cn);
+	my $pubkey_hash = undef;
+	if (-f $files->{key_filename} && -r $files->{key_filename}) {
+		$pubkey_hash = sha256_hex(extract_pubkey_from_key($files->{key_filename}));
+	}
 
 	if (not($force) && defined($cert->{pending})) {
 		print STDERR "Error: a certificate for $cn is already pending issuance.\n";
