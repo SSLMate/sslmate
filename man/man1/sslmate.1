@@ -45,10 +45,16 @@ sslmate \- buy and manage SSL certificates
 \fBsslmate download \fR\fB\fIHOSTNAME\fR...\fR
 .HP \w'\fBsslmate\ download\ \fR\fB\-\-all\fR\ 'u
 \fBsslmate download \fR\fB\-\-all\fR
+.HP \w'\fBsslmate\ list\fR\ 'u
+\fBsslmate list\fR
+.HP \w'\fBsslmate\ edit\ \fR\fB\fIOPTIONS\fR...\fR\fB\ \fR\fB\fIHOSTNAME\fR\fR\ 'u
+\fBsslmate edit \fR\fB\fIOPTIONS\fR...\fR\fB \fR\fB\fIHOSTNAME\fR\fR
 .HP \w'\fBsslmate\ test\ \fR\fB\fIHOSTNAME\fR\fR\ 'u
 \fBsslmate test \fR\fB\fIHOSTNAME\fR\fR
 .HP \w'\fBsslmate\ mkconfig\ \fR\fB\fITEMPLATE\fR\fR\fB\ \fR\fB\fIHOSTNAME\fR\fR\ 'u
 \fBsslmate mkconfig \fR\fB\fITEMPLATE\fR\fR\fB \fR\fB\fIHOSTNAME\fR\fR
+.HP \w'\fBsslmate\ resend\-email\ \fR\fB\fIHOSTNAME\fR\fR\ 'u
+\fBsslmate resend\-email \fR\fB\fIHOSTNAME\fR\fR
 .HP \w'\fBsslmate\ link\fR\ 'u
 \fBsslmate link\fR
 .SH "DESCRIPTION"
@@ -78,11 +84,6 @@ the name of the sub\-command\&.
 Generate a private key and purchase a certificate for the given hostname/common name/CN\&.
 .sp
 The following options are understood:
-.PP
-\fB\-f\fR, \fB\-\-force\fR
-.RS 4
-Overwrite existing key and certificate files\&.
-.RE
 .PP
 \fB\-\-auto\-renew\fR, \fB\-\-no\-auto\-renew\fR
 .RS 4
@@ -138,6 +139,11 @@ Email the invoice for this purchase to the given address\&.
 By default, invoices are not emailed, but can be downloaded from your
 \m[blue]\fBonline SSLMate dashboard\fR\m[]\&\s-2\u[1]\d\s+2\&.
 .RE
+.PP
+\fB\-f\fR, \fB\-\-force\fR
+.RS 4
+Buy the certificate even if there are existing key and certificate files, or if an active certificate with this name already exists in your SSLMate account\&. Existing key and certificate files will be overwritten\&.
+.RE
 .RE
 .PP
 \fBrenew \fR\fB[\fIOPTIONS\fR]\fR\fB \fR\fB\fIHOSTNAME\fR\fR
@@ -162,6 +168,24 @@ command\&.
 .RS 4
 Use the given coupon code for a discount\&.
 .RE
+.PP
+\fB\-\-invoice\-note=\fR\fB\fINOTE\fR\fR
+.RS 4
+Include the given note with the invoice for this purchase\&.
+.RE
+.PP
+\fB\-\-email\-invoice\-to=\fR\fB\fIADDRESS\fR\fR
+.RS 4
+Email the invoice for this purchase to the given address\&.
+.sp
+By default, invoices are not emailed, but can be downloaded from your
+\m[blue]\fBonline SSLMate dashboard\fR\m[]\&\s-2\u[1]\d\s+2\&.
+.RE
+.PP
+\fB\-f\fR, \fB\-\-force\fR
+.RS 4
+Renew the certificate even if it\*(Aqs not about to expire\&. Note that the renewed certificate will expire one year from the current date, not from the expiration date of the current certificate\&.
+.RE
 .RE
 .PP
 \fBreissue \fR\fB[\fIOPTIONS\fR]\fR\fB \fR\fB\fIHOSTNAME\fR\fR
@@ -176,16 +200,16 @@ command to revoke a certificate after you have reissued it\&.
 .sp
 The following options are understood:
 .PP
-\fB\-f\fR, \fB\-\-force\fR
-.RS 4
-Overwrite existing files\&.
-.RE
-.PP
 \fB\-\-no\-wait\fR
 .RS 4
 Return immediately after requesting the reissue instead of waiting for the new certificate to be issued\&. If this option is used, no certificate files are downloaded; instead the new certificate must be downloaded separately with the
 \fBsslmate download\fR
 command\&.
+.RE
+.PP
+\fB\-f\fR, \fB\-\-force\fR
+.RS 4
+Overwrite existing files\&.
 .RE
 .RE
 .PP
@@ -220,6 +244,17 @@ the
 option\&. Only use
 \fB\-\-all\fR
 if you no longer need any certificates for a hostname\&.
+.sp
+You will be prompted for confirmation unless you also specify the
+\fB\-\-batch\fR
+option\&.
+.RE
+.PP
+\fB\-\-batch\fR
+.RS 4
+Don\*(Aqt prompt for confirmation if
+\fB\-\-all\fR
+is used\&.
 .RE
 .RE
 .PP
@@ -258,6 +293,99 @@ If this option is used, specific hostnames cannot be specified on the command li
 If the certificate has not been issued yet, download a temporary, self\-signed, certificate instead\&. See the documentation for
 \fBsslmate buy\fR
 for more information about temporary certificates\&.
+.RE
+.RE
+.PP
+\fBlist \fR\fB[\fIOPTIONS\fR]\fR
+.RS 4
+List the certificates in your SSLMate account\&.
+.sp
+The following options are understood:
+.PP
+\fB\-\-local\fR
+.RS 4
+List only certificates that are also installed locally\&.
+.RE
+.PP
+\fB\-\-no\-local\fR
+.RS 4
+List only certificates that are
+\fInot\fR
+installed locally\&.
+.RE
+.PP
+\fB\-c \fR\fB\fICOLUMNS\fR\fR, \fB\-\-columns=\fR\fB\fICOLUMNS\fR\fR
+.RS 4
+Include the given columns in the output, where
+\fICOLUMNS\fR
+is a comma\-separated list of the following column names:
+.PP
+name
+.RS 4
+The certificate\*(Aqs common name\&.
+.RE
+.PP
+status
+.RS 4
+The certificate\*(Aqs status\&.
+.RE
+.PP
+expiration
+.RS 4
+The certificate\*(Aqs expiration date, in YYYY\-MM\-DD format\&.
+.RE
+.PP
+local_status
+.RS 4
+The status of the locally\-installed copy of the certificate ("Installed", "Temporary", "Mismatched key", "No key file", "Out\-of\-date", or "None")\&.
+.RE
+.PP
+fingerprint
+.RS 4
+The certificate\*(Aqs SHA\-1 fingerprint, in uppercase hex with octets separated by colons\&.
+.RE
+.PP
+sha256_fingerprint
+.RS 4
+The certificate\*(Aqs SHA\-256 fingerprint, in uppercase hex with octets separated by colons\&.
+.RE
+.PP
+auto_renew
+.RS 4
+The certificate\*(Aqs auto\-renew setting\&.
+.RE
+.PP
+approver_email
+.RS 4
+The approver email address\&.
+.RE
+.RE
+.PP
+\fB\-z\fR
+.RS 4
+Generate machine\-parseable output, in which columns and lines are separated by a NUL character\&. You must explicitly enumerate the columns you want with the
+\fB\-\-columns\fR\&.
+.RE
+.RE
+.PP
+\fBedit \fR\fB\fIOPTIONS\fR...\fR\fB \fR\fB\fIHOSTNAME\fR\fR
+.RS 4
+Change one or more setting of the given certificate\&. The settings are specified by the
+\fIOPTIONS\fR
+arguments, as described below\&. Every setting is optional; if omitted, the setting is left unchanged\&.
+.PP
+\fB\-\-email=\fR\fB\fIADDRESS\fR\fR
+.RS 4
+Change the approver email address of this certificate\&. The new address will be used for approving future reissues and renewals of the certificate\&. If the certificate is currently pending approval, the approval email will be resent to the new address\&.
+.sp
+The new address must be one of the acceptable addresses that is listed when you run
+\fBsslmate buy\fR
+for this host name\&.
+.RE
+.PP
+\fB\-\-auto\-renew\fR, \fB\-\-no\-auto\-renew\fR
+.RS 4
+Enable or disable auto\-renew for this certificate\&.
 .RE
 .RE
 .PP
@@ -307,6 +435,22 @@ Output a list of available configuration templates\&. No other arguments are req
 \fB\-\-no\-security\fR
 .RS 4
 Don\*(Aqt include recommended security settings\&. Output only the bare minimum configuration needed to use the certificate\&.
+.RE
+.RE
+.PP
+\fBresend\-email \fR\fB[\fIOPTIONS\fR]\fR\fB \fR\fB\fIHOSTNAME\fR\fR
+.RS 4
+Resend the approval email of a certificate that\*(Aqs pending approval\&.
+.PP
+\fB\-\-email=\fR\fB\fIADDRESS\fR\fR
+.RS 4
+Change the certificate\*(Aqs approver address to
+\fIADDRESS\fR
+and resend the email there\&.
+.sp
+The new address must be one of the acceptable addresses that is listed when you run
+\fBsslmate buy\fR
+for this host name\&.
 .RE
 .RE
 .PP
@@ -387,10 +531,10 @@ environment variable\&.
 .PP
 The following options are understood:
 .PP
-\fBaccount_id \fR\fB\fIID\fR\fR, \fBapi_key \fR\fB\fIKEY\fR\fR
+\fBapi_key \fR\fB\fIKEY\fR\fR
 .RS 4
-Your API credentials, which can be found on your
-\m[blue]\fBonline SSLMate account page\fR\m[]\&\s-2\u[3]\d\s+2\&. These options are automatically set when you run
+Your API key, which can be found on your
+\m[blue]\fBonline SSLMate account page\fR\m[]\&\s-2\u[3]\d\s+2\&. This option is automatically set (in your personal configuration file) when you run
 \fBsslmate link\fR\&.
 .RE
 .PP
@@ -405,6 +549,13 @@ places keys and certificates\&. When running as root, the default is
 \fBhonor_umask yes | no\fR
 .RS 4
 By default, sslmate creates certificate files with 644 permissions and key files with 600 permissions\&. If this option is set to yes, sslmate honors your umask when creating files\&. Note that key files are never created with group or world permissions, even if this option is set to yes\&.
+.RE
+.PP
+\fBwildcard_filename \fR\fB\fIPREFIX\fR\fR
+.RS 4
+When creating files for wildcard certificates, use
+\fIPREFIX\fR
+in the filename instead of a * character\&.
 .RE
 .PP
 \fBapi_endpoint \fR\fB\fIURI\fR\fR
