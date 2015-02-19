@@ -2207,7 +2207,7 @@ sub command_edit {
 
 	if (defined($cert->{pending}) && defined($approver_email)) {
 		print "Resending approval email to $approver_email... ";
-		my ($status, $response) = authed_api_call('POST',  '/certs/' . qs_escape($cn) . '/resend_approval_email', undef, {}) or return 1;
+		my ($status, $response) = authed_api_call('POST',  '/certs/' . qs_escape($cn) . '/redo_approval', undef, {}) or return 1;
 		if ($status != 200) {
 			print "\n";
 			print STDERR "Error resending approval email: " . $response->{message} . "\n";
@@ -2267,7 +2267,7 @@ sub command_resend_email {
 	}
 
 	print "Resending approval email...\n";
-	my ($status, $response) = authed_api_call('POST',  '/certs/' . qs_escape($cn) . '/resend_approval_email', undef, {}) or return 1;
+	my ($status, $response) = authed_api_call('POST',  '/certs/' . qs_escape($cn) . '/redo_approval', undef, {}) or return 1;
 	if ($status != 200) {
 		print STDERR "Error: " . $response->{message} . "\n";
 		return 1;
