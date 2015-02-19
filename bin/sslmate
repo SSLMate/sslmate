@@ -1458,7 +1458,11 @@ sub command_revoke {
 		return 1;
 	}
 
-	if ($response->{num_revoked} == 0 && $response->{num_active} == 0) {
+	if ($response->{num_imported} > 0) {
+		print STDERR "Error: the certificate for '$cn' was imported.\n";
+		print STDERR "To revoke this cert, please contact the vendor where you purchased it.\n";
+		return 1;
+	} elsif ($response->{num_revoked} == 0 && $response->{num_active} == 0) {
 		print STDERR "Error: your account contains no active certificates for '$cn'.\n";
 		return 1;
 	} elsif ($response->{num_revoked} == 0) {
