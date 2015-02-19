@@ -1051,12 +1051,18 @@ sub do_buy {
 	# 1. Retrieve the current cert object from the server
 	#
 	my ($status, $cert);
-	($status, $cert) = authed_api_call('GET', '/certs/' . qs_escape($cn), { expand => ['current'] }) or exit 1;
+	($status, $cert) = authed_api_call('GET', '/certs/' . qs_escape($cn), { expand => ['current','pending','csr'] }) or exit 1;
 	if ($status != 200) {
 		print STDERR "Error: " . $cert->{message} . "\n";
 		exit 1;
 	}
 	$cn = $cert->{cn}; # So that we use the canonical CN
+
+	if (not($force) && defined($cert->{pending})) {
+		print STDERR "Error: a certificate for $cn is already pending issuance.\n";
+		print STDERR "Tip: to resend or change the approver email for this certificate, use 'sslmate resend-email'.\n";
+		exit 1;
+	}
 
 	my $authorized_charge;
 	my $authorized_charge_currency;
@@ -1097,8 +1103,10 @@ sub do_buy {
 	#
 	$files->{key_file} = open_key_file($files->{key_filename}, $force);
 
+	my $orig_csr = $cert->{csr};
 	my $exit_with_error = sub {
 		unlink($files->{key_filename});
+		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, { csr => $orig_csr }) if defined($orig_csr);
 		exit 1;
 	};
 
@@ -1123,6 +1131,7 @@ sub do_buy {
 	($status, $cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), undef, $request) or $exit_with_error->();
 	if ($status != 200) {
 		print STDERR "Error: " . $cert->{message} . "\n";
+		$orig_csr = undef;
 		$exit_with_error->();
 	}
 
@@ -1316,7 +1325,7 @@ sub command_reissue {
 	init_default_paths;
 
 	# 1. Retrieve the current cert object from the server
-	my ($cert_status, $cert) = authed_api_call('GET', '/certs/' . qs_escape($cn), { 'expand' => [ 'current' ] }) or return 1;
+	my ($cert_status, $cert) = authed_api_call('GET', '/certs/' . qs_escape($cn), { 'expand' => [ 'current', 'pending', 'csr' ] }) or return 1;
 	if ($cert_status != 200) {
 		print STDERR "Error: " . $cert->{message} . "\n";
 		return 1;
@@ -1328,7 +1337,7 @@ sub command_reissue {
 		return 1;
 	}
 	if (not defined $cert->{current}) {
-		print STDERR "Error: this certificate is not active.  Only active (non-expired, non-pending) certs may be reissued.\n";
+		print STDERR "Error: this certificate is not active.  Only active (non-expired, non-pending) certs may be reissued.  Please purchase a new certificate with 'sslmate buy'.\n";
 		return 1;
 	}
 	if ($cert->{current}->{source} eq 'import') {
@@ -1343,8 +1352,10 @@ sub command_reissue {
 	check_for_existing_files($new_key_filename) unless $force;
 	$files->{key_file} = open_key_file($new_key_filename, $force);
 
+	my $orig_csr = $cert->{csr};
 	my $exit_with_error = sub {
 		unlink($new_key_filename);
+		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, { csr => $orig_csr }) if defined($orig_csr);
 		exit 1;
 	};
 
@@ -1364,6 +1375,7 @@ sub command_reissue {
 	($cert_status, $cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), undef, { csr => $csr }) or $exit_with_error->();
 	if ($cert_status != 200) {
 		print STDERR "Error: " . $cert->{message} . "\n";
+		$orig_csr = undef;
 		$exit_with_error->();
 	}
 
@@ -1481,9 +1493,10 @@ sub command_renew {
 	my %opts;
 	my $batch = 0;
 	my $no_wait = 0;
+	my $force = 0;
 	while (@args >= 1) {
 		if ($args[0] eq "-f" || $args[0] eq "--force") {
-			# Ignored for backwards compatibility with pre-0.5.0
+			$force = 1;
 			shift @args;
 		} elsif ($args[0] =~ /^--coupon=(.*)$/) {
 			$opts{coupon_code} = $1;
@@ -1544,7 +1557,7 @@ sub command_renew {
 	
 	# Retrieve the current cert object from the server
 	my ($status, $cert);
-	($status, $cert) = authed_api_call('GET', '/certs/' . qs_escape($cn), { expand => ['current'] }) or exit 1;
+	($status, $cert) = authed_api_call('GET', '/certs/' . qs_escape($cn), { expand => ['current','pending'] }) or exit 1;
 	if ($status != 200) {
 		print STDERR "Error: " . $cert->{message} . "\n";
 		exit 1;
@@ -1554,7 +1567,12 @@ sub command_renew {
 		return 1;
 	}
 	$cn = $cert->{cn}; # So that we use the canonical CN
-	# TODO TODO: check to make sure cert is active, expiring soon, etc. ?
+
+	if (not($force) && defined($cert->{pending})) {
+		print STDERR "Error: a certificate for $cn is already pending issuance.\n";
+		print STDERR "Tip: to resend or change the approver email for this certificate, use 'sslmate resend-email'.\n";
+		return 1;
+	}
 
 	my $authorized_charge;
 	my $authorized_charge_currency;
