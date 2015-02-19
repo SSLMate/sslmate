@@ -634,6 +634,11 @@ sub openssl_genrsa {
 	die "Error: 'openssl genrsa' command failed.\n" unless $? == 0;
 }
 
+sub make_dn {
+	my ($cn, $country_code) = @_;
+	return { CN => $cn, C => $country_code // 'US', ST => 'Some-State', O => 'Internet Widgits Pty Ltd' };
+}
+
 sub openssl_req {
 	my ($key_filename, $dn) = @_;
 
@@ -1674,7 +1679,7 @@ sub command_req {
 		return 0;
 	}
 
-	my $country_code = 'US';
+	my $country_code;
 	my $force = 0;
 	while (@args >= 1) {
 		if ($args[0] eq "-f" || $args[0] eq "--force") {
@@ -1720,7 +1725,7 @@ sub command_req {
 
 	# 2. Generate the CSR
 	print "Generating CSR... "; STDOUT->flush;
-	print $csr_file openssl_req("$cn.key", { CN => $cn, C => $country_code, ST => 'Some-State', O => 'Internet Widgits Pty Ltd' });
+	print $csr_file openssl_req("$cn.key", make_dn($cn, $country_code));
 	close($csr_file);
 	print "$cn.csr\n";
 
