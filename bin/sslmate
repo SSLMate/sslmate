@@ -862,6 +862,24 @@ sub prompt_for_approver_email {
 	}
 }
 
+sub order_can_be_paid {
+	my ($product_info) = @_;
+
+	if ($product_info->{price}->{currency} ne "USD") {
+		print STDERR "Error: this version of the sslmate command does not support non-USD currencies. Please download a new version as per the instructions at https://sslmate.com.\n";
+		return 0;
+	}
+	if ($product_info->{payment} && $product_info->{payment}->{method} eq 'none') {
+		print STDERR "Error: your account has no payment method on file. Please visit https://sslmate.com/account to update your account.\n";
+		return 0;
+	}
+	if ($product_info->{payment} && $product_info->{payment}->{method} eq 'credit_card' && $product_info->{payment}->{credit_card}->{expired}) {
+		print STDERR "Error: your credit card is expired. Please visit https://sslmate.com/account to update your credit card.\n";
+		return 0;
+	}
+	return 1;
+}
+
 sub prompt_for_order_confirmation {
 	my ($product_info, %other_info) = @_;
 
@@ -1093,18 +1111,8 @@ sub do_buy {
 		#
 
 		my $product_info = get_product_info('dv', $cn, years => $years, coupon_code => $opts{coupon_code}) or exit 1;
-		if ($product_info->{price}->{currency} ne "USD") {
-			print STDERR "Error: this version of the sslmate command does not support non-USD currencies. Please download a new version as per the instructions at https://sslmate.com.\n";
-			exit 1;
-		}
-		if ($product_info->{payment} && $product_info->{payment}->{method} eq 'none') {
-			print STDERR "Error: your account has no payment method on file. Please visit https://sslmate.com/account to update your account.\n";
-			exit 1;
-		}
-		if ($product_info->{payment} && $product_info->{payment}->{method} eq 'credit_card' && $product_info->{payment}->{credit_card}->{expired}) {
-			print STDERR "Error: your credit card is expired. Please visit https://sslmate.com/account to update your credit card.\n";
-			exit 1;
-		}
+
+		exit 1 unless order_can_be_paid($product_info);
 
 		if (defined $approver_email) {
 			if (!grep { $_ eq $approver_email } @{$product_info->{approver_emails}}) {
@@ -1638,18 +1646,8 @@ sub command_renew {
 		# Get product/pricing info from the server, ask user for confirmation
 
 		my $product_info = get_product_info($cert->{type}, $cn, years => $years, coupon_code => $opts{coupon_code}) or exit 1;
-		if ($product_info->{price}->{currency} ne "USD") {
-			print STDERR "Error: this version of the sslmate command does not support non-USD currencies. Please download a new version as per the instructions at https://sslmate.com.\n";
-			exit 1;
-		}
-		if ($product_info->{payment} && $product_info->{payment}->{method} eq 'none') {
-			print STDERR "Error: your account has no payment method on file. Please visit https://sslmate.com/account to update your account.\n";
-			exit 1;
-		}
-		if ($product_info->{payment} && $product_info->{payment}->{method} eq 'credit_card' && $product_info->{payment}->{credit_card}->{expired}) {
-			print STDERR "Error: your credit card is expired. Please visit https://sslmate.com/account to update your credit card.\n";
-			exit 1;
-		}
+
+		exit 1 unless order_can_be_paid($product_info);
 
 		prompt_for_order_confirmation($product_info,
 					      approver_email => $cert->{approver_email},
