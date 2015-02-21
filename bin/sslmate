@@ -1019,15 +1019,17 @@ sub command_link {
 sub do_wait_for_cert {
 	my ($cn, $cert_instance, $no_wait, $accept_dummy, $files, $new_key_filename) = @_;
 
-	print "You will soon receive an email at " . $cert_instance->{approver_email} . " from " . $cert_instance->{approval_email_from} . ". Follow the instructions in the email to verify your ownership of your domain.\n\n";
+	if ($cert_instance->{approval_method} eq 'email') {
+		print "You will soon receive an email at " . $cert_instance->{approver_email} . " from " . $cert_instance->{approval_email_from} . ". Follow the instructions in the email to verify your ownership of your domain.\n\n";
 
-	if ($no_wait) {
-		print "Once you've verified ownership, you will be able to download your certificate with the 'sslmate download' command.\n";
-		return 0;
-	} elsif ($accept_dummy) {
-		print "Once you've verified ownership, you will be able to download your certificate with the 'sslmate download' command.  In the meantime, you can configure your server with the temporary certificate, but this certificate will NOT be trusted by clients.\n";
-	} else {
-		print "Once you've verified ownership, your certificate will be automatically downloaded.  If you'd rather do this later, press Ctrl+C and download your certificate with the 'sslmate download' command instead.\n\n";
+		if ($no_wait) {
+			print "Once you've verified ownership, you will be able to download your certificate with the 'sslmate download' command.\n";
+			return 0;
+		} elsif ($accept_dummy) {
+			print "Once you've verified ownership, you will be able to download your certificate with the 'sslmate download' command.  In the meantime, you can configure your server with the temporary certificate, but this certificate will NOT be trusted by clients.\n";
+		} else {
+			print "Once you've verified ownership, your certificate will be automatically downloaded.  If you'd rather do this later, press Ctrl+C and download your certificate with the 'sslmate download' command instead.\n\n";
+		}
 	}
 
 	print "Waiting for ownership confirmation...\n" unless $accept_dummy;
@@ -1160,6 +1162,7 @@ sub do_buy {
 	# 3. Create/update the cert object on the server
 	#
 	my $request = {	auto_renew	=> $auto_renew,
+			approval_method	=> 'email',
 			approver_email	=> $approver_email,
 			csr		=> $csr };
 
@@ -2194,6 +2197,7 @@ sub command_edit {
 
 	my $request = {
 		auto_renew => $auto_renew,
+		approval_method => defined($approver_email) ? 'email' : undef,
 		approver_email => $approver_email,
 	};
 
@@ -2257,7 +2261,7 @@ sub command_resend_email {
 	}
 
 	if (defined $approver_email) {
-		my ($cert_status, $cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), undef, { approver_email => $approver_email }) or return 1;
+		my ($cert_status, $cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), undef, { approval_method => 'email', approver_email => $approver_email }) or return 1;
 		if ($cert_status != 200) {
 			print STDERR "Error: " . $cert->{message} . "\n";
 			return 1;
@@ -2553,6 +2557,7 @@ sub do_import {
 
 	# 8. Create/update the cert object on the server
 	my $request = {	auto_renew	=> $auto_renew,
+			approval_method	=> 'email',
 			approver_email	=> $approver_email,
 			csr		=> \$csr };
 
