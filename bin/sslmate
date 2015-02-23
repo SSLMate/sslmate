@@ -66,6 +66,8 @@ our %global_config;
 our %personal_config;
 our %ephemeral_config;
 our $curl;
+our $http_approval_map;
+our $dns_approval_map;
 
 sub print_usage {
 	my ($out) = @_;
@@ -618,6 +620,116 @@ sub authed_api_call {
 	return api_call($method, $command, default_api_credentials, $query_string, $post_data);
 }
 
+sub load_approval_map {
+	my ($type) = @_;
+
+	my $param = $type . '_approval_map';
+	my $path = get_config($param);
+	if (not defined $path) {
+		print STDERR "Error: configuration parameter $param not set - cannot perform $type approval.\n";
+		return undef;
+	}
+	my $fh;
+	if (not open($fh, '<', $path)) {
+		print STDERR "Error: cannot open $path ($!) - cannot perform $type approval.\n";
+		return undef;
+	}
+	my $map = {};
+	for my $line (<$fh>) {
+		chomp $line;
+		my ($hostname, $command, @params) = split(' ', $line);
+		$map->{$hostname} = { command => $command, params => \@params };
+	}
+	return $map;
+}
+
+sub exec_approval_method {
+	my ($method, @args) = @_;
+	local %ENV = %ENV;
+
+	$ENV{NUM_PARAMS} = scalar @{$method->{params}};
+	my $i = 0;
+	for my $param (@{$method->{params}}) {
+		$ENV{"PARAM_$i"} = $param;
+		$i++;
+	}
+	system($method->{command}, @args);
+	return $? == 0;
+}
+
+sub prepare_http_approval {
+	my ($action, $cn, $options) = @_;
+	$http_approval_map //= load_approval_map('http');
+	return 0 unless defined($http_approval_map);
+	for my $option (@$options) {
+		my $method = $http_approval_map->{$option->{hostname}};
+		next unless defined $method;
+		next unless exec_approval_method($method, $action, @$option{qw{hostname path content}});
+		return 1;
+	}
+	print STDERR "Error: no HTTP approval method available for $cn.\n";
+	return 0;
+}
+
+sub prepare_dns_approval {
+	my ($action, $cn, $options) = @_;
+	$dns_approval_map //= load_approval_map('dns');
+	return 0 unless defined($dns_approval_map);
+	for my $option (@$options) {
+		my $name = $option->{name};
+		my $method;
+		while (!defined($method) && $name ne '') {
+			$method = $dns_approval_map->{$name};
+			$name =~ s/^[^.]*\.//;
+		}
+		next unless defined $method;
+		next unless exec_approval_method($method, $action, @$option{qw{name type value}});
+		return 1;
+	}
+	print STDERR "Error: no DNS approval method available for $cn.\n";
+	return 0;
+}
+
+sub compare_approval_option {
+	my ($a, $b) = @_;
+	for my $key (keys %$a, keys %$b) {
+		return 0 unless exists($a->{$key}) && exists($b->{$key});
+		return 0 unless $a->{$key} eq $b->{$key};
+	}
+	return 1;
+}
+
+sub compare_approval_options {
+	my ($a, $b) = @_;
+	return 0 unless @$a == @$b;
+	for my $i (1..@$a-1) {
+		return 0 unless compare_approval_option($a->[$i], $b->[$i]);
+	}
+	return 1;
+}
+
+sub prepare_approval {
+	my ($old_cert, $new_cert) = @_;
+
+	if ($old_cert->{exists} && $old_cert->{approval_method} eq 'http') {
+		if ($new_cert->{approval_method} ne 'http' ||
+				!compare_approval_options($old_cert->{http_approval}, $new_cert->{http_approval})) {
+			prepare_http_approval('del', $old_cert->{cn}, $old_cert->{http_approval});
+		}
+	} elsif ($old_cert->{exists} && $old_cert->{approval_method} eq 'dns') {
+		if ($new_cert->{approval_method} ne 'dns' ||
+				!compare_approval_options($old_cert->{dns_approval}, $new_cert->{dns_approval})) {
+			prepare_dns_approval('del', $old_cert->{cn}, $old_cert->{dns_approval});
+		}
+	}
+	if ($new_cert->{approval_method} eq 'http') {
+		prepare_http_approval('add', $new_cert->{cn}, $new_cert->{http_approval}) or return 0;
+	} elsif ($new_cert->{approval_method} eq 'dns') {
+		prepare_dns_approval('add', $new_cert->{cn}, $new_cert->{dns_approval}) or return 0;
+	}
+	return 1;
+}
+
 sub openssl_genrsa {
 	my ($key_file, $nbits) = @_;
 
@@ -1167,12 +1279,14 @@ sub do_buy {
 			csr		=> $csr };
 
 	print "Placing order...\n";
-	($status, $cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), undef, $request) or $exit_with_error->();
+	($status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), undef, $request) or $exit_with_error->();
 	if ($status != 200) {
-		print STDERR "Error: " . $cert->{message} . "\n";
+		print STDERR "Error: " . $new_cert->{message} . "\n";
 		$orig_csr = undef;
 		$exit_with_error->();
 	}
+
+	prepare_approval($cert, $new_cert) or $exit_with_error->();
 
 	#
 	# 4. Buy the certificate from SSLMate
@@ -1418,12 +1532,13 @@ sub command_reissue {
 
 	# 4. Update the CSR server-side
 	print "Reissuing cert...\n";
-	($cert_status, $cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), undef, { csr => $csr }) or $exit_with_error->();
+	($cert_status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), undef, { csr => $csr }) or $exit_with_error->();
 	if ($cert_status != 200) {
-		print STDERR "Error: " . $cert->{message} . "\n";
+		print STDERR "Error: " . $new_cert->{message} . "\n";
 		$orig_csr = undef;
 		$exit_with_error->();
 	}
+	prepare_approval($cert, $new_cert) or $exit_with_error->();
 
 	# 5. Reissue the certificate
 	my ($reissue_status, $cert_instance) = authed_api_call('POST', '/certs/' . qs_escape($cn) . '/reissue') or $exit_with_error->();
@@ -1660,6 +1775,7 @@ sub command_renew {
 		$authorized_charge = $product_info->{price}->{amount_due};
 	}
 
+	my $new_cert;
 	if (defined $pubkey_hash && $cert->{pubkey_hash} ne $pubkey_hash) {
 		# The locally-installed key is out of sync with the key registered with the server.
 		# So, generate a CSR from the locally-installed key and register it with the server.
@@ -1667,12 +1783,15 @@ sub command_renew {
 		my $csr = openssl_req($files->{key_filename}, $cert->{dn});
 		print "Done.\n";
 
-		($status, $cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), undef, { csr => \$csr }) or exit 1;
+		($status, $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), undef, { csr => \$csr }) or exit 1;
 		if ($status != 200) {
-			print STDERR "Error: " . $cert->{message} . "\n";
+			print STDERR "Error: " . $new_cert->{message} . "\n";
 			exit 1;
 		}
+	} else {
+		$new_cert = $cert;
 	}
+	prepare_approval($cert, $new_cert) or exit 1;
 
 	# Renew the certificate
 	print "Placing order...\n";
@@ -2195,18 +2314,35 @@ sub command_edit {
 		do_link or return 1;
 	}
 
+	#
+	# Retrieve current cert object from server
+	#
+	my ($cert_status, $cert) = authed_api_call('GET', '/certs/' . qs_escape($cn)) or return 1;
+	if ($cert_status != 200) {
+		print STDERR "Error: " . $cert->{message} . "\n";
+		return 1;
+	}
+	$cn = $cert->{cn}; # So that we use the canonical CN
+
+	#
+	# Update the cert object on the server
+	#
 	my $request = {
 		auto_renew => $auto_renew,
 		approval_method => defined($approver_email) ? 'email' : undef,
 		approver_email => $approver_email,
 	};
 
-	my ($cert_status, $cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['pending'] }, $request) or return 1;
+	($cert_status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['pending'] }, $request) or return 1;
 	if ($cert_status != 200) {
-		print STDERR "Error: " . $cert->{message} . "\n";
+		print STDERR "Error: " . $new_cert->{message} . "\n";
 		return 1;
 	}
+	prepare_approval($cert, $new_cert) or return 1;
 
+	#
+	# If this cert is pending, and we just changed the approver email, resend the approval email
+	#
 	if (defined($cert->{pending}) && defined($approver_email)) {
 		print "Resending approval email to $approver_email... ";
 		my ($status, $response) = authed_api_call('POST',  '/certs/' . qs_escape($cn) . '/redo_approval', undef, {}) or return 1;
@@ -2261,11 +2397,20 @@ sub command_resend_email {
 	}
 
 	if (defined $approver_email) {
-		my ($cert_status, $cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), undef, { approval_method => 'email', approver_email => $approver_email }) or return 1;
+		# Retrieve current cert object from server
+		my ($cert_status, $cert) = authed_api_call('GET', '/certs/' . qs_escape($cn)) or return 1;
 		if ($cert_status != 200) {
 			print STDERR "Error: " . $cert->{message} . "\n";
 			return 1;
 		}
+
+		# Update the cert object on the server
+		($cert_status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), undef, { approval_method => 'email', approver_email => $approver_email }) or return 1;
+		if ($cert_status != 200) {
+			print STDERR "Error: " . $new_cert->{message} . "\n";
+			return 1;
+		}
+		prepare_approval($cert, $new_cert) or return 1;
 	}
 
 	print "Resending approval email...\n";
@@ -2562,11 +2707,13 @@ sub do_import {
 			csr		=> \$csr };
 
 	print "Importing certificate for $cn...\n";
-	($status, $cert_obj) = authed_api_call('POST', '/certs/' . qs_escape($cn), undef, $request) or $exit_with_error->();
+	($status, my $new_cert_obj) = authed_api_call('POST', '/certs/' . qs_escape($cn), undef, $request) or $exit_with_error->();
 	if ($status != 200) {
-		print STDERR "Error: " . $cert_obj->{message} . "\n";
+		print STDERR "Error: " . $new_cert_obj->{message} . "\n";
 		$exit_with_error->();
 	}
+
+	prepare_approval($cert_obj, $new_cert_obj) or $exit_with_error->();
 
 	# 9. Create a new cert instance with this crt file
 	my $cert_instance;
