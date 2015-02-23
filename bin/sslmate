@@ -1201,7 +1201,7 @@ sub do_wait_for_cert {
 }
 
 sub do_buy {
-	my ($cn, $years, $force, $no_wait, $accept_dummy, $auto_renew, $batch, $approver_email, %opts) = @_;
+	my ($cn, $years, $force, $no_wait, $accept_dummy, $auto_renew, $batch, $approval_method, $approver_email, %opts) = @_;
 
 	# Future TODO: support reusing key file if one already exists
 
@@ -1256,16 +1256,18 @@ sub do_buy {
 
 		exit 1 unless order_can_be_paid($product_info);
 
-		if (defined $approver_email) {
-			if (!grep { $_ eq $approver_email } @{$product_info->{approver_emails}}) {
-				print STDERR "Error: $approver_email: not an acceptable approver email for $cn\n";
-				exit 1;
+		if ($approval_method eq 'email') {
+			if (defined $approver_email) {
+				if (!grep { $_ eq $approver_email } @{$product_info->{approver_emails}}) {
+					print STDERR "Error: $approver_email: not an acceptable approver email for $cn\n";
+					exit 1;
+				}
+			} else {
+				print "We need to send you an email to verify that you own this domain.\n";
+				print "Where should we send this email?\n";
+				print "\n";
+				$approver_email = prompt_for_approver_email($product_info->{approver_emails}) or exit 1;
 			}
-		} else {
-			print "We need to send you an email to verify that you own this domain.\n";
-			print "Where should we send this email?\n";
-			print "\n";
-			$approver_email = prompt_for_approver_email($product_info->{approver_emails}) or exit 1;
 		}
 
 		prompt_for_order_confirmation($product_info,
@@ -1302,7 +1304,7 @@ sub do_buy {
 	# 3. Create/update the cert object on the server
 	#
 	my $request = {	auto_renew	=> $auto_renew,
-			approval_method	=> 'email',
+			approval_method	=> $approval_method,
 			approver_email	=> $approver_email,
 			csr		=> $csr };
 
@@ -1375,6 +1377,7 @@ sub command_buy {
 	my $auto_renew = undef;
 	my $force = 0;
 	my $batch = 0;
+	my $approval_method = 'email';
 	my $approver_email = undef;
 	my $no_wait = 0;
 	my $accept_dummy = 0;
@@ -1399,6 +1402,9 @@ sub command_buy {
 			shift @args;
 		} elsif ($args[0] eq "--batch") {
 			$batch = 1;
+			shift @args;
+		} elsif ($args[0] =~ /^--approval=(.*)$/) {
+			$approval_method = $1;
 			shift @args;
 		} elsif ($args[0] =~ /^--email=(.*)$/) {
 			$approver_email = $1;
@@ -1425,7 +1431,11 @@ sub command_buy {
 		print STDERR "Error: --no-wait and --temp are mutually exclusive.\n";
 		return 2;
 	}
-	if ($batch && not defined($approver_email)) {
+	if (defined($approver_email) && $approval_method ne 'email') {
+		print STDERR "Error: --email is only valid with --approval=email.\n";
+		return 2;
+	}
+	if ($batch && $approval_method eq 'email' && not defined($approver_email)) {
 		print STDERR "Error: in batch mode, you must specify the approver email with --email.\n";
 		print STDERR "See 'sslmate help buy' for help.\n";
 		return 2;
@@ -1454,7 +1464,7 @@ sub command_buy {
 	}
 
 	init_default_paths;
-	do_buy($cn, $years, $force, $no_wait, $accept_dummy, $auto_renew, $batch, $approver_email, %opts);
+	do_buy($cn, $years, $force, $no_wait, $accept_dummy, $auto_renew, $batch, $approval_method, $approver_email, %opts);
 	return 0;
 }
 
@@ -2161,6 +2171,13 @@ sub format_cert_info {
 		return 'DV' if $raw_type eq 'dv';
 		return $raw_type;
 	};
+	local *format_approval_method = sub {
+		my ($raw_method) = @_;
+		return 'Email' if $raw_method eq 'email';
+		return 'HTTP' if $raw_method eq 'http';
+		return 'DNS' if $raw_method eq 'dns';
+		return $raw_method;
+	};
 
 	my $latest = $cert->{pending} // $cert->{current};
 
@@ -2192,6 +2209,7 @@ sub format_cert_info {
 		type => format_type($latest ? $latest->{type} : $cert->{type}),
 		approver_email => $cert->{approver_email},
 		approval_email_from => $latest ? $latest->{approval_email_from} : undef,
+		approval_method => format_approval_method($cert->{approval_method}),
 	};
 }
 
@@ -2241,6 +2259,7 @@ sub command_list {
 				type =>			'Type',
 				approver_email =>	'Approver Email',
 				approval_email_from =>	'Approval Email From',
+				approval_method =>	'Approval',
 			    );
 	for my $column (@columns) {
 		if (not exists $column_titles{$column}) {
@@ -2318,16 +2337,23 @@ sub command_edit {
 	}
 
 	my $auto_renew;
+	my $approval_method;
 	my $approver_email;
 
 	local @ARGV = @args;
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
 	$getopt->getoptions('auto-renew!', \$auto_renew,
+			    'approval=s', \$approval_method,
 			    'email=s', \$approver_email) or return 2;
 	if (@ARGV == 0) {
 		print STDERR "Error: you must specify the name of the certificate to edit.\n";
 		print_our_usage(*STDERR);
+		return 2;
+	}
+	$approval_method = 'email' if !defined($approval_method) && defined($approver_email);
+	if (defined($approver_email) && $approval_method ne 'email') {
+		print STDERR "Error: --email is only valid with --approval=email.\n";
 		return 2;
 	}
 
@@ -2357,7 +2383,7 @@ sub command_edit {
 	#
 	my $request = {
 		auto_renew => $auto_renew,
-		approval_method => defined($approver_email) ? 'email' : undef,
+		approval_method => $approval_method,
 		approver_email => $approver_email,
 	};
 
@@ -2551,6 +2577,7 @@ sub command_import {
 	my $auto_renew = undef;
 	my $install = 1;
 	my $batch = 0;
+	my $approval_method = 'email';
 	my $approver_email = undef;
 	while (@args >= 1) {
 		if ($args[0] eq "-f" || $args[0] eq "--force") {
@@ -2568,6 +2595,9 @@ sub command_import {
 		} elsif ($args[0] eq "--batch") {
 			$batch = 1;
 			shift @args;
+		} elsif ($args[0] =~ /^--approval=(.*)$/) {
+			$approval_method = $1;
+			shift @args;
 		} elsif ($args[0] =~ /^--email=(.*)$/) {
 			$approver_email = $1;
 			shift @args;
@@ -2582,7 +2612,11 @@ sub command_import {
 		return 2;
 	}
 
-	if ($batch && not defined($approver_email)) {
+	if (defined($approver_email) && $approval_method ne 'email') {
+		print STDERR "Error: --email is only valid with --approval=email.\n";
+		return 2;
+	}
+	if ($batch && $approval_method eq 'email' && not defined($approver_email)) {
 		print STDERR "Error: in batch mode, you must specify the approver email with --email.\n";
 		print STDERR "See 'sslmate help import' for help.\n";
 		return 2;
@@ -2601,12 +2635,12 @@ sub command_import {
 
 	init_default_paths;
 
-	do_import($force, $auto_renew, $install, $args[0], $args[1], undef, $batch, $approver_email);
+	do_import($force, $auto_renew, $install, $args[0], $args[1], undef, $batch, $approval_method, $approver_email);
 	return 0;
 }
 
 sub do_import {
-	my ($force, $auto_renew, $install_locally, $source_key_path, $source_crt_path, $cn, $batch, $approver_email) = @_;
+	my ($force, $auto_renew, $install_locally, $source_key_path, $source_crt_path, $cn, $batch, $approval_method, $approver_email) = @_;
 
 	# 1. Read the key
 	open(my $source_key_file, '<', $source_key_path) or die "Error: Unable to open $source_key_path: $!\n";
@@ -2703,16 +2737,18 @@ sub do_import {
 			exit 1 unless prompt_yesno();
 			print "\n";
 		}
-		if (defined $approver_email) {
-			if (!grep { $_ eq $approver_email } @{$product_info->{approver_emails}}) {
-				print STDERR "Error: $approver_email: not an acceptable approver email for $cn\n";
-				exit 1;
+		if ($approval_method eq 'email') {
+			if (defined $approver_email) {
+				if (!grep { $_ eq $approver_email } @{$product_info->{approver_emails}}) {
+					print STDERR "Error: $approver_email: not an acceptable approver email for $cn\n";
+					exit 1;
+				}
+			} else {
+				print "When it's time to renew this certificate, we will need to send you an email to\n";
+				print "verify that you own this domain.  Where should we send this email?\n";
+				print "\n";
+				$approver_email = prompt_for_approver_email($product_info->{approver_emails}) or exit 1;
 			}
-		} else {
-			print "When it's time to renew this certificate, we will need to send you an email to\n";
-			print "verify that you own this domain.  Where should we send this email?\n";
-			print "\n";
-			$approver_email = prompt_for_approver_email($product_info->{approver_emails}) or exit 1;
 		}
 	}
 
@@ -2730,7 +2766,7 @@ sub do_import {
 
 	# 8. Create/update the cert object on the server
 	my $request = {	auto_renew	=> $auto_renew,
-			approval_method	=> 'email',
+			approval_method	=> $approval_method,
 			approver_email	=> $approver_email,
 			csr		=> \$csr };
 
