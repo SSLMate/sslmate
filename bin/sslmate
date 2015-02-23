@@ -746,6 +746,34 @@ sub openssl_genrsa {
 	die "Error: 'openssl genrsa' command failed.\n" unless $? == 0;
 }
 
+sub openssl_ecparam_genkey {
+	my ($key_file, $curve_name) = @_;
+
+	my $openssl_pid = fork;
+	die "Error: fork failed: $!" unless defined $openssl_pid;
+	if ($openssl_pid == 0) {
+		open(STDIN, '<', '/dev/null');
+		open(STDOUT, '>&', $key_file) or die "Error: dup failed: $!";
+		open(STDERR, '>', '/dev/null');
+		exec('openssl', 'ecparam', '-name', $curve_name, '-genkey');
+		die "Error: Unable to run 'openssl ecparam' command: " . ($!{ENOENT} ? 'openssl command not found' : $!) . "\n";
+	}
+	waitpid($openssl_pid, 0) or die "waitpid failed: $!";
+	die "Error: 'openssl ecparam' command failed.\n" unless $? == 0;
+}
+
+sub genkey {
+	my ($key_file) = @_;
+	my $key_type = get_config('key_type', 'rsa');
+	if ($key_type eq 'rsa') {
+		openssl_genrsa($key_file, get_config('rsa_bits', 2048));
+	} elsif ($key_type eq 'ecdsa') {
+		openssl_ecparam_genkey($key_file, get_config('ecdsa_curve', 'prime256v1'));
+	} else {
+		die "Error: illegal value for key_type config option: $key_type\n";
+	}
+}
+
 sub make_dn {
 	my ($cn, $country_code) = @_;
 	return { CN => $cn, C => $country_code // 'US', ST => 'Some-State', O => 'Internet Widgits Pty Ltd' };
@@ -1262,7 +1290,7 @@ sub do_buy {
 
 	print "Generating private key... "; STDOUT->flush;
 	truncate($files->{key_file}, 0);
-	openssl_genrsa($files->{key_file}, 2048);
+	genkey($files->{key_file});
 	close($files->{key_file});
 	print "Done.\n";
 
@@ -1522,7 +1550,7 @@ sub command_reissue {
 	# 3. Generate new RSA key and CSR
 	print "Generating private key... "; STDOUT->flush;
 	truncate($files->{key_file}, 0);
-	openssl_genrsa($files->{key_file}, 2048);
+	genkey($files->{key_file});
 	close($files->{key_file});
 	print "Done.\n";
 
@@ -1869,7 +1897,7 @@ sub command_req {
 
 	# 1. Generate an RSA key
 	print "Generating private key... "; STDOUT->flush;
-	openssl_genrsa($key_file, 2048);
+	genkey($key_file);
 	close($key_file);
 	print "$cn.key\n";
 
