@@ -2378,6 +2378,11 @@ sub command_edit {
 	}
 	$cn = $cert->{cn}; # So that we use the canonical CN
 
+	if (not $cert->{exists}) {
+		print STDERR "Error: $cn: there is no certificate in your account with this common name.\n";
+		return 1;
+	}
+
 	#
 	# Update the cert object on the server
 	#
