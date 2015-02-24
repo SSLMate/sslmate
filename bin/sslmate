@@ -130,6 +130,16 @@ sub new_curl {
 	return $curl;
 }
 
+
+sub english_join {
+	my $sep = shift;
+	if (@_ <= 2) {
+		return join(" $sep ", @_);
+	} else {
+		return join(', ', @_[0..@_-2]) . ", $sep " . $_[@_-1];
+	}
+}
+
 sub prompt_user {
 	my ($message) = @_;
 
@@ -626,13 +636,11 @@ sub load_approval_map {
 	my $param = $type . '_approval_map';
 	my $path = get_config($param);
 	if (not defined $path) {
-		print STDERR "Error: configuration parameter $param not set - cannot perform $type approval.\n";
-		return undef;
+		die "Configuration parameter $param not set\n";
 	}
 	my $fh;
 	if (not open($fh, '<', $path)) {
-		print STDERR "Error: cannot open $path ($!) - cannot perform $type approval.\n";
-		return undef;
+		die "Cannot open $path: $!\n";
 	}
 	my $map = {};
 	for my $line (<$fh>) {
@@ -658,25 +666,26 @@ sub exec_approval_method {
 }
 
 sub prepare_http_approval {
-	my ($action, $cn, $options) = @_;
+	my ($action, $options) = @_;
 	$http_approval_map //= load_approval_map('http');
-	return 0 unless defined($http_approval_map);
+	my @tried_hostnames;
 	for my $option (@$options) {
 		my $method = $http_approval_map->{$option->{hostname}};
+		push @tried_hostnames, $option->{hostname};
 		next unless defined $method;
 		next unless exec_approval_method($method, $action, @$option{qw{hostname path content}});
 		return 1;
 	}
-	print STDERR "Error: no HTTP approval method available for $cn.\n";
-	return 0;
+	die "No HTTP approval method available for " . english_join('or', @tried_hostnames) . ".\n";
 }
 
 sub prepare_dns_approval {
-	my ($action, $cn, $options) = @_;
+	my ($action, $options) = @_;
 	$dns_approval_map //= load_approval_map('dns');
-	return 0 unless defined($dns_approval_map);
+	my @tried_names;
 	for my $option (@$options) {
 		my $name = $option->{name};
+		push @tried_names, $name;
 		my $method;
 		while (!defined($method) && $name ne '') {
 			$method = $dns_approval_map->{$name};
@@ -686,8 +695,7 @@ sub prepare_dns_approval {
 		next unless exec_approval_method($method, $action, @$option{qw{name type value}});
 		return 1;
 	}
-	print STDERR "Error: no DNS approval method available for $cn.\n";
-	return 0;
+	die "No DNS approval method available for " . english_join('or', @tried_names) . ".\n";
 }
 
 sub compare_approval_option {
@@ -714,20 +722,39 @@ sub prepare_approval {
 	if ($old_cert->{exists} && $old_cert->{approval_method} eq 'http') {
 		if ($new_cert->{approval_method} ne 'http' ||
 				!compare_approval_options($old_cert->{http_approval}, $new_cert->{http_approval})) {
-			prepare_http_approval('del', $old_cert->{cn}, $old_cert->{http_approval});
+			my $successful = eval {
+				prepare_http_approval('del', $old_cert->{http_approval});
+				1;
+			};
+			# Question: Display a warning if not successful?
 		}
 	} elsif ($old_cert->{exists} && $old_cert->{approval_method} eq 'dns') {
 		if ($new_cert->{approval_method} ne 'dns' ||
 				!compare_approval_options($old_cert->{dns_approval}, $new_cert->{dns_approval})) {
-			prepare_dns_approval('del', $old_cert->{cn}, $old_cert->{dns_approval});
+			my $successful = eval {
+				prepare_dns_approval('del', $old_cert->{dns_approval});
+				1;
+			};
+			# Question: Display a warning if not successful?
 		}
 	}
+	my $successful = 0;
 	if ($new_cert->{approval_method} eq 'http') {
-		prepare_http_approval('add', $new_cert->{cn}, $new_cert->{http_approval}) or return 0;
+		$successful = eval {
+			prepare_http_approval('add', $new_cert->{http_approval});
+			1;
+		};
+		print STDERR "Error: unable to set up automatic HTTP approval for " . $new_cert->{cn} . ": $@" if not $successful;
 	} elsif ($new_cert->{approval_method} eq 'dns') {
-		prepare_dns_approval('add', $new_cert->{cn}, $new_cert->{dns_approval}) or return 0;
+		$successful = eval {
+			prepare_dns_approval('add', $new_cert->{dns_approval});
+			1;
+		};
+		print STDERR "Error: unable to set up DNS approval records for " . $new_cert->{cn} . ": $@" if not $successful;
+	} else {
+		$successful = 1;
 	}
-	return 1;
+	return $successful;
 }
 
 sub openssl_genrsa {
