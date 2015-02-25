@@ -47,6 +47,7 @@ use File::Temp;
 use IO::Handle;
 use IPC::Open2;
 use List::Util qw(max sum);
+use FindBin;
 
 				# Debian/Ubuntu package		RHEL/CentOS package
 				# --------------------------------------------------
@@ -59,6 +60,9 @@ our $has_curl = eval { require WWW::Curl::Easy; 1 };
 
 use version; our $VERSION = version->declare('0.6.2');
 our $API_ENDPOINT = 'https://sslmate.com/api/v2';
+
+our $DEFAULT_LIBEXEC_DIR = undef;
+our $LIBEXEC_DIR = $ENV{'SSLMATE_LIBEXEC_DIR'} // $DEFAULT_LIBEXEC_DIR // "$FindBin::Bin/../libexec/sslmate";
 
 our $quiet = 0;
 our $config_profile;
@@ -652,7 +656,7 @@ sub load_approval_map {
 }
 
 sub exec_approval_method {
-	my ($method, @args) = @_;
+	my ($type, $method, @args) = @_;
 	local %ENV = %ENV;
 
 	$ENV{NUM_PARAMS} = scalar @{$method->{params}};
@@ -661,7 +665,11 @@ sub exec_approval_method {
 		$ENV{"PARAM_$i"} = $param;
 		$i++;
 	}
-	system($method->{command}, @args);
+	my $path = $method->{command};
+	unless ($path =~ /^\//) {
+		$path = "$LIBEXEC_DIR/approval/$type/$path";
+	}
+	system($path, @args);
 	return $? == 0;
 }
 
@@ -673,7 +681,7 @@ sub prepare_http_approval {
 		my $method = $http_approval_map->{$option->{hostname}};
 		push @tried_hostnames, $option->{hostname};
 		next unless defined $method;
-		next unless exec_approval_method($method, $action, @$option{qw{hostname path content}});
+		next unless exec_approval_method('http', $method, $action, @$option{qw{hostname path content}});
 		return 1;
 	}
 	die "No HTTP approval method available for " . english_join('or', @tried_hostnames) . ".\n";
@@ -692,7 +700,7 @@ sub prepare_dns_approval {
 			$name =~ s/^[^.]*\.//;
 		}
 		next unless defined $method;
-		next unless exec_approval_method($method, $action, @$option{qw{name type value}});
+		next unless exec_approval_method('dns', $method, $action, @$option{qw{name type value}});
 		return 1;
 	}
 	die "No DNS approval method available for " . english_join('or', @tried_names) . ".\n";
