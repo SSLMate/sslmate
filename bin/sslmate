@@ -2575,7 +2575,7 @@ sub command_test {
 	my $num_errors = 0;
 	for my $result (@{$response->{result}}) {
 		my $host = $result->{hostname} . " (" . $result->{ip_address} . ")";
-		if ($result->{error}) {
+		if ($result->{status} ne 'conclusive') {
 			print "$host: Error: " . $result->{error} . "\n";
 			++$num_errors;
 		} elsif (not $result->{correct}) {
