@@ -1,0 +1,90 @@
+#!/bin/sh -e
+
+#
+# HTTP approval handler for SSLMate.
+# To use, place the following in your http_approval_map file:
+#
+#	www.example.com documentroot /path/to/document/root
+#
+# where /path/to/document/root is the path to your web server's
+# document root for www.example.com.
+#
+# This program is meant to be invoked by the SSLMate client. Do not
+# execute directly.
+#
+
+#
+# Copyright (c) 2015 Opsmate, Inc.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a
+# copy of this software and associated documentation files (the "Software"),
+# to deal in the Software without restriction, including without limitation
+# the rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Software, and to permit persons to whom the
+# Software is furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included
+# in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+# OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+# ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+# OTHER DEALINGS IN THE SOFTWARE.
+#
+# Except as contained in this notice, the name(s) of the above copyright
+# holders shall not be used in advertising or otherwise to promote the
+# sale, use or other dealings in this Software without prior written
+# authorization.
+#
+
+USAGE="$0 add|del hostname path contents"
+
+if [ $# != 4 ]
+then
+	echo "Usage: $USAGE" >&2
+	exit 2
+fi
+action=$1
+hostname=$2
+path=$3
+contents=$4
+
+if [ $NUM_PARAMS != 1 ]
+then
+	echo "documentroot: Error: unexpected number of parameters (got $NUM_PARAMS, expected 1)" >&2
+	exit 2
+fi
+
+document_root=$PARAM_0
+
+if ! [ -d "$document_root" ]
+then
+	echo "documentroot: Error: $document_root: no such directory" >&2
+	exit 1
+fi
+if ! [ -w "$document_root" ]
+then
+	echo "documentroot: Error: $document_root: not writable" >&2
+	exit 1
+fi
+
+if [ $action = "add" ]
+then
+	# TODO: mkdir?
+	printf "documentroot: Writing $document_root$path... " >&2
+	printf "%s" "$contents" > "$document_root$path"
+	printf "Done.\n" >&2
+elif [ $action = "del" ]
+then
+	printf "documentroot: Removing $document_root$path... " >&2
+	rm -f "$document_root$path"
+	printf "Done.\n" >&2
+else
+	echo "Usage: $USAGE" >&2
+	exit 2
+fi
+
+exit 0
