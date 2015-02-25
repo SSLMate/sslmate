@@ -135,6 +135,11 @@ sub new_curl {
 }
 
 
+sub object_subset {
+	my $obj = shift;
+	return { map { $_ => $obj->{$_} } @_ };
+}
+
 sub english_join {
 	my $sep = shift;
 	if (@_ <= 2) {
@@ -1318,10 +1323,9 @@ sub do_buy {
 	#
 	$files->{key_file} = open_key_file($files->{key_filename}, $force);
 
-	my $orig_csr = $cert->{csr};
 	my $exit_with_error = sub {
 		unlink($files->{key_filename});
-		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, { csr => $orig_csr }) if defined($orig_csr);
+		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/approval_method approver_email csr/)) if defined($cert);
 		exit 1;
 	};
 
@@ -1347,7 +1351,7 @@ sub do_buy {
 	($status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), undef, $request) or $exit_with_error->();
 	if ($status != 200) {
 		print STDERR "Error: " . $new_cert->{message} . "\n";
-		$orig_csr = undef;
+		$cert = undef;
 		$exit_with_error->();
 	}
 
@@ -1585,10 +1589,9 @@ sub command_reissue {
 	}
 	$files->{key_file} = open_key_file($new_key_filename, $force);
 
-	my $orig_csr = $cert->{csr};
 	my $exit_with_error = sub {
 		unlink($new_key_filename);
-		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, { csr => $orig_csr }) if defined($orig_csr);
+		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/csr/)) if defined($cert);
 		exit 1;
 	};
 
@@ -1608,7 +1611,7 @@ sub command_reissue {
 	($cert_status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), undef, { csr => $csr }) or $exit_with_error->();
 	if ($cert_status != 200) {
 		print STDERR "Error: " . $new_cert->{message} . "\n";
-		$orig_csr = undef;
+		$cert = undef;
 		$exit_with_error->();
 	}
 	prepare_approval($cert, $new_cert) or $exit_with_error->();
@@ -1849,6 +1852,7 @@ sub command_renew {
 	}
 
 	my $new_cert;
+	my $exit_with_error;
 	if (defined $pubkey_hash && $cert->{pubkey_hash} ne $pubkey_hash) {
 		# The locally-installed key is out of sync with the key registered with the server.
 		# So, generate a CSR from the locally-installed key and register it with the server.
@@ -1861,10 +1865,17 @@ sub command_renew {
 			print STDERR "Error: " . $new_cert->{message} . "\n";
 			exit 1;
 		}
+		$exit_with_error = sub {
+			authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/csr/));
+			exit 1;
+		};
 	} else {
 		$new_cert = $cert;
+		$exit_with_error = sub {
+			exit 1;
+		};
 	}
-	prepare_approval($cert, $new_cert) or exit 1;
+	prepare_approval($cert, $new_cert) or $exit_with_error->();
 
 	# Renew the certificate
 	print "Placing order...\n";
@@ -1874,14 +1885,14 @@ sub command_renew {
 			%opts };
 
 	my $cert_instance;
-	($status, $cert_instance) = authed_api_call('POST', '/certs/' . qs_escape($cn) . '/buy', undef, $request) or exit 1;
+	($status, $cert_instance) = authed_api_call('POST', '/certs/' . qs_escape($cn) . '/buy', undef, $request) or $exit_with_error->();
 	if ($status != 200) {
 		if ($cert_instance->{reason} eq 'price_not_authorized') {
 			print STDERR "Error: the price of this certificate has changed. Please run 'sslmate renew' again.\n";
 		} else {
 			print STDERR "Error: " . $cert_instance->{message} . "\n";
 		}
-		exit 1;
+		$exit_with_error->();
 	}
 
 	print "Renewal complete.\n\n";
@@ -2432,7 +2443,10 @@ sub command_edit {
 		print STDERR "Error: " . $new_cert->{message} . "\n";
 		return 1;
 	}
-	prepare_approval($cert, $new_cert) or return 1;
+	if (!prepare_approval($cert, $new_cert)) {
+		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/approval_method approver_email/));
+		return 1;
+	}
 
 	#
 	# If this cert is pending, and we just changed the approver email, resend the approval email
@@ -2801,6 +2815,7 @@ sub do_import {
 
 	my $exit_with_error = sub {
 		unlink($files->{key_filename}) if $install_locally && defined $files->{key_filename};
+		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert_obj, qw/approval_method approver_email csr/)) if defined($cert_obj);
 		exit 1;
 	};
 
@@ -2814,6 +2829,7 @@ sub do_import {
 	($status, my $new_cert_obj) = authed_api_call('POST', '/certs/' . qs_escape($cn), undef, $request) or $exit_with_error->();
 	if ($status != 200) {
 		print STDERR "Error: " . $new_cert_obj->{message} . "\n";
+		$cert_obj = undef;
 		$exit_with_error->();
 	}
 
