@@ -734,18 +734,18 @@ sub prepare_approval {
 
 	if ($old_cert->{exists} && $old_cert->{approval_method} eq 'http') {
 		if ($new_cert->{approval_method} ne 'http' ||
-				!compare_approval_options($old_cert->{http_approval}, $new_cert->{http_approval})) {
+				!compare_approval_options($old_cert->{http_approval}->{options}, $new_cert->{http_approval}->{options})) {
 			my $successful = eval {
-				prepare_http_approval('del', $old_cert->{http_approval});
+				prepare_http_approval('del', $old_cert->{http_approval}->{options});
 				1;
 			};
 			# Question: Display a warning if not successful?
 		}
 	} elsif ($old_cert->{exists} && $old_cert->{approval_method} eq 'dns') {
 		if ($new_cert->{approval_method} ne 'dns' ||
-				!compare_approval_options($old_cert->{dns_approval}, $new_cert->{dns_approval})) {
+				!compare_approval_options($old_cert->{dns_approval}->{options}, $new_cert->{dns_approval}->{options})) {
 			my $successful = eval {
-				prepare_dns_approval('del', $old_cert->{dns_approval});
+				prepare_dns_approval('del', $old_cert->{dns_approval}->{options});
 				1;
 			};
 			# Question: Display a warning if not successful?
@@ -754,13 +754,13 @@ sub prepare_approval {
 	my $successful = 0;
 	if ($new_cert->{approval_method} eq 'http') {
 		$successful = eval {
-			prepare_http_approval('add', $new_cert->{http_approval});
+			prepare_http_approval('add', $new_cert->{http_approval}->{options});
 			1;
 		};
 		print STDERR "Error: unable to set up automatic HTTP approval for " . $new_cert->{cn} . ": $@" if not $successful;
 	} elsif ($new_cert->{approval_method} eq 'dns') {
 		$successful = eval {
-			prepare_dns_approval('add', $new_cert->{dns_approval});
+			prepare_dns_approval('add', $new_cert->{dns_approval}->{options});
 			1;
 		};
 		print STDERR "Error: unable to set up DNS approval records for " . $new_cert->{cn} . ": $@" if not $successful;
