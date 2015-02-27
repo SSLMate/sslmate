@@ -4,11 +4,11 @@
 # DNS approval handler for SSLMate using Route 53.
 # To use, place the following in your dns_approval_map file:
 #
-#	example.com route53 AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY HOSTED_ZONE_ID
+#	example.com. route53 AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY HOSTED_ZONE_ID
 #
-# where HOSTED_ZONE_ID is the ID for example.com in Route 53, and AWS_ACCESS_KEY_ID
-# and AWS_SECRET_ACCESS_KEY are credentials for an IAM account with the following
-# permissions:
+# where example.com. is your domain name (note the trailing dot), HOSTED_ZONE_ID is the
+# ID for example.com in Route 53, and AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are
+# credentials for an IAM account with the following permissions:
 #
 #   - route53:GetChange on arn:aws:route53:::change/*
 #   - route53:ListResourceRecordSets on arn:aws:route53:::hostedzone/HOSTED_ZONE_ID
