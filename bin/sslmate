@@ -2451,7 +2451,7 @@ sub command_edit {
 	#
 	# If this cert is pending, and we just changed the approver email, resend the approval email
 	#
-	if (defined($cert->{pending}) && defined($approver_email)) {
+	if (defined($new_cert->{pending}) && defined($approver_email)) {
 		print "Resending approval email to $approver_email... ";
 		my ($status, $response) = authed_api_call('POST',  '/certs/' . qs_escape($cn) . '/redo_approval', undef, {}) or return 1;
 		if ($status != 200) {
