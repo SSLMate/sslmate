@@ -255,6 +255,22 @@
 								</para>
 							</listitem>
 						</varlistentry>
+						<varlistentry>
+							<term><option>--key-type=rsa|ecdsa</option></term>
+
+							<listitem>
+								<para>
+									Specify the type of key to generate: RSA (the default), or ECDSA
+									(elliptic curve). The certificate will be signed with a signature of the same type.
+								</para>
+								<para>
+									RSA provides the best compatibility with clients.  ECDSA provides
+									better performance during the TLS handshake, but is not supported
+									by older web browsers (such as IE 8 on Windows XP, Android 2.3,
+									and Java 6).  If in doubt, use RSA.
+								</para>
+							</listitem>
+						</varlistentry>
 					</variablelist>
 				</listitem>
 			</varlistentry>
@@ -369,6 +385,20 @@
 
 							<listitem>
 								<para>Overwrite existing files.</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
+							<term><option>--key-type=rsa|ecdsa</option></term>
+
+							<listitem>
+								<para>
+									Specify the type of key to use for the reissued certificate: RSA (the default), or ECDSA
+									(elliptic curve). The certificate will be signed with a signature of the same type.
+								</para>
+								<para>
+									See the documentation for <command>sslmate buy</command> for more information.
+									If in doubt, do not use this option.
+								</para>
 							</listitem>
 						</varlistentry>
 					</variablelist>

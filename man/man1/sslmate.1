@@ -144,6 +144,13 @@ By default, invoices are not emailed, but can be downloaded from your
 .RS 4
 Buy the certificate even if there are existing key and certificate files, or if an active certificate with this name already exists in your SSLMate account\&. Existing key and certificate files will be overwritten\&.
 .RE
+.PP
+\fB\-\-key\-type=rsa|ecdsa\fR
+.RS 4
+Specify the type of key to generate: RSA (the default), or ECDSA (elliptic curve)\&. The certificate will be signed with a signature of the same type\&.
+.sp
+RSA provides the best compatibility with clients\&. ECDSA provides better performance during the TLS handshake, but is not supported by older web browsers (such as IE 8 on Windows XP, Android 2\&.3, and Java 6)\&. If in doubt, use RSA\&.
+.RE
 .RE
 .PP
 \fBrenew \fR\fB[\fIOPTIONS\fR]\fR\fB \fR\fB\fIHOSTNAME\fR\fR
@@ -210,6 +217,15 @@ command\&.
 \fB\-f\fR, \fB\-\-force\fR
 .RS 4
 Overwrite existing files\&.
+.RE
+.PP
+\fB\-\-key\-type=rsa|ecdsa\fR
+.RS 4
+Specify the type of key to use for the reissued certificate: RSA (the default), or ECDSA (elliptic curve)\&. The certificate will be signed with a signature of the same type\&.
+.sp
+See the documentation for
+\fBsslmate buy\fR
+for more information\&. If in doubt, do not use this option\&.
 .RE
 .RE
 .PP
