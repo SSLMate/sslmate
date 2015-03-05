@@ -2098,6 +2098,8 @@ sub command_download {
 			next;
 		}
 
+		print STDERR "Warning: $cn: the key file for this certificate (" . $paths->{key_filename} . ") is out-of-date (the certificate has been reissued with a newer key). You should install the new key and then re-run 'sslmate download' to download the corresponding certificate files.\n" if $is_out_of_date;
+
 		$chain //= '';
 
 		if (not($install_new_key) &&
