@@ -1176,12 +1176,12 @@ sub do_link {
 }
 
 sub command_link {
-	my @args = @_;
+	local @ARGV = @_;
 
-	if (@args >= 1 && $args[0] eq "-?") {
+	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
 		print "Usage: sslmate link\n";
 		return 0;
-	} elsif (@args > 0) {
+	} elsif (@ARGV > 0) {
 		print STDERR "Error: sslmate link takes no arguments.\n";
 		print STDERR "Usage: sslmate link\n";
 		return 2;
@@ -1390,9 +1390,9 @@ sub do_buy {
 }
 
 sub command_buy {
-	my @args = @_;
+	local @ARGV = @_;
 
-	if (@args >= 1 && $args[0] eq "-?") {
+	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
 		print "Usage: sslmate buy [OPTIONS] HOSTNAME\n\n";
 		print "Example: sslmate buy www.example.com\n";
 		print "         sslmate buy '*.example.com'\n";
@@ -1420,46 +1420,21 @@ sub command_buy {
 	my $approver_email = undef;
 	my $no_wait = 0;
 	my $accept_dummy = 0;
-	while (@args >= 1) {
-		if ($args[0] eq "-f" || $args[0] eq "--force") {
-			$force = 1;
-			shift @args;
-		} elsif ($args[0] eq "--auto-renew") {
-			$auto_renew = 1;
-			shift @args;
-		} elsif ($args[0] eq "--no-auto-renew") {
-			$auto_renew = 0;
-			shift @args;
-		} elsif ($args[0] =~ /^--coupon=(.*)$/) {
-			$opts{coupon_code} = $1;
-			shift @args;
-		} elsif ($args[0] =~ /^--email-invoice-to=(.*)$/) {
-			$opts{email_invoice_to} = $1;
-			shift @args;
-		} elsif ($args[0] =~ /^--invoice-note=(.*)$/) {
-			$opts{invoice_note} = $1;
-			shift @args;
-		} elsif ($args[0] eq "--batch") {
-			$batch = 1;
-			shift @args;
-		} elsif ($args[0] =~ /^--approval=(.*)$/) {
-			$approval_method = $1;
-			shift @args;
-		} elsif ($args[0] =~ /^--email=(.*)$/) {
-			$approver_email = $1;
-			shift @args;
-		} elsif ($args[0] eq "--no-wait") {
-			$no_wait = 1;
-			shift @args;
-		} elsif ($args[0] eq "--temp") {
-			$accept_dummy = 1;
-			shift @args;
-		} else {
-			last;
-		}
-	}
 
-	if (@args != 1 && @args != 2) {
+	my $getopt = Getopt::Long::Parser->new;
+	$getopt->configure(qw(no_ignore_case permute bundling));
+	$getopt->getoptions('auto-renew!', \$auto_renew,
+			    'force|f', \$force,
+			    'batch', \$batch,
+			    'approval=s', \$approval_method,
+			    'email=s', \$approver_email,
+			    'no-wait', \$no_wait,
+			    'temp', \$accept_dummy,
+			    'coupon=s', \$opts{coupon_code},
+			    'email-invoice-to=s', \$opts{email_invoice_to},
+			    'invoice-note=s', \$opts{invoice_note}) or return 2;
+
+	if (@ARGV != 1) {
 		print STDERR "Error: you must specify the hostname for the certificate.\n";
 		print STDERR "Example: sslmate buy www.example.com\n";
 		print STDERR "     or: sslmate buy '*.example.com'\n";
@@ -1480,17 +1455,8 @@ sub command_buy {
 		return 2;
 	}
 
-	my $cn = lc $args[0];
+	my $cn = lc $ARGV[0];
 	my $years = undef;
-
-	if (@args == 2) {
-		$years = $args[1];
-
-		if (!Scalar::Util::looks_like_number($years) || $years < 1 || $years > 5) {
-			print STDERR "Error: number of years must be between 1 and 5, inclusive.\n";
-			return 1;
-		}
-	}
 
 	load_config;
 	if (!is_linked) {
@@ -1508,9 +1474,9 @@ sub command_buy {
 }
 
 sub command_reissue {
-	my @args = @_;
+	local @ARGV = @_;
 
-	if (@args >= 1 && $args[0] eq "-?") {
+	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
 		print "Usage: sslmate reissue [OPTIONS] HOSTNAME\n\n";
 		print "Example: sslmate reissue www.example.com\n";
 		print "\n";
@@ -1522,25 +1488,19 @@ sub command_reissue {
 
 	my $force = 0;
 	my $no_wait = 0;
-	while (@args >= 1) {
-		if ($args[0] eq "-f" || $args[0] eq '--force') {
-			$force = 1;
-			shift @args;
-		} elsif ($args[0] eq "--no-wait") {
-			$no_wait = 1;
-			shift @args;
-		} else {
-			last;
-		}
-	}
 
-	if (@args != 1) {
+	my $getopt = Getopt::Long::Parser->new;
+	$getopt->configure(qw(no_ignore_case permute bundling));
+	$getopt->getoptions('force|f', \$force,
+			    'no-wait', \$no_wait) or return 2;
+
+	if (@ARGV != 1) {
 		print STDERR "Error: you must specify the hostname of the certificate to reissue.\n";
 		print STDERR "Example: sslmate reissue www.example.com\n";
 		return 2;
 	}
 
-	my $cn = lc $args[0];
+	my $cn = lc $ARGV[0];
 
 	load_config;
 	if (!is_linked) {
@@ -1628,9 +1588,9 @@ sub command_reissue {
 }
 
 sub command_revoke {
-	my @args = @_;
+	local @ARGV = @_;
 
-	if (@args >= 1 && $args[0] eq "-?") {
+	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
 		print "Usage: sslmate revoke [OPTIONS] HOSTNAME\n\n";
 		print "Example: sslmate revoke www.example.com\n";
 		print "\n";
@@ -1649,7 +1609,6 @@ sub command_revoke {
 	my $all = 0;
 	my $batch = 0;
 
-	local @ARGV = @args;
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
 	$getopt->getoptions('all|a', \$all,
@@ -1714,9 +1673,9 @@ sub command_revoke {
 }
 
 sub command_renew {
-	my @args = @_;
+	local @ARGV = @_;
 
-	if (@args >= 1 && $args[0] eq "-?") {
+	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
 		print "Usage: sslmate renew [OPTIONS] HOSTNAME\n\n";
 		print "Example: sslmate renew www.example.com\n";
 		print "         sslmate renew '*.example.com'\n";
@@ -1733,34 +1692,20 @@ sub command_renew {
 	}
 
 	my %opts;
+	my $force = 0;
 	my $batch = 0;
 	my $no_wait = 0;
-	my $force = 0;
-	while (@args >= 1) {
-		if ($args[0] eq "-f" || $args[0] eq "--force") {
-			$force = 1;
-			shift @args;
-		} elsif ($args[0] =~ /^--coupon=(.*)$/) {
-			$opts{coupon_code} = $1;
-			shift @args;
-		} elsif ($args[0] =~ /^--email-invoice-to=(.*)$/) {
-			$opts{email_invoice_to} = $1;
-			shift @args;
-		} elsif ($args[0] =~ /^--invoice-note=(.*)$/) {
-			$opts{invoice_note} = $1;
-			shift @args;
-		} elsif ($args[0] eq "--batch") {
-			$batch = 1;
-			shift @args;
-		} elsif ($args[0] eq "--no-wait") {
-			$no_wait = 1;
-			shift @args;
-		} else {
-			last;
-		}
-	}
 
-	if (@args != 1 && @args != 2) {
+	my $getopt = Getopt::Long::Parser->new;
+	$getopt->configure(qw(no_ignore_case permute bundling));
+	$getopt->getoptions('force|f', \$force,
+			    'batch', \$batch,
+			    'no-wait', \$no_wait,
+			    'coupon=s', \$opts{coupon_code},
+			    'email-invoice-to=s', \$opts{email_invoice_to},
+			    'invoice-note=s', \$opts{invoice_note}) or return 2;
+
+	if (@ARGV != 1) {
 		print STDERR "Error: you must specify the hostname for the certificate.\n";
 		print STDERR "Example: sslmate renew www.example.com\n";
 		print STDERR "     or: sslmate renew '*.example.com'\n";
@@ -1768,15 +1713,8 @@ sub command_renew {
 		return 2;
 	}
 
-	my $cn = $args[0];
+	my $cn = $ARGV[0];
 	my $years = undef;
-	if (@args == 2) {
-		$years = $args[1];
-		if (!Scalar::Util::looks_like_number($years) || $years < 1 || $years > 5) {
-			print STDERR "Error: number of years must be between 1 and 5, inclusive.\n";
-			return 1;
-		}
-	}
 
 	load_config;
 	if (!is_linked) {
@@ -1900,9 +1838,9 @@ sub command_renew {
 }
 
 sub command_req {
-	my @args = @_;
+	local @ARGV = @_;
 
-	if (@args >= 1 && $args[0] eq "-?") {
+	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
 		print "Usage: sslmate req [OPTIONS] HOSTNAME\n\n";
 		print "Example: sslmate req www.example.com\n";
 		print "         sslmate req '*.example.com'\n";
@@ -1913,21 +1851,15 @@ sub command_req {
 		return 0;
 	}
 
-	my $country_code;
 	my $force = 0;
-	while (@args >= 1) {
-		if ($args[0] eq "-f" || $args[0] eq "--force") {
-			$force = 1;
-			shift @args;
-		} elsif ($args[0] =~ /^--country=(.*)$/) {
-			$country_code = $1;
-			shift @args;
-		} else {
-			last;
-		}
-	}
+	my $country_code;
 
-	if (@args != 1) {
+	my $getopt = Getopt::Long::Parser->new;
+	$getopt->configure(qw(no_ignore_case permute bundling));
+	$getopt->getoptions('force|f', \$force,
+			    'country=s', \$country_code) or return 2;
+
+	if (@ARGV != 1) {
 		print STDERR "Error: you must specify the hostname for the certificate.\n";
 		print STDERR "Example: sslmate req www.example.com\n";
 		print STDERR "     or: sslmate req '*.example.com'\n";
@@ -1935,7 +1867,7 @@ sub command_req {
 		return 2;
 	}
 
-	my $cn = lc $args[0];
+	my $cn = lc $ARGV[0];
 
 	# 0. Open the files
 	my $open_flags = O_WRONLY | O_CREAT | O_TRUNC;
@@ -1967,9 +1899,9 @@ sub command_req {
 }
 
 sub command_download {
-	my @args = @_;
+	local @ARGV = @_;
 
-	if (@args >= 1 && $args[0] eq "-?") {
+	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
 		print "Usage: sslmate download [OPTIONS] HOSTNAME ...\n";
 		print "Example: sslmate download www.example.com\n";
 		print "         sslmate download --all\n";
@@ -1982,19 +1914,12 @@ sub command_download {
 
 	my $all = 0;
 	my $accept_dummy = 0;
-	while (@args >= 1) {
-		if ($args[0] eq "-a" || $args[0] eq "--all") {
-			$all = 1;
-			shift @args;
-		} elsif ($args[0] eq "--temp") {
-			$accept_dummy = 1;
-			shift @args;
-		} else {
-			last;
-		}
-	}
+	my $getopt = Getopt::Long::Parser->new;
+	$getopt->configure(qw(no_ignore_case permute bundling));
+	$getopt->getoptions('all|a', \$all,
+			    'temp', \$accept_dummy) or return 2;
 
-	if ((!$all && @args == 0) || ($all && @args > 0)) {
+	if ((!$all && @ARGV == 0) || ($all && @ARGV > 0)) {
 		print STDERR "Error: you must specify hostname(s) of certificate(s) to download OR use --all.\n";
 		print STDERR "Example: sslmate download www.example.com\n";
 		print STDERR "     or: sslmate download --all\n";
@@ -2014,7 +1939,7 @@ sub command_download {
 	init_default_paths;
 
 	if ($all) {
-		# scan the key directory, populate @args for every .key file
+		# scan the key directory, populate @ARGV for every .key file
 		my $key_directory = get_config('key_directory') // '.';
 		opendir(my $dh, $key_directory) or die "Error: unable to read key directory: $key_directory: $!\n";
 		my @cns = map { s/\.key$//; $_ } grep { /\.key$/ } readdir($dh);
@@ -2024,9 +1949,9 @@ sub command_download {
 			@cns = map { s/^$wildcard_filename\./*./; $_ } @cns;
 		}
 
-		push @args, @cns;
+		push @ARGV, @cns;
 
-		if (@args == 0) {
+		if (@ARGV == 0) {
 			print "No certificates to download.\n" unless $quiet;
 			return 10;
 		}
@@ -2034,7 +1959,7 @@ sub command_download {
 
 	my @certs;
 	my $errors = 0;
-	for my $cn (@args) {
+	for my $cn (@ARGV) {
 		my ($status, $cert) = authed_api_call('GET', '/certs/' . qs_escape($cn), { expand => ['current.crt', 'current.chain', 'pending.crt', 'pending.chain'] }) or return 1;
 		if (not $cert->{exists}) {
 			print STDERR "Error: $cn: There is no certificate in your account with this name.\n";
@@ -2262,9 +2187,9 @@ sub format_cert_info {
 }
 
 sub command_list {
-	my @args = @_;
+	local @ARGV = @_;
 
-	if (@args >= 1 && $args[0] eq "-?") {
+	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
 		print "Usage: sslmate list [OPTIONS]\n";
 		print "\n";
 		print "Valid options:\n";
@@ -2283,7 +2208,6 @@ sub command_list {
 	my $columns;
 	my $machine_output;
 
-	local @ARGV = @args;
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
 	$getopt->getoptions('local!', \$local,
@@ -2377,9 +2301,9 @@ sub command_edit {
 		print $out " --no-auto-renew     disable auto-renew for this cert\n";
 	};
 
-	my @args = @_;
+	local @ARGV = @_;
 
-	if (@args >= 1 && $args[0] eq "-?") {
+	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
 		print_our_usage(*STDOUT);
 		return 0;
 	}
@@ -2388,7 +2312,6 @@ sub command_edit {
 	my $approval_method;
 	my $approver_email;
 
-	local @ARGV = @args;
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
 	$getopt->getoptions('auto-renew!', \$auto_renew,
@@ -2476,16 +2399,15 @@ sub command_resend_email {
 		print $out " --email=ADDRESS     send to the given address\n";
 	};
 
-	my @args = @_;
+	local @ARGV = @_;
 
-	if (@args >= 1 && $args[0] eq "-?") {
+	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
 		print_our_usage(*STDOUT);
 		return 0;
 	}
 
 	my $approver_email;
 
-	local @ARGV = @args;
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
 	$getopt->getoptions('email=s', \$approver_email) or return 2;
@@ -2534,9 +2456,9 @@ sub command_resend_email {
 }
 
 sub command_test {
-	my @args = @_;
+	local @ARGV = @_;
 
-	if (@args >= 1 && $args[0] eq "-?") {
+	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
 		print "Usage: sslmate test [OPTIONS] COMMONNAME\n";
 		print "Example: sslmate test www.example.com\n";
 		print "\n";
@@ -2549,7 +2471,6 @@ sub command_test {
 	my $port = 443;
 	my @hostname;
 
-	local @ARGV = @args;
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
 	$getopt->getoptions('port|p=i', \$port,
@@ -2612,9 +2533,9 @@ sub command_test {
 }
 
 sub command_import {
-	my @args = @_;
+	local @ARGV = @_;
 
-	if (@args >= 1 && $args[0] eq "-?") {
+	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
 		print "Usage: sslmate import [OPTIONS] KEYFILE CERTFILE\n";
 		print "\n";
 		print "Example: sslmate import www.example.com.key www.example.com.crt\n";
@@ -2629,40 +2550,23 @@ sub command_import {
 		return 0;
 	}
 
-	my $force = 0;
 	my $auto_renew = undef;
+	my $force = 0;
 	my $install = 1;
 	my $batch = 0;
 	my $approval_method = 'email';
 	my $approver_email = undef;
-	while (@args >= 1) {
-		if ($args[0] eq "-f" || $args[0] eq "--force") {
-			$force = 1;
-			shift @args;
-		} elsif ($args[0] eq "--auto-renew") {
-			$auto_renew = 1;
-			shift @args;
-		} elsif ($args[0] eq "--no-auto-renew") {
-			$auto_renew = 0;
-			shift @args;
-		} elsif ($args[0] eq "--no-install") {
-			$install = 0;
-			shift @args;
-		} elsif ($args[0] eq "--batch") {
-			$batch = 1;
-			shift @args;
-		} elsif ($args[0] =~ /^--approval=(.*)$/) {
-			$approval_method = $1;
-			shift @args;
-		} elsif ($args[0] =~ /^--email=(.*)$/) {
-			$approver_email = $1;
-			shift @args;
-		} else {
-			last;
-		}
-	}
 
-	if (@args != 2) {
+	my $getopt = Getopt::Long::Parser->new;
+	$getopt->configure(qw(no_ignore_case permute bundling));
+	$getopt->getoptions('auto-renew!', \$auto_renew,
+			    'force|f', \$force,
+			    'install!', \$install,
+			    'batch', \$batch,
+			    'approval=s', \$approval_method,
+			    'email=s', \$approver_email) or return 2;
+
+	if (@ARGV != 2) {
 		print STDERR "Error: you must specify the key file and cert file paths.\n";
 		print STDERR "Example: sslmate import www.example.com.key www.example.com.crt\n";
 		return 2;
@@ -2691,7 +2595,7 @@ sub command_import {
 
 	init_default_paths;
 
-	do_import($force, $auto_renew, $install, $args[0], $args[1], undef, $batch, $approval_method, $approver_email);
+	do_import($force, $auto_renew, $install, $ARGV[0], $ARGV[1], undef, $batch, $approval_method, $approver_email);
 	return 0;
 }
 
@@ -2950,20 +2854,20 @@ sub command_mkconfig {
 }
 
 sub command_help {
-	my @args = @_;
+	local @ARGV = @_;
 
-	if (@args == 0 || $args[0] eq 'help') {
+	if (@ARGV == 0 || $ARGV[0] eq 'help') {
 		print_usage(*STDOUT);
 	} else {
-		main($args[0], "-?");
+		main($ARGV[0], "-?");
 	}
 	return 0;
 }
 
 sub command_version {
-	my @args = @_;
+	local @ARGV = @_;
 
-	if (@args >= 1 && $args[0] eq "-?") {
+	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
 		print "Usage: sslmate version [OPTIONS]\n";
 		print "\n";
 		print "Valid options:\n";
@@ -2974,17 +2878,11 @@ sub command_version {
 
 	my $check = 1;
 	my $is_latest = 0;
-	while (@args >= 1) {
-		if ($args[0] eq "--no-check") {
-			$check = 0;
-			shift @args;
-		} elsif ($args[0] eq "--is-latest") {
-			$is_latest = 1;
-			shift @args;
-		} else {
-			last;
-		}
-	}
+	my $getopt = Getopt::Long::Parser->new;
+	$getopt->configure(qw(no_ignore_case permute bundling));
+	$getopt->getoptions('check!', \$check,
+			    'is-latest', \$is_latest) or return 2;
+
 	die "Error: --no-check and --is-latest are mutually-exclusive.\n" if $is_latest && !$check;
 
 	print "SSLMate $VERSION\n" unless $is_latest;
@@ -3009,58 +2907,49 @@ sub command_version {
 }
 
 sub main {
-	my @args = @_;
+	local @ARGV = @_;
 
-	while (@args >= 1) {
-		if ($args[0] eq "-p" && @args >= 2) {
-			shift @args;
-			$config_profile = $args[0];
-			shift @args;
-		} elsif ($args[0] =~ /^--profile=(.*)$/) {
-			$config_profile = $1;
-			shift @args;
-		} else {
-			last;
-		}
-	}
+	my $getopt = Getopt::Long::Parser->new;
+	$getopt->configure(qw(no_ignore_case no_permute bundling));
+	$getopt->getoptions('profile|p=s', \$config_profile) or return 2;
 
-	if (@args == 0) {
+	if (@ARGV == 0) {
 		print_usage(*STDERR);
 		return 2;
 	}
 
-	my $command = shift @args;
+	my $command = shift @ARGV;
 
 	if ($command eq 'buy') {
-		return command_buy @args;
+		return command_buy @ARGV;
 	} elsif ($command eq 'reissue') {
-		return command_reissue @args;
+		return command_reissue @ARGV;
 	} elsif ($command eq 'revoke') {
-		return command_revoke @args;
+		return command_revoke @ARGV;
 	} elsif ($command eq 'renew') {
-		return command_renew @args;
+		return command_renew @ARGV;
 	} elsif ($command eq 'req') {
-		return command_req @args;
+		return command_req @ARGV;
 	} elsif ($command eq 'download') {
-		return command_download @args;
+		return command_download @ARGV;
 	} elsif ($command eq 'list') {
-		return command_list @args;
+		return command_list @ARGV;
 	} elsif ($command eq 'edit') {
-		return command_edit @args;
+		return command_edit @ARGV;
 	} elsif ($command eq 'resend-email') {
-		return command_resend_email @args;
+		return command_resend_email @ARGV;
 	} elsif ($command eq 'test') {
-		return command_test @args;
+		return command_test @ARGV;
 	} elsif ($command eq 'import') {
-		return command_import @args;
+		return command_import @ARGV;
 	} elsif ($command eq 'link') {
-		return command_link @args;
+		return command_link @ARGV;
 	} elsif ($command eq 'mkconfig') {
-		return command_mkconfig @args;
+		return command_mkconfig @ARGV;
 	} elsif ($command eq 'help') {
-		return command_help @args;
+		return command_help @ARGV;
 	} elsif ($command eq 'version') {
-		return command_version @args;
+		return command_version @ARGV;
 	} else {
 		print STDERR "sslmate: '$command' is not a valid sslmate command.  See 'sslmate help'.\n";
 		return 1;
