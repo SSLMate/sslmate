@@ -803,15 +803,17 @@ sub openssl_ecparam_genkey {
 }
 
 sub genkey {
-	my ($key_file) = @_;
-	my $key_type = get_config('key_type', 'rsa');
-	if ($key_type eq 'rsa') {
+	my ($key_file, $key_type) = @_;
+	$key_type //= get_config('key_type', 'rsa');
+	if (lc $key_type eq 'rsa') {
 		openssl_genrsa($key_file, get_config('rsa_bits', 2048));
-	} elsif ($key_type eq 'ecdsa') {
+	} elsif (lc $key_type eq 'ecdsa') {
 		openssl_ecparam_genkey($key_file, get_config('ecdsa_curve', 'prime256v1'));
 	} else {
-		die "Error: illegal value for key_type config option: $key_type\n";
+		print STDERR "Error: invalid key type: $key_type (valid options are 'rsa' and 'ecdsa')\n";
+		return 0;
 	}
+	return 1;
 }
 
 sub make_dn {
@@ -1241,7 +1243,7 @@ sub do_wait_for_cert {
 }
 
 sub do_buy {
-	my ($cn, $years, $force, $no_wait, $accept_dummy, $auto_renew, $batch, $approval_method, $approver_email, %opts) = @_;
+	my ($cn, $years, $force, $no_wait, $accept_dummy, $auto_renew, $batch, $approval_method, $approver_email, $key_type, %opts) = @_;
 
 	# Future TODO: support reusing key file if one already exists
 
@@ -1331,7 +1333,7 @@ sub do_buy {
 
 	print "Generating private key... "; STDOUT->flush;
 	truncate($files->{key_file}, 0);
-	genkey($files->{key_file});
+	genkey($files->{key_file}, $key_type) or $exit_with_error->();
 	close($files->{key_file});
 	print "Done.\n";
 
@@ -1406,6 +1408,7 @@ sub command_buy {
 		print " --no-wait            return immediately; don't wait for cert to be issued\n";
 		print " --temp               return immediately with a temporary certificate\n";
 		print " --coupon=CODE        use the given coupon code for a discount\n";
+		print " --key-type=TYPE      type of key to generate ('rsa' or 'ecdsa')\n";
 		print " --invoice-note=NOTE  include the given note with the invoice\n";
 		print " --email-invoice-to=ADDRESS\n";
 		print "                      email an invoice to the given address\n";
@@ -1420,6 +1423,7 @@ sub command_buy {
 	my $approver_email = undef;
 	my $no_wait = 0;
 	my $accept_dummy = 0;
+	my $key_type = undef;
 
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
@@ -1430,6 +1434,7 @@ sub command_buy {
 			    'email=s', \$approver_email,
 			    'no-wait', \$no_wait,
 			    'temp', \$accept_dummy,
+			    'key-type=s', \$key_type,
 			    'coupon=s', \$opts{coupon_code},
 			    'email-invoice-to=s', \$opts{email_invoice_to},
 			    'invoice-note=s', \$opts{invoice_note}) or return 2;
@@ -1469,7 +1474,7 @@ sub command_buy {
 	}
 
 	init_default_paths;
-	do_buy($cn, $years, $force, $no_wait, $accept_dummy, $auto_renew, $batch, $approval_method, $approver_email, %opts);
+	do_buy($cn, $years, $force, $no_wait, $accept_dummy, $auto_renew, $batch, $approval_method, $approver_email, $key_type, %opts);
 	return 0;
 }
 
@@ -1483,16 +1488,19 @@ sub command_reissue {
 		print "Valid options:\n";
 		print " -f, --force        overwrite existing files\n";
 		print " --no-wait          return immediately; don't wait for new cert to be issued\n";
+		print " --key-type=TYPE    type of key to generate ('rsa' or 'ecdsa')\n";
 		return 0;
 	}
 
 	my $force = 0;
 	my $no_wait = 0;
+	my $key_type = undef;
 
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
 	$getopt->getoptions('force|f', \$force,
-			    'no-wait', \$no_wait) or return 2;
+			    'no-wait', \$no_wait,
+			    'key-type=s', \$key_type) or return 2;
 
 	if (@ARGV != 1) {
 		print STDERR "Error: you must specify the hostname of the certificate to reissue.\n";
@@ -1555,10 +1563,10 @@ sub command_reissue {
 		exit 1;
 	};
 
-	# 3. Generate new RSA key and CSR
+	# 3. Generate new key and CSR
 	print "Generating private key... "; STDOUT->flush;
 	truncate($files->{key_file}, 0);
-	genkey($files->{key_file});
+	genkey($files->{key_file}, $key_type) or $exit_with_error->();
 	close($files->{key_file});
 	print "Done.\n";
 
@@ -1848,16 +1856,19 @@ sub command_req {
 		print "Valid options:\n";
 		print " -f, --force        overwrite existing files\n";
 		print " --country=CODE     set country code for request\n";
+		print " --key-type=TYPE    type of key to generate ('rsa' or 'ecdsa')\n";
 		return 0;
 	}
 
 	my $force = 0;
 	my $country_code;
+	my $key_type;
 
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
 	$getopt->getoptions('force|f', \$force,
-			    'country=s', \$country_code) or return 2;
+			    'country=s', \$country_code,
+			    'key-type=s', \$key_type) or return 2;
 
 	if (@ARGV != 1) {
 		print STDERR "Error: you must specify the hostname for the certificate.\n";
@@ -1883,9 +1894,9 @@ sub command_req {
 		return 1;
 	}
 
-	# 1. Generate an RSA key
+	# 1. Generate a key
 	print "Generating private key... "; STDOUT->flush;
-	genkey($key_file);
+	genkey($key_file, $key_type) or return 1;
 	close($key_file);
 	print "$cn.key\n";
 
