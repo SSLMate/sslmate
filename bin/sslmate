@@ -1982,13 +1982,13 @@ sub command_download {
 	my $errors = 0;
 	for my $cn (@ARGV) {
 		my ($status, $cert) = authed_api_call('GET', '/certs/' . qs_escape($cn), { expand => ['current.crt', 'current.chain', 'pending.crt', 'pending.chain'] }) or return 1;
-		if (not $cert->{exists}) {
+		if ($status != 200) {
+			print STDERR "Error: " . $cert->{message} . "\n";
+			return 1;
+		} elsif (not $cert->{exists}) {
 			print STDERR "Error: $cn: There is no certificate in your account with this name.\n";
 			++$errors;
 			next;
-		} elsif ($status != 200) {
-			print STDERR "Error: " . $cert->{message} . "\n";
-			return 1;
 		}
 		$cn = $cert->{cn}; # So that we use the canonical CN
 
