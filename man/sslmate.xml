@@ -967,10 +967,6 @@
 				<listitem><para>The directories where <command>sslmate</command> places keys and certificates. When running as root, the default is <filename>/etc/sslmate</filename>. When running as non-root, the default is the current working directory.</para></listitem>
 			</varlistentry>
 			<varlistentry>
-				<term><option>honor_umask yes | no</option></term>
-				<listitem><para>By default, sslmate creates certificate files with 644 permissions and key files with 600 permissions. If this option is set to yes, sslmate honors your umask when creating files.  Note that key files are never created with group or world permissions, even if this option is set to yes.</para></listitem>
-			</varlistentry>
-			<varlistentry>
 				<term><option>wildcard_filename <replaceable>PREFIX</replaceable></option></term>
 				<listitem><para>When creating files for wildcard certificates, use <replaceable>PREFIX</replaceable> in the filename instead of a * character.</para></listitem>
 			</varlistentry>

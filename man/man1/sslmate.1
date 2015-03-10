@@ -562,11 +562,6 @@ places keys and certificates\&. When running as root, the default is
 /etc/sslmate\&. When running as non\-root, the default is the current working directory\&.
 .RE
 .PP
-\fBhonor_umask yes | no\fR
-.RS 4
-By default, sslmate creates certificate files with 644 permissions and key files with 600 permissions\&. If this option is set to yes, sslmate honors your umask when creating files\&. Note that key files are never created with group or world permissions, even if this option is set to yes\&.
-.RE
-.PP
 \fBwildcard_filename \fR\fB\fIPREFIX\fR\fR
 .RS 4
 When creating files for wildcard certificates, use

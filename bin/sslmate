@@ -310,6 +310,7 @@ sub init_default_paths {
 			$global_config{'cert_directory'} = $default_directory;
 		}
 	}
+	warn "Warning: the honor_umask option is deprecated and will be removed in a future version of SSLMate.\n" if config_has('honor_umask');
 	unless (get_config('honor_umask', 'no') eq 'yes') {
 		umask 0022;
 	}
