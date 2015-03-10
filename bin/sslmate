@@ -206,6 +206,58 @@ sub prompt_password {
 	return $password; # XXX: should this be passed through decode_input?
 }
 
+sub restore_file_permissions {
+	my ($destfile, $srcfile) = @_;
+
+	my @srcstat = stat($srcfile) or die "Error: $srcfile: $!\n";
+	if (not @srcstat) {
+		warn "Warning: unable to preserve permissions of $srcfile: stat failed: $!\n";
+		return;
+	}
+
+	# 1. Restore user and group
+	if (!chown($srcstat[4], -1, $destfile)) {
+		warn "Warning: unable to preserve ownership of $srcfile: chown failed: $!\n";
+	}
+	if (!chown(-1, $srcstat[5], $destfile)) {
+		warn "Warning: unable to preserve group ownership of $srcfile: chown failed: $!\n";
+	}
+
+	# 2. Restore mode
+	my $facls;
+	if ($^O eq 'linux') {
+		# Try to use getfacl so that FACLs are preserved.  But getfacl might not be
+		# installed, so quietly fall back to regular chmod if getfacl fails.  Note
+		# that getfacl/setfacl also get/set normal permissions, and work even on
+		# filesystems which don't support FACLs.
+		pipe(my $getfacl_reader, my $getfacl_writer) or die "Error: pipe failed: $!";
+		my $getfacl_pid = fork;
+		die "Error: fork failed: $!" unless defined $getfacl_pid;
+		if ($getfacl_pid == 0) {
+			open(STDIN, '<', '/dev/null');
+			open(STDOUT, '>&', $getfacl_writer) or die "Error: dup failed: $!";
+			open(STDERR, '>', '/dev/null');
+			close($getfacl_reader);
+			exec('getfacl', $srcfile);
+			exit 1;
+		}
+		close($getfacl_writer);
+
+		my $getfacl_output = do { local $/; <$getfacl_reader> };
+		close($getfacl_reader);
+
+		waitpid($getfacl_pid, 0) or die "Error: waitpid failed: $!";
+		$facls = $getfacl_output if $? == 0;
+	}
+	if (defined $facls) {
+		open(my $setfacl_writer, '|-', 'setfacl', '-M-', $destfile) or die "Error: fork failed: $!";
+		print $setfacl_writer $facls;
+		close($setfacl_writer) or warn "Warning: unable to preserve permissions of $srcfile: setfacl failed\n";
+	} else {
+		chmod($srcstat[2] & 07777, $destfile) or warn "Warning: unable to preserve permissions of $srcfile: chmod failed: $!\n";
+	}
+}
+
 sub config_has {
 	my ($name) = @_;
 
@@ -407,6 +459,7 @@ sub write_cert_files {
 
 	# Rename the new files on top of the old files:
 	if (defined $new_key_filename && $new_key_filename ne $paths->{key_filename}) {
+		restore_file_permissions($new_key_filename, $paths->{key_filename});
 		rename($new_key_filename, $paths->{key_filename})
 				or die "Error: " . $paths->{key_filename} . ': ' . $! . "\n";
 	}
