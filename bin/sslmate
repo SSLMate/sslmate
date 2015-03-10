@@ -323,18 +323,6 @@ sub file_contents_are {
 	return $actual_contents eq $contents;
 }
 
-sub read_first_crt {
-	my ($fh) = @_;
-	my $crt = '';
-	while (defined(my $line = <$fh>)) {
-		chomp $line;
-		$crt .= $line;
-		$crt .= "\n";
-		last if $line eq '-----END CERTIFICATE-----';
-	}
-	return $crt;
-}
-
 sub make_openssl_req_cnf {
 	my ($dn) = @_;
 	my $tempfile = File::Temp->new();
