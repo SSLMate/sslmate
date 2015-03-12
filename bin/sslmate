@@ -1922,19 +1922,25 @@ sub command_req {
 		print "\n";
 		print "Valid options:\n";
 		print " -f, --force        overwrite existing files\n";
-		print " --country=CODE     set country code for request\n";
+		print " --key-file=FILE    write private key to FILE (- for stdout)\n";
+		print " --csr-file=FILE    write CSR to FILE (- for stdout)\n";
 		print " --key-type=TYPE    type of key to generate ('rsa' or 'ecdsa')\n";
+		print " --dn NAME=VALUE    set the given DN attribute in the request\n";
 		return 0;
 	}
 
 	my $force = 0;
-	my $country_code;
+	my $dn = {};
 	my $key_type;
+	my $key_filename;
+	my $csr_filename;
 
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
 	$getopt->getoptions('force|f', \$force,
-			    'country=s', \$country_code,
+			    'dn=s', $dn,
+			    'key-file=s', \$key_filename,
+			    'csr-file=s', \$csr_filename,
 			    'key-type=s', \$key_type) or return 2;
 
 	if (@ARGV != 1) {
@@ -1946,32 +1952,48 @@ sub command_req {
 	}
 
 	my $cn = lc $ARGV[0];
+	$key_filename //= "$cn.key";
+	$csr_filename //= "$cn.csr";
+	if (keys %$dn) {
+		$dn->{C} //= 'US';
+		$dn->{CN} = $cn;
+	} else {
+		$dn = make_dn($cn);
+	}
 
 	# 0. Open the files
 	my $open_flags = O_WRONLY | O_CREAT | O_TRUNC;
 	$open_flags |= O_EXCL unless $force;
 	my $key_file;
-	if (!sysopen($key_file, "$cn.key", $open_flags, 0600)) {
-		print STDERR "Error: unable to open '$cn.key' for writing: $!\n";
-		return 1;
+	if ($key_filename eq '-') {
+		open($key_file, '>&STDOUT');
+	} else {
+		if (!sysopen($key_file, $key_filename, $open_flags, 0600)) {
+			print STDERR "Error: unable to open '$key_filename' for writing: $!\n";
+			return 1;
+		}
 	}
 	my $csr_file;
-	if (!sysopen($csr_file, "$cn.csr", $open_flags, 0666)) {
-		print STDERR "Error: unable to open '$cn.csr' for writing: $!\n";
-		return 1;
+	if ($csr_filename eq '-') {
+		open($csr_file, '>&STDOUT');
+	} else {
+		if (!sysopen($csr_file, $csr_filename, $open_flags, 0666)) {
+			print STDERR "Error: unable to open '$csr_filename' for writing: $!\n";
+			return 1;
+		}
 	}
 
 	# 1. Generate a key
-	print "Generating private key... "; STDOUT->flush;
+	print STDERR "Generating private key... "; STDERR->flush;
 	genkey($key_file, $key_type) or return 1;
 	close($key_file);
-	print "$cn.key\n";
+	print STDERR "$key_filename\n";
 
 	# 2. Generate the CSR
-	print "Generating CSR... "; STDOUT->flush;
-	print $csr_file openssl_req("$cn.key", make_dn($cn, $country_code));
+	print STDERR "Generating CSR... "; STDERR->flush;
+	print $csr_file openssl_req("$cn.key", $dn);
 	close($csr_file);
-	print "$cn.csr\n";
+	print STDERR "$csr_filename\n";
 
 	return 0;
 }
