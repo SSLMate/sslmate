@@ -258,6 +258,17 @@ sub restore_file_permissions {
 	}
 }
 
+sub validate_cn {
+	my ($cn) = @_;
+	# Most validation happens server-side, but a slash can't be encoded in a URL, so we have
+	# to check for it client-side.
+	if ($cn =~ /\//) {
+		print STDERR "Error: $cn: invalid common name (contains a slash)\n";
+		return 0;
+	}
+	return 1;
+}
+
 sub config_has {
 	my ($name) = @_;
 
@@ -1508,6 +1519,7 @@ sub command_buy {
 
 	my $cn = lc $ARGV[0];
 	my $years = undef;
+	validate_cn($cn) or return 1;
 
 	load_config;
 	if (!is_linked) {
@@ -1557,6 +1569,7 @@ sub command_reissue {
 	}
 
 	my $cn = lc $ARGV[0];
+	validate_cn($cn) or return 1;
 
 	load_config;
 	if (!is_linked) {
@@ -1677,6 +1690,7 @@ sub command_revoke {
 	}
 
 	my $cn = lc $ARGV[0];
+	validate_cn($cn) or return 1;
 
 	load_config;
 	if (!is_linked) {
@@ -1775,6 +1789,7 @@ sub command_renew {
 
 	my $cn = $ARGV[0];
 	my $years = undef;
+	validate_cn($cn) or return 1;
 
 	load_config;
 	if (!is_linked) {
@@ -2023,6 +2038,8 @@ sub command_download {
 	my @certs;
 	my $errors = 0;
 	for my $cn (@ARGV) {
+		$cn = lc $cn;
+		validate_cn($cn) or return 1;
 		my ($status, $cert) = authed_api_call('GET', '/certs/' . qs_escape($cn), { expand => ['current.crt', 'current.chain', 'pending.crt', 'pending.chain'] }) or return 1;
 		if ($status != 200) {
 			print STDERR "Error: " . $cert->{message} . "\n";
@@ -2391,7 +2408,8 @@ sub command_edit {
 		return 2;
 	}
 
-	my $cn = $ARGV[0];
+	my $cn = lc $ARGV[0];
+	validate_cn($cn) or return 1;
 	load_config;
 	if (!is_linked) {
 		unless (-t STDIN) {
@@ -2480,7 +2498,8 @@ sub command_resend_email {
 		return 2;
 	}
 
-	my $cn = $ARGV[0];
+	my $cn = lc $ARGV[0];
+	validate_cn($cn) or return 1;
 	load_config;
 	if (!is_linked) {
 		unless (-t STDIN) {
@@ -2545,7 +2564,8 @@ sub command_test {
 		return 2;
 	}
 
-	my $cn = $ARGV[0];
+	my $cn = lc $ARGV[0];
+	validate_cn($cn) or return 1;
 
 	load_config;
 	if (!is_linked) {
@@ -2689,6 +2709,7 @@ sub do_import {
 		print STDERR "Error: The certificate ($source_crt_path)'s public key does not match the private key ($source_key_path)\n";
 		exit 1;
 	}
+	validate_cn($cn) or return 1;
 
 	# 4. Retrieve the current cert object from the server
 	my $cert_obj;
