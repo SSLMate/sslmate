@@ -74,8 +74,8 @@ try:
 	aws_access_key_id = os.environ['PARAM_0'];
 	aws_secret_access_key = os.environ['PARAM_1'];
 	hosted_zone_id = os.environ['PARAM_2'];
-except KeyError:
-	sys.stderr.write('route53: Error: Missing required environment variable - was this program invoked by SSLMate?\n')
+except KeyError as e:
+	sys.stderr.write('route53: Error: Missing required environment variable %s - was this program invoked by SSLMate?\n' % e.args[0])
 	sys.exit(2)
 except ValueError:
 	sys.stderr.write('route53: Error: Environment variable contains bogus value - was this program invoked by SSLMate?\n')
@@ -119,7 +119,7 @@ try:
 	else:
 		bad_usage();
 except Exception as e:
-	sys.stderr.write('route53: Error (for %s): %s\n' % (rr_name, e.error_message))
+	sys.stderr.write('route53: Error (for %s): %s\n' % (rr_name, e))
 	sys.exit(1)
 
 sys.exit(0)
