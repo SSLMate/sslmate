@@ -1427,7 +1427,7 @@ sub do_buy {
 	unless ($force) {
 		my $errors = 0;
 
-		$errors += has_existing_files(@{$paths}{qw{key_filename crt_filename chain_crt_filename chained_crt_filename}});
+		$errors += has_existing_files(@{$paths}{keys %$paths});
 		if (defined($cert->{pending})) {
 			print STDERR "Error: a certificate for $cn is already pending issuance.\n";
 			print STDERR "Tip: to resend or change a certificate's approver email, use 'sslmate resend-email'.\n";
@@ -2873,11 +2873,12 @@ sub do_import {
 
 		if ($install_locally) {
 			my @check_files;
-			# Don't care if .key or .crt files exist if they're the same as the files we're importing.
-			push @check_files, 'key_filename' unless $key_already_installed;
-			push @check_files, 'crt_filename' unless $crt_already_installed;
-			push @check_files, 'chain_crt_filename';
-			push @check_files, 'chained_crt_filename';
+			for my $file_type (keys %$paths) {
+				# Don't care if .key or .crt files exist if they're the same as the files we're importing.
+				next if $file_type eq 'key' && $key_already_installed;
+				next if $file_type eq 'crt' && $crt_already_installed;
+				push @check_files, $file_type;
+			}
 			$errors += has_existing_files(@{$paths}{@check_files});
 		}
 		if (defined($cert_obj->{current}) && $cert_obj->{current}->{expiration} >= $crt_info->{expiration}) {
