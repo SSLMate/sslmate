@@ -60,6 +60,7 @@ our $has_curl = eval { require WWW::Curl::Easy; 1 };
 
 our $VERSION = '0.7.0-pre2';
 our $API_ENDPOINT = 'https://sslmate.com/api/v2';
+our $PKCS12_PASSWORD = 'sslmate';
 
 our $DEFAULT_LIBEXEC_DIR = undef;
 our $LIBEXEC_DIR = $ENV{'SSLMATE_LIBEXEC_DIR'} // $DEFAULT_LIBEXEC_DIR // "$FindBin::Bin/../libexec/sslmate";
@@ -509,6 +510,27 @@ sub open_key_file {
 	return $fh;
 }
 
+sub write_pkcs12_file {
+	my ($out_file, $key, $crt, $chain) = @_;
+
+	pipe(my $openssl_stdin, my $to_openssl_stdin) or die "Error: pipe failed: $!";
+	my $openssl_pid = fork;
+	die "Error: fork failed: $!" unless defined $openssl_pid;
+	if ($openssl_pid == 0) {
+		open(STDIN, '<&', $openssl_stdin) or die "Error: dup failed: $!";
+		open(STDOUT, '>&', $out_file) or die "Error: dup failed: $!";
+		close($to_openssl_stdin);
+		$ENV{PKCS12_PASSWORD} = $PKCS12_PASSWORD;
+		exec('openssl', 'pkcs12', '-export', '-passout', 'env:PKCS12_PASSWORD');
+		die "Error: Unable to run 'openssl pkcs12' command: " . ($!{ENOENT} ? 'openssl command not found' : $!) . "\n";
+	}
+	close($openssl_stdin);
+	print $to_openssl_stdin join('', $key, $crt, $chain);
+	close($to_openssl_stdin);
+	waitpid($openssl_pid, 0) or die "waitpid failed: $!";
+	warn "Warning: 'openssl pkcs12' command failed; could not create PKCS#12 file\n" unless $? == 0;
+}
+
 sub write_cert_file {
 	my ($type, $file, $key, $crt, $chain) = @_;
 
@@ -524,7 +546,7 @@ sub write_cert_file {
 		print $file $crt;
 		print $file $chain;
 	} elsif ($type eq 'p12') {
-		# TODO: cat example.com.key example.com.crt example.com.chain.crt | openssl pkcs12 -export -passout pass:sslmate -out example.com.p12
+		write_pkcs12_file($file, $key, $crt, $chain);
 	} elsif ($type eq 'jks') {
 		# TODO: jks files
 	}
