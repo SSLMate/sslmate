@@ -2744,22 +2744,27 @@ sub do_import {
 
 	# 5. Check for existing files/certs
 	my $files;
+	my $key_already_installed = 0;
+	my $crt_already_installed = 0;
 	if ($install_locally) {
 		$files = get_cert_paths($cn);
 		if (realpath($source_key_path) eq realpath($files->{key_filename})) {
-			# Don't bother to write the key because it's already in place
-			delete $files->{key_filename};
+			$key_already_installed = 1;
+		}
+		if (realpath($source_crt_path) eq realpath($files->{crt_filename})) {
+			$crt_already_installed = 1;
 		}
 	}
 	unless ($force) {
 		my $errors = 0;
 
 		if ($install_locally) {
-			my @check_files = qw{key_filename chain_crt_filename chained_crt_filename};
-			if (realpath($source_crt_path) ne realpath($files->{crt_filename})) {
-				# Only care if .crt file exists if it's not the same file we're importing
-				push @check_files, 'crt_filename';
-			}
+			my @check_files;
+			# Don't care if .key or .crt files exist if they're the same as the files we're importing.
+			push @check_files, 'key_filename' unless $key_already_installed;
+			push @check_files, 'crt_filename' unless $crt_already_installed;
+			push @check_files, 'chain_crt_filename';
+			push @check_files, 'chained_crt_filename';
 			$errors += has_existing_files(@{$files}{@check_files});
 		}
 		if (defined($cert_obj->{current}) && $cert_obj->{current}->{expiration} >= $crt_info->{expiration}) {
@@ -2822,12 +2827,12 @@ sub do_import {
 	my $csr = openssl_req($source_key_path, $cert_obj->{dn} // make_dn($cn));
 
 	my $key_file;
-	if ($install_locally) {
-		$key_file = open_key_file($files->{key_filename}, $force) if defined $files->{key_filename};
+	if ($install_locally && !$key_already_installed) {
+		$key_file = open_key_file($files->{key_filename}, $force);
 	}
 
 	my $exit_with_error = sub {
-		unlink($files->{key_filename}) if $install_locally && defined $files->{key_filename};
+		unlink($files->{key_filename}) if $install_locally && !$key_already_installed;
 		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert_obj, qw/approval_method approver_email csr/)) if defined($cert_obj);
 		exit 1;
 	};
@@ -2875,7 +2880,7 @@ sub do_import {
 	print "\n";
 	print "Your certificate has been imported to SSLMate.\n\n";
 	if ($install_locally) {
-		print "           Private key file: " . ($files->{key_filename} // $source_key_path) . "\n";
+		print "           Private key file: " . $files->{key_filename} . "\n";
 		print "           Certificate file: " . $files->{crt_filename} . "\n";
 		print "     Certificate chain file: " . $files->{chain_crt_filename} . "\n";
 		print "Certificate with chain file: " . $files->{chained_crt_filename} . "\n";
