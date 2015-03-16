@@ -1376,7 +1376,7 @@ sub do_buy {
 	#
 	# 2. Generate key/CSR
 	#
-	$files->{key_file} = open_key_file($files->{key_filename}, $force);
+	my $key_file = open_key_file($files->{key_filename}, $force);
 
 	my $exit_with_error = sub {
 		unlink($files->{key_filename});
@@ -1385,9 +1385,9 @@ sub do_buy {
 	};
 
 	print "Generating private key... "; STDOUT->flush;
-	truncate($files->{key_file}, 0);
-	genkey($files->{key_file}, $key_type) or $exit_with_error->();
-	close($files->{key_file});
+	truncate($key_file, 0);
+	genkey($key_file, $key_type) or $exit_with_error->();
+	close($key_file);
 	print "Done.\n";
 
 	print "Generating CSR... "; STDOUT->flush;
@@ -1616,7 +1616,7 @@ sub command_reissue {
 	unless ($force) {
 		exit 1 if has_existing_files($new_key_filename);
 	}
-	$files->{key_file} = open_key_file($new_key_filename, $force);
+	my $key_file = open_key_file($new_key_filename, $force);
 
 	my $exit_with_error = sub {
 		unlink($new_key_filename);
@@ -1626,9 +1626,9 @@ sub command_reissue {
 
 	# 3. Generate new key and CSR
 	print "Generating private key... "; STDOUT->flush;
-	truncate($files->{key_file}, 0);
-	genkey($files->{key_file}, $key_type) or $exit_with_error->();
-	close($files->{key_file});
+	truncate($key_file, 0);
+	genkey($key_file, $key_type) or $exit_with_error->();
+	close($key_file);
 	print "Done.\n";
 
 	print "Generating CSR... "; STDOUT->flush;
@@ -2821,8 +2821,9 @@ sub do_import {
 	# 7. Generate the CSR
 	my $csr = openssl_req($source_key_path, $cert_obj->{dn} // make_dn($cn));
 
+	my $key_file;
 	if ($install_locally) {
-		$files->{key_file} = open_key_file($files->{key_filename}, $force) if defined $files->{key_filename};
+		$key_file = open_key_file($files->{key_filename}, $force) if defined $files->{key_filename};
 	}
 
 	my $exit_with_error = sub {
@@ -2861,11 +2862,11 @@ sub do_import {
 	$cert_instance->{chain} //= '';
 
 	if ($install_locally) {
-		if (defined $files->{key_file}) {
+		if (defined $key_file) {
 			# write .key file
-			truncate($files->{key_file}, 0);
-			print {$files->{key_file}} $key;
-			close $files->{key_file};
+			truncate($key_file, 0);
+			print $key_file $key;
+			close $key_file;
 		}
 
 		write_cert_files($files, undef, $crt, $cert_instance->{chain});
