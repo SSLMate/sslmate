@@ -94,7 +94,7 @@ if aws_access_key_id is None:
 	# Get AWS credentials from ~/.aws/credentials, an INI-style file (see http://blogs.aws.amazon.com/security/post/Tx3D6U6WSFGOK2H/A-New-and-Standardized-Way-to-Manage-Credentials-in-the-AWS-SDKs)
 	aws_credentials_path = os.path.join(os.path.expanduser("~"), '.aws', 'credentials')
 	if not os.path.exists(aws_credentials_path):
-		sys.stderr.write('route53: %s does not exist; please place your AWS credentials in either this file or in the SSLMate DNS approval map file\n' % aws_credentials_path)
+		sys.stderr.write('route53: Error: %s does not exist; please place your AWS credentials in either this file or in the SSLMate DNS approval map file\n' % aws_credentials_path)
 		sys.exit(2)
 	try:
 		aws_credentials_config = ConfigParser.RawConfigParser()
@@ -102,7 +102,7 @@ if aws_access_key_id is None:
 		aws_access_key_id = aws_credentials_config.get('default', 'aws_access_key_id')
 		aws_secret_access_key = aws_credentials_config.get('default', 'aws_secret_access_key')
 	except ConfigParser.Error as e:
-		sys.stderr.write('route53: %s: %s\n' % (aws_credentials_path, e))
+		sys.stderr.write('route53: Error: %s: %s\n' % (aws_credentials_path, e))
 		sys.exit(2)
 
 try:
@@ -115,7 +115,8 @@ try:
 				hosted_zone_id = zone['Id'][12:] # Slice off '/hostedzone/' prefix to get the actual ID
 				break
 		if hosted_zone_id is None:
-			sys.stderr.write('route53: Unable to find a hosted zone for %s (when using access key ID %s). Does your Route 53 account contain a hosted zone for this domain?\n' % (rr_name, aws_access_key_id))
+			sys.stderr.write('route53: Error: Unable to find a hosted zone for %s (when using access key ID %s). Does your Route 53 account contain a hosted zone for this domain?\n' % (rr_name, aws_access_key_id))
+			sys.exit(2)
 
 	current = conn.get_all_rrsets(hosted_zone_id, rr_type, rr_name, maxitems=1)
 	currently_exists = len(current) > 0 and rr_value in current[0].resource_records
