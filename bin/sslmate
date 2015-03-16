@@ -427,7 +427,60 @@ sub get_cert_paths {
 	$paths->{crt} = $cert_directory . $cn . ".crt";
 	$paths->{chain} = $cert_directory . $cn . ".chain.crt";
 	$paths->{chained} = $cert_directory . $cn . ".chained.crt";
+	#$paths->{combined} = $cert_directory . $cn . ".combined.pem"; TODO
+	#$paths->{p12} = $cert_directory . $cn . ".p12"; TODO
+	#$paths->{jks} = $cert_directory . $cn . ".jks"; TODO
 	return $paths;
+}
+
+our %file_types = (
+	crt => 'Certificate',
+	chain => 'Certificate chain',
+	chained => 'Certificate with chain',
+	combined => 'Combined PEM file',
+	p12 => 'PKCS#12 file',
+	jks => 'Java keystore',
+);
+our %file_type_contains_private_key = (
+	combined => 1,
+	p12 => 1,
+	jks => 1,
+);
+
+sub print_cert_paths {
+	my ($paths, $key_status, $cert_status) = @_;
+
+	$key_status //= '';
+	$cert_status //= '';
+
+	my @rows;
+
+	if ($key_status eq 'missing') {
+		push @rows, ["Private key", "(not found - should be " . $paths->{key} . ")"];
+	} elsif ($key_status eq 'old') {
+		push @rows, ["Private key", $paths->{key} . " (out-of-date)"];
+	} else {
+		push @rows, ["Private key", $paths->{key}];
+	}
+
+	for my $type (qw/crt chain chained combined p12 jks/) {
+		next unless defined $paths->{$type};
+
+		if ($file_type_contains_private_key{$type} && $key_status eq 'missing') {
+			push @rows, [$file_types{$type}, '(private key not found)'];
+		} elsif ($cert_status eq 'pending') {
+			push @rows, [$file_types{$type}, "(not yet issued - will be " . $paths->{$type} . ")"];
+		} elsif ($cert_status eq 'temporary') {
+			push @rows, [$file_types{$type}, $paths->{$type} . " (temporary)"];
+		} else {
+			push @rows, [$file_types{$type}, $paths->{$type}];
+		}
+	}
+
+	my $field_width = max(map { length($_->[0]) } @rows);
+	for my $row (@rows) {
+		printf "%*s: %s\n", $field_width, $row->[0], $row->[1];
+	}
 }
 
 sub has_existing_files {
@@ -456,27 +509,53 @@ sub open_key_file {
 	return $fh;
 }
 
+sub write_cert_file {
+	my ($type, $file, $key, $crt, $chain) = @_;
+
+	if ($type eq 'crt') {
+		print $file $crt;
+	} elsif ($type eq 'chain') {
+		print $file $chain;
+	} elsif ($type eq 'chained') {
+		print $file $crt;
+		print $file $chain;
+	} elsif ($type eq 'combined') {
+		print $file $key;
+		print $file $crt;
+		print $file $chain;
+	} elsif ($type eq 'p12') {
+		# TODO: cat example.com.key example.com.crt example.com.chain.crt | openssl pkcs12 -export -passout pass:sslmate -out example.com.p12
+	} elsif ($type eq 'jks') {
+		# TODO: jks files
+	}
+}
+
 sub write_cert_files {
 	my ($paths, $new_key_filename, $crt, $chain) = @_;
 
-	# write .crt file
-	my $crt_file = File::Temp->new(DIR => dirname($paths->{crt}), TEMPLATE => '.sslmate.XXXXXX');
-	chmod(0666 & ~umask, $crt_file);
-	print $crt_file $crt;
-	close $crt_file;
+	my $key = read_file($new_key_filename // $paths->{key});
+	my %files;
 
-	# write .chain.crt file
-	my $chain_crt_file = File::Temp->new(DIR => dirname($paths->{crt}), TEMPLATE => '.sslmate.XXXXXX');
-	chmod(0666 & ~umask, $chain_crt_file);
-	print $chain_crt_file $chain;
-	close $chain_crt_file;
+	for my $type (keys %file_types) {
+		next unless defined $paths->{$type};
 
-	# write .chained.crt file
-	my $chained_crt_file = File::Temp->new(DIR => dirname($paths->{crt}), TEMPLATE => '.sslmate.XXXXXX');
-	chmod(0666 & ~umask, $chained_crt_file);
-	print $chained_crt_file $crt;
-	print $chained_crt_file $chain;
-	close $chained_crt_file;
+		my $default_mode;
+		if ($file_type_contains_private_key{$type}) {
+			next unless defined $key;
+			$default_mode = 0600;
+		} else {
+			$default_mode = 0666;
+		}
+
+		$files{$type} = File::Temp->new(DIR => dirname($paths->{$type}), TEMPLATE => '.sslmate.XXXXXX');
+		if (-e $paths->{$type}) {
+			restore_file_permissions($files{$type}, $paths->{$type});
+		} else {
+			chmod($default_mode & ~umask, $files{$type});
+		}
+
+		write_cert_file($type, $files{$type}, $key, $crt, $chain);
+	}
 
 	# Rename the new files on top of the old files:
 	if (defined $new_key_filename && $new_key_filename ne $paths->{key}) {
@@ -485,17 +564,11 @@ sub write_cert_files {
 				or die "Error: " . $paths->{key} . ': ' . $! . "\n";
 	}
 
-	rename($crt_file->filename, $paths->{crt})
-				or die "Error: " . $paths->{crt} . ': ' . $! . "\n";
-	$crt_file->unlink_on_destroy(0);
-
-	rename($chain_crt_file->filename, $paths->{chain})
-			or die "Error: " . $paths->{chain} . ': ' . $! . "\n";
-	$chain_crt_file->unlink_on_destroy(0);
-
-	rename($chained_crt_file->filename, $paths->{chained})
-			or die "Error: " . $paths->{chained} . ': ' . $! . "\n";
-	$chained_crt_file->unlink_on_destroy(0);
+	for my $type (keys %files) {
+		rename($files{$type}->filename, $paths->{$type})
+					or die "Error: " . $paths->{$type} . ': ' . $! . "\n";
+		$files{$type}->unlink_on_destroy(0);
+	}
 }
 
 sub qs_escape {
@@ -1286,18 +1359,18 @@ sub do_wait_for_cert {
 
 	print "\n";
 
-	my $extra_info = '';
+	my ($key_status, $cert_status);
+	if (! -f $paths->{key}) {
+		$key_status = 'missing';
+	}
 	if ($is_dummy) {
 		print "A temporary, self-signed, certificate has been downloaded.\n\n";
-		$extra_info = " (temporary)";
+		$cert_status = 'temporary';
 	} else {
 		print "Your certificate is ready for use!\n\n";
 	}
 
-	print "           Private key file: " . $paths->{key} . "\n" if defined $new_key_filename;
-	print "           Certificate file: " . $paths->{crt} . "$extra_info\n";
-	print "     Certificate chain file: " . $paths->{chain} . "$extra_info\n";
-	print "Certificate with chain file: " . $paths->{chained} . "$extra_info\n";
+	print_cert_paths($paths, $key_status, $cert_status);
 	#print "\n";
 	#print "(" . $paths->{chained} . " is the concatenation of " . $paths->{crt} . " and " . $paths->{chain} . "; consult your program's documentation to determine whether you specify the certificate and chain in separate files or in one file.)\n";
 	print "\n";
@@ -2095,7 +2168,7 @@ sub command_download {
 		my ($crt, $chain);
 		my $is_dummy = 0;
 		my $install_new_key = 0;
-		my $is_out_of_date = 0;
+		my $key_is_out_of_date = 0;
 
 		if ($cert->{current} && defined($new_pubkey_hash) && $cert->{current}->{pubkey_hash} eq $new_pubkey_hash) {
 			$crt = $cert->{current}->{crt};
@@ -2128,22 +2201,28 @@ sub command_download {
 			$crt = $response->{crt};
 			$chain = $response->{chain};
 			$is_dummy = 1 if $response->{state} ne 'active';
-			$is_out_of_date = 1;
+			$key_is_out_of_date = 1;
 		} else {
 			print STDERR "Error: $cn: This certificate is not active.\n";
 			++$errors;
 			next;
 		}
 
-		print STDERR "Warning: $cn: the key file for this certificate (" . $paths->{key} . ") is out-of-date (the certificate has been reissued with a newer key). You should install the new key and then re-run 'sslmate download' to download the corresponding certificate files.\n" if $is_out_of_date;
+		print STDERR "Warning: $cn: the key file for this certificate (" . $paths->{key} . ") is out-of-date (the certificate has been reissued with a newer key). You should install the new key and then re-run 'sslmate download' to download the corresponding certificate files.\n" if $key_is_out_of_date;
 
 		$chain //= '';
 
-		if (not($install_new_key) &&
+		my $missing_files = 0;
+		for my $type (keys %file_types) {
+			if (defined $paths->{$type} && ! -e $paths->{$type}) {
+				$missing_files = 1;
+			}
+		}
+		if (not($missing_files) &&
+				not($install_new_key) &&
 				file_contents_are($paths->{crt}, $crt) &&
-				file_contents_are($paths->{chain}, $chain) &&
-				file_contents_are($paths->{chained}, $crt . $chain)) {
-			# Certs did not change
+				file_contents_are($paths->{chain}, $chain)) {
+			# Files did not change
 			next;
 		}
 
@@ -2159,7 +2238,7 @@ sub command_download {
 			       chain => $chain,
 			       is_dummy => $is_dummy,
 			       install_new_key => $install_new_key,
-			       is_out_of_date => $is_out_of_date,
+			       key_is_out_of_date => $key_is_out_of_date,
 			     };
 	}
 
@@ -2177,17 +2256,19 @@ sub command_download {
 		                 $cert->{crt},
 		                 $cert->{chain});
 
-		my $extra_info = '';
+		my ($key_status, $cert_status);
+		if (! -f $paths->{key}) {
+			$key_status = 'missing';
+		} elsif ($cert->{key_is_out_of_date}) {
+			$key_status = 'old';
+		}
 		if ($cert->{is_dummy}) {
 			print "A temporary, self-signed, certificate for $cn has been downloaded.\n\n";
-			$extra_info = " (temporary)";
+			$cert_status = 'temporary';
 		} else {
 			print "The certificate for $cn has been downloaded.\n\n";
 		}
-		print "           Private key file: " . $paths->{key} . "\n" if -f $paths->{key};
-		print "           Certificate file: " . $paths->{crt} . "$extra_info\n";
-		print "     Certificate chain file: " . $paths->{chain} . "$extra_info\n";
-		print "Certificate with chain file: " . $paths->{chained} . "$extra_info\n";
+		print_cert_paths($paths, $key_status, $cert_status);
 		print "\n";
 	}
 	if ($errors) {
@@ -2890,10 +2971,7 @@ sub do_import {
 	print "\n";
 	print "Your certificate has been imported to SSLMate.\n\n";
 	if ($install_locally) {
-		print "           Private key file: " . $paths->{key} . "\n";
-		print "           Certificate file: " . $paths->{crt} . "\n";
-		print "     Certificate chain file: " . $paths->{chain} . "\n";
-		print "Certificate with chain file: " . $paths->{chained} . "\n";
+		print_cert_paths($paths);
 	}
 }
 
