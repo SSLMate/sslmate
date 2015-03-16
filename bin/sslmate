@@ -470,7 +470,7 @@ sub write_cert_files {
 
 	# Rename the new files on top of the old files:
 	if (defined $new_key_filename && $new_key_filename ne $paths->{key}) {
-		restore_file_permissions($new_key_filename, $paths->{key});
+		restore_file_permissions($new_key_filename, $paths->{key}) if -e $paths->{key};
 		rename($new_key_filename, $paths->{key})
 				or die "Error: " . $paths->{key} . ': ' . $! . "\n";
 	}
