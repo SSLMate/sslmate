@@ -379,11 +379,21 @@ sub init_default_paths {
 	}
 }
 
+sub read_file {
+	my ($filename) = @_;
+	open(my $fh, '<', $filename) or return undef;
+	my $contents = do { local $/; <$fh> };
+	close($fh);
+	return $contents;
+}
+
 sub file_contents_are {
 	my ($filename, $contents) = @_;
-	open(my $fh, '<', $filename) or return 0;
-	my $actual_contents = do { local $/; <$fh> };
-	return $actual_contents eq $contents;
+	if (defined(my $actual_contents = read_file($filename))) {
+		return $actual_contents eq $contents;
+	} else {
+		return 0;
+	}
 }
 
 sub make_openssl_req_cnf {
