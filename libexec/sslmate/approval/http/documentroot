@@ -52,9 +52,9 @@ hostname=$2
 path=$3
 contents=$4
 
-if [ $NUM_PARAMS != 1 ]
+if [ $PARAMS != "0" ]
 then
-	echo "documentroot: Error: unexpected number of parameters (got $NUM_PARAMS, expected 1)" >&2
+	echo "documentroot: Error: unexpected parameters (expected exactly 1 parameter)" >&2
 	exit 2
 fi
 

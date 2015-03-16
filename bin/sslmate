@@ -812,8 +812,17 @@ sub load_approval_map {
 	my $map = {};
 	for my $line (<$fh>) {
 		chomp $line;
-		my ($hostname, $command, @params) = split(' ', $line);
-		$map->{$hostname} = { command => $command, params => \@params };
+		my ($hostname, $command, @param_words) = split(' ', $line);
+		my $params = {};
+		my $index = 0;
+		for (@param_words) {
+			if (my ($name, $value) = /^([^=]+)=(.*)$/) {
+				$params->{$name} = $value;
+			} else {
+				$params->{$index++} = $_;
+			}
+		}
+		$map->{$hostname} = { command => $command, params => $params };
 	}
 	return $map;
 }
@@ -822,11 +831,9 @@ sub exec_approval_method {
 	my ($type, $method, @args) = @_;
 	local %ENV = %ENV;
 
-	$ENV{NUM_PARAMS} = scalar @{$method->{params}};
-	my $i = 0;
-	for my $param (@{$method->{params}}) {
-		$ENV{"PARAM_$i"} = $param;
-		$i++;
+	$ENV{PARAMS} = join(' ', sort keys %{$method->{params}});
+	for my $name (keys %{$method->{params}}) {
+		$ENV{"PARAM_$name"} = $method->{params}->{$name};
 	}
 	my $path = $method->{command};
 	unless ($path =~ /^\//) {
