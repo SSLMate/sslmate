@@ -2817,6 +2817,8 @@ sub command_test {
 	}
 
 	my $num_errors = 0;
+	my $num_cert_errors = 0;
+	my $num_chain_errors = 0;
 	for my $result (@{$response->{result}}) {
 		my $host = $result->{hostname} . " (" . $result->{ip_address} . ")";
 		if ($result->{status} ne 'conclusive') {
@@ -2825,14 +2827,24 @@ sub command_test {
 		} elsif (not $result->{correct}) {
 			print "$host: Incorrect certificate installed\n";
 			++$num_errors;
+			++$num_cert_errors;
 		} elsif (not $result->{chained}) {
 			print "$host: Chain certificate not installed\n";
 			++$num_errors;
+			++$num_cert_errors;
+			++$num_chain_errors;
 		} elsif ($result->{dummy}) {
 			print "$host: Good (temporary, self-signed certificate)\n";
 		} else {
 			print "$host: Good\n";
 		}
+	}
+
+	if ($num_chain_errors > 0) {
+		print STDERR "Tip: make sure you have configured your server with either the .chained.crt file\n     OR with BOTH the .crt file and the .chain.crt file.\n";
+	}
+	if ($num_cert_errors > 0) {
+		print STDERR "Tip: use the 'sslmate mkconfig' command to generate the correct configuration.\n";
 	}
 
 	return 11 unless $num_errors == 0;
