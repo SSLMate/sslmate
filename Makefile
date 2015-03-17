@@ -5,7 +5,7 @@
 #
 
 PROJECT = sslmate
-VERSION = 0.7.0-pre2
+VERSION = 0.7.0-pre3
 
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
