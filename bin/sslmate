@@ -413,6 +413,28 @@ EOF
 	return $tempfile;
 }
 
+our %file_types = (
+	crt => 'Certificate',
+	chain => 'Certificate chain',
+	chained => 'Certificate with chain',
+	combined => 'Combined PEM file',
+	p12 => 'PKCS#12 file',
+	jks => 'Java keystore',
+);
+our %file_extensions = (
+	crt => '.crt',
+	chain => '.chain.crt',
+	chained => '.chained.crt',
+	combined => '.combined.pem',
+	p12 => '.p12',
+	jks => '.jks',
+);
+our %file_type_contains_private_key = (
+	combined => 1,
+	p12 => 1,
+	jks => 1,
+);
+
 sub get_cert_paths {
 	my ($cn) = @_;
 
@@ -427,26 +449,12 @@ sub get_cert_paths {
 	$paths->{key} = $key_directory . $cn . ".key";
 	$paths->{crt} = $cert_directory . $cn . ".crt";
 	$paths->{chain} = $cert_directory . $cn . ".chain.crt";
-	$paths->{chained} = $cert_directory . $cn . ".chained.crt";
-	#$paths->{combined} = $cert_directory . $cn . ".combined.pem"; TODO
-	#$paths->{p12} = $cert_directory . $cn . ".p12"; TODO
-	#$paths->{jks} = $cert_directory . $cn . ".jks"; TODO
+	for my $type (split /,\s*|\s+/, get_config("cert_formats", "chained")) {
+		die "Unknown file type in config: $type\n" unless exists $file_types{$type};
+		$paths->{$type} = $cert_directory . $cn . $file_extensions{$type};
+	}
 	return $paths;
 }
-
-our %file_types = (
-	crt => 'Certificate',
-	chain => 'Certificate chain',
-	chained => 'Certificate with chain',
-	combined => 'Combined PEM file',
-	p12 => 'PKCS#12 file',
-	jks => 'Java keystore',
-);
-our %file_type_contains_private_key = (
-	combined => 1,
-	p12 => 1,
-	jks => 1,
-);
 
 sub print_cert_paths {
 	my ($paths, $key_status, $cert_status) = @_;
