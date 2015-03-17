@@ -74,14 +74,14 @@ fi
 if [ $action = "add" ]
 then
 	# TODO: mkdir?
-	printf "documentroot: Writing $document_root$path... " >&2
+	printf "documentroot: Writing $document_root$path... "
 	printf "%s" "$contents" > "$document_root$path"
-	printf "Done.\n" >&2
+	printf "Done.\n"
 elif [ $action = "del" ]
 then
-	printf "documentroot: Removing $document_root$path... " >&2
+	printf "documentroot: Removing $document_root$path... "
 	rm -f "$document_root$path"
-	printf "Done.\n" >&2
+	printf "Done.\n"
 else
 	echo "Usage: $USAGE" >&2
 	exit 2

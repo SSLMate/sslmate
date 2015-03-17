@@ -145,8 +145,8 @@ try:
 
 	if action == 'add':
 		if not currently_exists:
-			sys.stderr.write('route53: Adding %s record for %s... ' % (rr_type, rr_name))
-			sys.stderr.flush()
+			sys.stdout.write('route53: Adding %s record for %s... ' % (rr_type, rr_name))
+			sys.stdout.flush()
 			changes = ResourceRecordSets(conn, hosted_zone_id)
 			changes.add_change('UPSERT', rr_name, rr_type, ttl=5).add_value(rr_value)
 			result = changes.commit()
@@ -161,17 +161,17 @@ try:
 				else:
 					sys.stderr.write('route53: Error: bad response from AWS: unknown status %s for change %s\n' % (status, change_id))
 					sys.exit(1)
-			sys.stderr.write('Done.\n')
-			sys.stderr.flush()
+			sys.stdout.write('Done.\n')
+			sys.stdout.flush()
 	elif action == 'del':
 		if currently_exists:
-			sys.stderr.write('route53: Removing %s record for %s... ' % (rr_type, rr_name))
-			sys.stderr.flush()
+			sys.stdout.write('route53: Removing %s record for %s... ' % (rr_type, rr_name))
+			sys.stdout.flush()
 			changes = ResourceRecordSets(conn, hosted_zone_id)
 			changes.add_change('DELETE', rr_name, rr_type, ttl=5).add_value(rr_value)
 			changes.commit()
-			sys.stderr.write('Done.\n')
-			sys.stderr.flush()
+			sys.stdout.write('Done.\n')
+			sys.stdout.flush()
 	else:
 		bad_usage();
 except Exception as e:
