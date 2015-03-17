@@ -803,7 +803,7 @@ sub load_approval_map {
 	my $param = $type . '_approval_map';
 	my $path = get_config($param);
 	if (not defined $path) {
-		die "Configuration parameter $param not set\n";
+		return undef;
 	}
 	my $fh;
 	if (not open($fh, '<', $path)) {
@@ -827,33 +827,83 @@ sub load_approval_map {
 	return $map;
 }
 
+sub available_approval_methods {
+	my ($type) = @_;
+	my @methods;
+	my $dirpath = "$LIBEXEC_DIR/approval/$type";
+	if (opendir(my $dh, $dirpath)) {
+		@methods = map { { command => $_, params => {} } } grep { !/^\./ && -x "$dirpath/$_" } readdir($dh);
+		closedir($dh);
+	}
+	return @methods;
+}
+
 sub exec_approval_method {
 	my ($type, $method, @args) = @_;
-	local %ENV = %ENV;
 
-	$ENV{PARAMS} = join(' ', sort keys %{$method->{params}});
-	for my $name (keys %{$method->{params}}) {
-		$ENV{"PARAM_$name"} = $method->{params}->{$name};
+	pipe(my $from_method_stderr, my $method_stderr) or die "Error: pipe failed: $!";
+	my $method_pid = fork;
+	die "Error: fork failed: $!" unless defined $method_pid;
+	if ($method_pid == 0) {
+		open(STDIN, '<', '/dev/null');
+		open(STDERR, '>&', $method_stderr) or die "Error: dup failed: $!";
+		close($from_method_stderr);
+
+		$ENV{PARAMS} = join(' ', sort keys %{$method->{params}});
+		for my $name (keys %{$method->{params}}) {
+			$ENV{"PARAM_$name"} = $method->{params}->{$name};
+		}
+		my $path = $method->{command};
+		unless ($path =~ /^\//) {
+			$path = "$LIBEXEC_DIR/approval/$type/$path";
+		}
+
+		exec($path, @args);
+		die "Error: Unable to exec '$path': $!\n";
 	}
-	my $path = $method->{command};
-	unless ($path =~ /^\//) {
-		$path = "$LIBEXEC_DIR/approval/$type/$path";
-	}
-	system($path, @args);
-	return $? == 0;
+	close($method_stderr);
+
+	my $method_stderr_string = do { local $/; <$from_method_stderr> };
+	close($from_method_stderr);
+
+	waitpid($method_pid, 0) or die "waitpid failed: $!";
+	my $method_exit_code = WIFEXITED($?) ? WEXITSTATUS($?) : -1;
+
+	return ($method_exit_code, \$method_stderr_string);
 }
 
 sub prepare_http_approval {
 	my ($action, $options) = @_;
 	$http_approval_map //= load_approval_map('http');
 	my @tried_hostnames;
+	my @methods_stderr;
 	for my $option (@$options) {
-		my $method = $http_approval_map->{$option->{hostname}};
 		push @tried_hostnames, $option->{hostname};
-		next unless defined $method;
-		next unless exec_approval_method('http', $method, $action, @$option{qw{hostname path content}});
-		return 1;
+		if (defined($http_approval_map) && defined(my $method = $http_approval_map->{$option->{hostname}})) {
+			my ($status, $stderr) = exec_approval_method('http', $method, $action, @$option{qw{hostname path content}});
+			print STDERR $$stderr;
+			return if $status == 0;
+		} else {
+			for my $method (available_approval_methods('http')) {
+				my ($status, $stderr) = exec_approval_method('http', $method, $action, @$option{qw{hostname path content}});
+				if ($status == 0) {
+					print STDERR $$stderr;
+					return;
+				} elsif ($status == 3) {
+					# This method can't be used without parameters
+				} elsif ($status == 4) {
+					# This method couldn't handle this host. Try the next method...
+					push @methods_stderr, $stderr;
+				} else {
+					# This method could handle this host, but there was an error.
+					# Do not try any further methods, but do continue to the next option.
+					print STDERR $$stderr;
+					last;
+				}
+			}
+		}
 	}
+	print STDERR $$_ for @methods_stderr;
 	die "No HTTP approval method available for " . english_join('or', @tried_hostnames) . ".\n";
 }
 
@@ -861,18 +911,42 @@ sub prepare_dns_approval {
 	my ($action, $options) = @_;
 	$dns_approval_map //= load_approval_map('dns');
 	my @tried_names;
+	my @methods_stderr;
 	for my $option (@$options) {
 		my $name = $option->{name};
 		push @tried_names, $name;
 		my $method;
-		while (!defined($method) && $name ne '') {
-			$method = $dns_approval_map->{$name};
-			$name =~ s/^[^.]*\.//;
+		if (defined($dns_approval_map)) {
+			while (!defined($method) && $name ne '') {
+				$method = $dns_approval_map->{$name};
+				$name =~ s/^[^.]*\.//;
+			}
 		}
-		next unless defined $method;
-		next unless exec_approval_method('dns', $method, $action, @$option{qw{name type value}});
-		return 1;
+		if (defined($method)) {
+			my ($status, $stderr) = exec_approval_method('dns', $method, $action, @$option{qw{name type value}});
+			print STDERR $$stderr;
+			return if $status == 0;
+		} else {
+			for my $method (available_approval_methods('dns')) {
+				my ($status,$stderr) = exec_approval_method('dns', $method, $action, @$option{qw{name type value}});
+				if ($status == 0) {
+					print STDERR $$stderr;
+					return;
+				} elsif ($status == 3) {
+					# This method can't be used without parameters
+				} elsif ($status == 4) {
+					# This method couldn't handle this host. Try the next method...
+					push @methods_stderr, $stderr;
+				} else {
+					# This method could handle this host, but there was an error.
+					# Do not try any further methods, but do continue to the next option.
+					print STDERR $$stderr;
+					last;
+				}
+			}
+		}
 	}
+	print STDERR $$_ for @methods_stderr;
 	die "No DNS approval method available for " . english_join('or', @tried_names) . ".\n";
 }
 
