@@ -2501,6 +2501,7 @@ sub command_list {
 		print " --local             display only certificates that are installed locally\n";
 		print " --no-local          exclude certificates that are installed locally\n";
 		print " -c, --columns=COLS  include the given columns, where COLS is comma-separated\n";
+		print " -s, --sort=COL      sort by the given column (expiration by default)\n";
 		print " -z                  separate columns and terminate lines with a NUL character\n";
 		print "\n";
 		print "Valid columns:\n";
@@ -2511,11 +2512,13 @@ sub command_list {
 
 	my $local;
 	my $columns;
+	my $sort_column = 'expiration';
 	my $machine_output;
 
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
 	$getopt->getoptions('local!', \$local,
+			    'sort|s=s', \$sort_column,
 			    'columns|c=s', \$columns,
 			    'z', \$machine_output) or return 2;
 
@@ -2565,7 +2568,7 @@ sub command_list {
 		print STDERR "Error: " . $response->{message} . "\n";
 		return 1;
 	}
-	my @rows;
+	my @records;
 	for my $cert_obj (@{$response->{data}}) {
 		my $local_cert_info = get_local_cert_info(get_cert_paths($cert_obj->{cn}));
 		if (defined $local) {
@@ -2573,15 +2576,22 @@ sub command_list {
 			next if $local && !$is_local;
 			next if !$local && $is_local;
 		}
-		my @row = @{format_cert_info($cert_obj, $local_cert_info)}{@columns};
-		if ($machine_output) {
-			print join($ENV{'OFS'} // "\0", map { $_ // '' } @row) . ($ENV{'ORS'} // "\0");
-		} else {
-			push @rows, \@row;
-		}
+		push @records, format_cert_info($cert_obj, $local_cert_info);
 	}
 
-	if (not $machine_output) {
+	# TODO: multi-column sorting, inverse sorting, column-aware sorting
+	@records = sort { ($a->{$sort_column} // '') cmp ($b->{$sort_column} // '') } @records;
+
+	if ($machine_output) {
+		for my $record (@records) {
+			print join($ENV{'OFS'} // "\0", map { $_ // '' } @{$record}{@columns}) . ($ENV{'ORS'} // "\0");
+		}
+	} else {
+		my @rows;
+		for my $record (@records) {
+			push @rows, [ @{$record}{@columns} ];
+		}
+
 		my @titles = @column_titles{@columns};
 		my @widths;
 		for my $i (0..@columns-1) {
