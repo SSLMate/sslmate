@@ -2575,7 +2575,7 @@ sub command_list {
 		}
 		my @row = @{format_cert_info($cert_obj, $local_cert_info)}{@columns};
 		if ($machine_output) {
-			print join("\0", map { $_ // '' } @row) . "\0";
+			print join($ENV{'OFS'} // "\0", map { $_ // '' } @row) . ($ENV{'ORS'} // "\0");
 		} else {
 			push @rows, \@row;
 		}
