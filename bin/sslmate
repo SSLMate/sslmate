@@ -2512,15 +2512,17 @@ sub command_list {
 
 	my $local;
 	my $columns;
-	my $sort_column = 'expiration';
+	my $sort_columns = 'expiration';
 	my $machine_output;
 
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
 	$getopt->getoptions('local!', \$local,
-			    'sort|s=s', \$sort_column,
+			    'sort|s=s', \$sort_columns,
 			    'columns|c=s', \$columns,
 			    'z', \$machine_output) or return 2;
+
+	my @sort_columns = split(/,/, $sort_columns);
 
 	if ($machine_output && !defined($columns)) {
 		print STDERR "Error: --columns option is required if -z is used.\n";
@@ -2579,8 +2581,15 @@ sub command_list {
 		push @records, format_cert_info($cert_obj, $local_cert_info);
 	}
 
-	# TODO: multi-column sorting, inverse sorting, column-aware sorting
-	@records = sort { ($a->{$sort_column} // '') cmp ($b->{$sort_column} // '') } @records;
+	# TODO: column-aware sorting
+	@records = sort {
+		for (@sort_columns) {
+			my ($dir, $column_name) = /^\^(.*)$/ ? (-1, $1) : (1, $_);
+			my $cmp = $dir * (($a->{$column_name} // '') cmp ($b->{$column_name} // ''));
+			return $cmp unless $cmp == 0;
+		}
+		return 0;
+	} @records;
 
 	if ($machine_output) {
 		for my $record (@records) {
