@@ -71,7 +71,10 @@
 import time
 import sys
 import os
-import ConfigParser
+try:
+	import ConfigParser # Python 2
+except ImportError:
+	import configparser as ConfigParser # Python 3
 from boto import connect_route53
 from boto.route53.record import ResourceRecordSets
 
