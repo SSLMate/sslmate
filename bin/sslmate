@@ -1201,7 +1201,8 @@ sub command_reissue {
 	}
 
 	print "Reissue complete.\n\n";
-	return do_wait_for_cert($cn, $response, $no_wait, 0, $files, $new_key_filename);
+	do_wait_for_cert($cn, $response, $no_wait, 0, $files, $new_key_filename);
+	return 0;
 }
 
 sub command_revoke {
@@ -1396,7 +1397,8 @@ sub command_renew {
 	}
 
 	print "Renewal complete.\n\n";
-	return do_wait_for_cert($cn, $response, $no_wait, 0, $files);
+	do_wait_for_cert($cn, $response, $no_wait, 0, $files);
+	return 0;
 }
 
 sub command_req {
