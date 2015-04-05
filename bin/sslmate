@@ -1324,20 +1324,12 @@ sub prompt_for_order_confirmation {
 	for my $san (@sans) {
 		print "                " . $san . "\n";
 	}
-	my $desc;
-	if (length $product_info->{description}) {
-		$desc = $product_info->{description};
-	} elsif (defined $product_info->{years}) {
-		$desc = ($product_info->{wildcard} ? "Wildcard SSL" : "Standard SSL");
-	} else {
-		$desc = "1 Year " . ($product_info->{wildcard} ? "Wildcard SSL" : "Standard SSL");
-	}
 	if (defined $product_info->{years}) {
-		print "       Product: $desc\n";
+		print "       Product: " . $product_info->{description} . "\n";
 		print "         Price: " . format_money($product_info->{price}->{base_price}) . " / year\n";
 		print "         Years: " . $product_info->{years} . "\n";
 	} else {
-		print "       Product: $desc\n";
+		print "       Product: " . $product_info->{description} . "\n";
 		print "         Price: " . format_money($product_info->{price}->{base_price}) . "\n";
 	}
 	if (defined $other_info{auto_renew}) {
