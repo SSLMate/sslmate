@@ -1482,7 +1482,7 @@ sub do_wait_for_cert {
 }
 
 sub do_buy {
-	my ($cn, $years, $force, $no_wait, $accept_dummy, $auto_renew, $batch, $approval_method, $approver_email, $key_type, %opts) = @_;
+	my ($cn, $cert_type, $years, $force, $no_wait, $accept_dummy, $auto_renew, $batch, $approval_method, $approver_email, $key_type, %opts) = @_;
 
 	# Future TODO: support reusing key file if one already exists
 
@@ -1533,7 +1533,7 @@ sub do_buy {
 		# Get product/pricing info from the server, ask user for confirmation
 		#
 
-		my $product_info = get_product_info('dv', $cn, years => $years, coupon_code => $opts{coupon_code}) or exit 1;
+		my $product_info = get_product_info($cert_type // $cert->{type}, $cn, years => $years, coupon_code => $opts{coupon_code}) or exit 1;
 
 		exit 1 unless order_can_be_paid($product_info);
 
@@ -1566,7 +1566,7 @@ sub do_buy {
 
 	my $exit_with_error = sub {
 		unlink($paths->{key});
-		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/approval_method approver_email csr/)) if defined($cert);
+		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/type approval_method approver_email csr/)) if defined($cert);
 		exit 1;
 	};
 
@@ -1584,6 +1584,7 @@ sub do_buy {
 	# 3. Create/update the cert object on the server
 	#
 	my $request = {	auto_renew	=> $auto_renew,
+			type		=> $cert_type,
 			approval_method	=> $approval_method,
 			approver_email	=> $approver_email,
 			csr		=> $csr };
@@ -1641,6 +1642,7 @@ sub command_buy {
 		print "Common options:\n";
 		print " --auto-renew         automatically renew this certificate before it expires\n";
 		print " --no-auto-renew      don't automatically renew this certificate\n";
+		print " --ev                 purchase an extended validation (EV) certificate\n";
 		print " --coupon=CODE        use the given coupon code for a discount\n";
 		print " --invoice-note=NOTE  include the given note with the invoice\n";
 		print " --email-invoice-to=ADDRESS\n";
@@ -1662,6 +1664,7 @@ sub command_buy {
 	my $auto_renew = undef;
 	my $force = 0;
 	my $batch = 0;
+	my $ev = 0;
 	my $approval_method = 'email';
 	my $approver_email = undef;
 	my $no_wait = 0;
@@ -1673,6 +1676,7 @@ sub command_buy {
 	$getopt->getoptions('auto-renew!', \$auto_renew,
 			    'force|f', \$force,
 			    'batch', \$batch,
+			    'ev', \$ev,
 			    'approval=s', \$approval_method,
 			    'email=s', \$approver_email,
 			    'no-wait', \$no_wait,
@@ -1693,6 +1697,10 @@ sub command_buy {
 		print STDERR "Error: --no-wait and --temp are mutually exclusive.\n";
 		return 2;
 	}
+	if ($ev && !$no_wait && !$accept_dummy) {
+		# --ev implies --temp, unless --no-wait or --temp were already specified
+		$accept_dummy = 1;
+	}
 	if (defined($approver_email) && $approval_method ne 'email') {
 		print STDERR "Error: --email is only valid with --approval=email.\n";
 		return 2;
@@ -1705,6 +1713,7 @@ sub command_buy {
 
 	my $cn = lc $ARGV[0];
 	my $years = undef;
+	my $cert_type = $ev ? 'ev' : 'dv';
 	validate_cn($cn) or return 1;
 
 	load_config;
@@ -1718,7 +1727,7 @@ sub command_buy {
 	}
 
 	init_default_paths;
-	do_buy($cn, $years, $force, $no_wait, $accept_dummy, $auto_renew, $batch, $approval_method, $approver_email, $key_type, %opts);
+	do_buy($cn, $cert_type, $years, $force, $no_wait, $accept_dummy, $auto_renew, $batch, $approval_method, $approver_email, $key_type, %opts);
 	return 0;
 }
 
@@ -2441,6 +2450,7 @@ sub format_cert_info {
 	local *format_type = sub {
 		my ($raw_type) = @_;
 		return 'DV' if $raw_type eq 'dv';
+		return 'EV' if $raw_type eq 'ev';
 		return $raw_type;
 	};
 	local *format_approval_method = sub {
@@ -2499,7 +2509,7 @@ sub command_list {
 		print " -z                  separate columns and terminate lines with a NUL character\n";
 		print "\n";
 		print "Valid columns:\n";
-		print " name, status, expiration, local_status, fingerprint, sha256_fingerprint,\n";
+		print " name, type, status, expiration, local_status, fingerprint, sha256_fingerprint,\n";
 		print " auto_renew, approver_email\n";
 		return 0;
 	}
@@ -2523,7 +2533,7 @@ sub command_list {
 		return 2;
 	}
 
-	my @columns = defined($columns) ? split(/,/, $columns) : qw/name status expiration local_status/;
+	my @columns = defined($columns) ? split(/,/, $columns) : qw/name type status expiration local_status/;
 	my %column_titles = (
 				name =>			'Name',
 			        status =>		'Status',
