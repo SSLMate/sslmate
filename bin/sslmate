@@ -2455,6 +2455,7 @@ sub format_cert_info {
 	};
 	local *format_type = sub {
 		my ($raw_type) = @_;
+		return '-' if not defined $raw_type;
 		return 'DV' if $raw_type eq 'dv';
 		return 'EV' if $raw_type eq 'ev';
 		return $raw_type;
