@@ -2968,8 +2968,8 @@ sub do_import {
 	defined($crt) or die "Error: Unable to parse $source_crt_path - is it a valid certificate file?\n";
 
 	# 3. Parse the crt
-	# We could do this with a Perl module like Crypt::X509, but in order to keep the dependency
-	# footprint small, we do this with an API call instead.
+	# We could do this with a Perl module like Crypt::X509 (well, except for determining EV status), but
+	# in order to keep the dependency footprint small, we do this with an API call instead.
 	my ($status, $crt_info) = authed_api_call('POST', '/utils/parse_crt', undef, { crt => \$crt }) or exit 1;
 	if ($status != 200) {
 		print STDERR "Error: $source_crt_path: " . $crt_info->{message} . "\n";
@@ -2981,6 +2981,8 @@ sub do_import {
 		exit 1;
 	}
 	validate_cn($cn) or return 1;
+
+	my $type = $crt_info->{ev} ? 'ev' : 'dv';
 
 	# 4. Retrieve the current cert object from the server
 	my $cert_obj;
@@ -3029,7 +3031,7 @@ sub do_import {
 
 	# 6. Get product info from the server, ask user to choose approver email (unless we're in batch mode)
 	unless ($batch) {
-		my $product_info = get_product_info('dv', $cn) or exit 1;
+		my $product_info = get_product_info($type, $cn) or exit 1;
 
 		my $has_nondns_sans = 0;
 		my @missing_sans;
@@ -3083,12 +3085,13 @@ sub do_import {
 
 	my $exit_with_error = sub {
 		unlink($paths->{key}) if $install_locally && !$key_already_installed;
-		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert_obj, qw/approval_method approver_email csr/)) if defined($cert_obj);
+		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert_obj, qw/type approval_method approver_email csr/)) if defined($cert_obj);
 		exit 1;
 	};
 
 	# 8. Create/update the cert object on the server
 	my $request = {	auto_renew	=> $auto_renew,
+			type		=> $type,
 			approval_method	=> $approval_method,
 			approver_email	=> $approver_email,
 			csr		=> \$csr };
