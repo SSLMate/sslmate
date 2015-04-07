@@ -805,6 +805,12 @@ sub authed_api_call {
 	return api_call($method, $command, default_api_credentials, $query_string, $post_data);
 }
 
+sub format_chain {
+	my ($chain) = @_;
+	return ref($chain) eq 'ARRAY' ? join('', @$chain) :
+	       defined($chain) ? $chain : '';
+}
+
 sub load_approval_map {
 	my ($type) = @_;
 
@@ -1236,7 +1242,7 @@ sub wait_for_cert {
 		return unless defined $response; # TODO: repeat ? b/c this could be a timeout situation
 
 		if ($status == 200) {
-			return ($response->{crt}, $response->{chain}, $response->{state} eq 'active' ? 0 : 1);
+			return ($response->{crt}, format_chain($response->{chain}), $response->{state} eq 'active' ? 0 : 1);
 		} elsif ($response->{reason} eq 'not_ready') {
 			my $now = time;
 			my $retry_after = $response->{retry_after} // 5;
@@ -2287,14 +2293,14 @@ sub command_download {
 
 		if ($cert->{current} && defined($new_pubkey_hash) && $cert->{current}->{pubkey_hash} eq $new_pubkey_hash) {
 			$crt = $cert->{current}->{crt};
-			$chain = $cert->{current}->{chain};
+			$chain = format_chain($cert->{current}->{chain});
 			$install_new_key = 1;
 		} elsif ($cert->{current} && (!defined($pubkey_hash) || $cert->{current}->{pubkey_hash} eq $pubkey_hash)) {
 			$crt = $cert->{current}->{crt};
-			$chain = $cert->{current}->{chain};
+			$chain = format_chain($cert->{current}->{chain});
 		} elsif (!$cert->{current} && $cert->{pending} && (!defined($pubkey_hash) || $cert->{pending}->{pubkey_hash} eq $pubkey_hash)) {
 			$crt = $cert->{pending}->{crt};
-			$chain = $cert->{pending}->{chain};
+			$chain = format_chain($cert->{pending}->{chain});
 			$is_dummy = 1;
 		} elsif (defined($pubkey_hash)) {
 			my ($status, $response) = authed_api_call('GET', '/certs/'.qs_escape($cn).'/instances/pubkey_hash:'.qs_escape($pubkey_hash), { expand => ['crt', 'chain'] }) or return 1;
@@ -2314,7 +2320,7 @@ sub command_download {
 				next;
 			}
 			$crt = $response->{crt};
-			$chain = $response->{chain};
+			$chain = format_chain($response->{chain});
 			$is_dummy = 1 if $response->{state} ne 'active';
 			$key_is_out_of_date = 1;
 		} else {
@@ -3107,8 +3113,6 @@ sub do_import {
 	}
 
 	# 10. Write the key, crt, and chain to the destination directory
-	$cert_instance->{chain} //= '';
-
 	if ($install_locally) {
 		if (defined $key_file) {
 			# write .key file
@@ -3117,7 +3121,7 @@ sub do_import {
 			close $key_file;
 		}
 
-		write_cert_files($paths, undef, $crt, $cert_instance->{chain});
+		write_cert_files($paths, undef, $crt, format_chain($cert_instance->{chain}));
 	}
 
 	print "\n";
