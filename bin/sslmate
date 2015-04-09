@@ -675,6 +675,7 @@ sub external_api_call {
 	print $config_fh "user-agent = \"" . escape_curl_param("SSLMate-external/$VERSION") . "\"\n";
 	print $config_fh "silent\n";
 	print $config_fh "include\n";
+	print $config_fh "request = \"" . escape_curl_param($method) . "\"\n";
 	print $config_fh "url = \"" . escape_curl_param((get_config('api_endpoint') // $API_ENDPOINT) . $command) . "\"\n";
 	if ($creds) {
 		print $config_fh "user = \"" . escape_curl_param(join(':', $creds->{username}, $creds->{password})) . "\"\n";
