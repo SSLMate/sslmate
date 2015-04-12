@@ -2454,6 +2454,17 @@ sub format_cert_info {
 		return 'Canceled' if $raw_status eq 'canceled';
 		return $raw_status;
 	};
+	local *format_local_status = sub {
+		my ($raw_local_status) = @_;
+		return 'None' if $raw_local_status eq 'none';
+		return 'Out-of-date' if $raw_local_status eq 'out_of_date';
+		return 'No key file' if $raw_local_status eq 'missing_key';
+		return 'Mismatched key' if $raw_local_status eq 'mismatched_key';
+		return 'Temporary' if $raw_local_status eq 'installed_temporary';
+		return 'Installed' if $raw_local_status eq 'installed';
+		return 'No crt file' if $raw_local_status eq 'missing_crt';
+		return $raw_local_status;
+	};
 	local *format_type = sub {
 		my ($raw_type) = @_;
 		return '-' if not defined $raw_type;
@@ -2468,34 +2479,38 @@ sub format_cert_info {
 		return 'DNS' if $raw_method eq 'dns';
 		return $raw_method;
 	};
+	local *format_yesno = sub {
+		my ($value) = @_;
+		return $value ? 'Yes' : 'No';
+	};
 
 	my $latest = $cert->{pending} // $cert->{current};
 
-	my $local_status = 'None';
+	my $local_status = 'none';
 	if ($local_info->{crt}) {
 		if (not($latest) || $local_info->{crt}->{sha256_fingerprint} ne ($latest->{sha256_fingerprint} // '')) {
-			$local_status = 'Out-of-date';
+			$local_status = 'out_of_date';
 		} elsif (not $local_info->{key}) {
-			$local_status = 'No key file';
+			$local_status = 'missing_key';
 		} elsif ($local_info->{crt}->{pubkey_hash} ne $local_info->{key}->{pubkey_hash}) {
-			$local_status = 'Mismatched key';
+			$local_status = 'mismatched_key';
 		} elsif ($latest->{state} eq 'pending') {
-			$local_status = 'Temporary';
+			$local_status = 'installed_temporary';
 		} else {
-			$local_status = 'Installed';
+			$local_status = 'installed';
 		}
 	} elsif ($local_info->{key}) {
-		$local_status = 'No crt file';
+		$local_status = 'missing_crt';
 	}
 
 	return {
 		name => $cert->{cn},
 		status => $latest ? format_status($latest->{state}) : undef,
 		expiration => $latest && $latest->{expiration} ? strftime('%Y-%m-%d', localtime($latest->{expiration})) : undef,
-		local_status => $local_status,
+		local_status => format_local_status($local_status),
 		fingerprint => $latest ? format_hash($latest->{sha1_fingerprint}) : undef,
 		sha256_fingerprint => $latest ? format_hash($latest->{sha256_fingerprint}) : undef,
-		auto_renew => $cert->{auto_renew} ? "Yes" : "No",
+		auto_renew => format_yesno($cert->{auto_renew}),
 		type => format_type($latest ? $latest->{type} : $cert->{type}),
 		approver_email => $cert->{approver_email},
 		approval_email_from => $latest ? $latest->{approval_email_from} : undef,
