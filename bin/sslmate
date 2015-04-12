@@ -1859,6 +1859,8 @@ sub command_reissue {
 		$exit_with_error->();
 	}
 
+	$no_wait = 1 if $cert_instance->{type} eq 'ev';
+
 	print "Reissue complete.\n\n";
 	if (!do_wait_for_cert($cn, $cert_instance, $no_wait, 0, $paths, $new_key_filename)) {
 		print "\n";
@@ -2124,6 +2126,8 @@ sub command_renew {
 		}
 		$exit_with_error->();
 	}
+
+	$no_wait = 1 if $cert_instance->{type} eq 'ev';
 
 	print "Renewal complete.\n\n";
 	if (!do_wait_for_cert($cn, $cert_instance, $no_wait, 0, $paths)) {
