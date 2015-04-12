@@ -2436,8 +2436,45 @@ sub get_local_cert_info {
 	return { key => $key_info, crt => $crt_info };
 }
 
-sub format_cert_info {
+sub make_cert_info {
 	my ($cert, $local_info) = @_;
+
+	my $latest = $cert->{pending} // $cert->{current};
+
+	my $local_status = 'none';
+	if ($local_info->{crt}) {
+		if (not($latest) || $local_info->{crt}->{sha256_fingerprint} ne ($latest->{sha256_fingerprint} // '')) {
+			$local_status = 'out_of_date';
+		} elsif (not $local_info->{key}) {
+			$local_status = 'missing_key';
+		} elsif ($local_info->{crt}->{pubkey_hash} ne $local_info->{key}->{pubkey_hash}) {
+			$local_status = 'mismatched_key';
+		} elsif ($latest->{state} eq 'pending') {
+			$local_status = 'installed_temporary';
+		} else {
+			$local_status = 'installed';
+		}
+	} elsif ($local_info->{key}) {
+		$local_status = 'missing_crt';
+	}
+
+	return {
+		name => $cert->{cn},
+		status => $latest ? $latest->{state} : undef,
+		expiration => $latest && $latest->{expiration} ? strftime('%Y-%m-%d', localtime($latest->{expiration})) : undef,
+		local_status => $local_status,
+		fingerprint => $latest ? $latest->{sha1_fingerprint} : undef,
+		sha256_fingerprint => $latest ? $latest->{sha256_fingerprint} : undef,
+		auto_renew => int($cert->{auto_renew}),
+		type => $latest ? $latest->{type} : $cert->{type},
+		approver_email => $cert->{approver_email},
+		approval_email_from => $latest ? $latest->{approval_email_from} : undef,
+		approval_method => $cert->{approval_method},
+	};
+}
+
+sub format_cert_row {
+	my ($cert_info, @columns) = @_;
 
 	local *format_hash = sub {
 		my ($raw_hash) = @_;
@@ -2483,39 +2520,25 @@ sub format_cert_info {
 		my ($value) = @_;
 		return $value ? 'Yes' : 'No';
 	};
+	my %formatters = (
+		status => \&format_status,
+		local_status => \&format_local_status,
+		fingerprint => \&format_hash,
+		sha256_fingerprint => \&format_hash,
+		auto_renew => \&format_yesno,
+		type => \&format_type,
+		approval_method => \&format_approval_method,
+	);
 
-	my $latest = $cert->{pending} // $cert->{current};
-
-	my $local_status = 'none';
-	if ($local_info->{crt}) {
-		if (not($latest) || $local_info->{crt}->{sha256_fingerprint} ne ($latest->{sha256_fingerprint} // '')) {
-			$local_status = 'out_of_date';
-		} elsif (not $local_info->{key}) {
-			$local_status = 'missing_key';
-		} elsif ($local_info->{crt}->{pubkey_hash} ne $local_info->{key}->{pubkey_hash}) {
-			$local_status = 'mismatched_key';
-		} elsif ($latest->{state} eq 'pending') {
-			$local_status = 'installed_temporary';
+	my @row;
+	for my $column (@columns) {
+		if (exists $formatters{$column}) {
+			push @row, $formatters{$column}->($cert_info->{$column});
 		} else {
-			$local_status = 'installed';
+			push @row, $cert_info->{$column};
 		}
-	} elsif ($local_info->{key}) {
-		$local_status = 'missing_crt';
 	}
-
-	return {
-		name => $cert->{cn},
-		status => $latest ? format_status($latest->{state}) : undef,
-		expiration => $latest && $latest->{expiration} ? strftime('%Y-%m-%d', localtime($latest->{expiration})) : undef,
-		local_status => format_local_status($local_status),
-		fingerprint => $latest ? format_hash($latest->{sha1_fingerprint}) : undef,
-		sha256_fingerprint => $latest ? format_hash($latest->{sha256_fingerprint}) : undef,
-		auto_renew => format_yesno($cert->{auto_renew}),
-		type => format_type($latest ? $latest->{type} : $cert->{type}),
-		approver_email => $cert->{approver_email},
-		approval_email_from => $latest ? $latest->{approval_email_from} : undef,
-		approval_method => format_approval_method($cert->{approval_method}),
-	};
+	return \@row;
 }
 
 sub command_list {
@@ -2605,7 +2628,7 @@ sub command_list {
 			next if $local && !$is_local;
 			next if !$local && $is_local;
 		}
-		push @records, format_cert_info($cert_obj, $local_cert_info);
+		push @records, make_cert_info($cert_obj, $local_cert_info);
 	}
 
 	# TODO: column-aware sorting
@@ -2625,7 +2648,7 @@ sub command_list {
 	} else {
 		my @rows;
 		for my $record (@records) {
-			push @rows, [ @{$record}{@columns} ];
+			push @rows, format_cert_row($record, @columns);
 		}
 
 		my @titles = @column_titles{@columns};
