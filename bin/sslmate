@@ -2551,8 +2551,8 @@ sub command_list {
 		print " --local             display only certificates that are installed locally\n";
 		print " --no-local          exclude certificates that are installed locally\n";
 		print " -c, --columns=COLS  include the given columns, where COLS is comma-separated\n";
-		print " -s, --sort=COL      sort by the given column (expiration by default)\n";
-		print " -z                  separate columns and terminate lines with a NUL character\n";
+		print " -s, --sort=COLS     sort by the given column(s) (expiration by default)\n";
+		print " -z                  machine-parseable output\n";
 		print "\n";
 		print "Valid columns:\n";
 		print " name, type, status, expiration, local_status, fingerprint, sha256_fingerprint,\n";
