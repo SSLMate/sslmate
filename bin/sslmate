@@ -3193,6 +3193,46 @@ sub do_import {
 	}
 }
 
+sub interpolate_config_template {
+	my ($in, $paths) = @_;
+	my $in_len = length($in);
+	my $out = '';
+	my $begin = 0;
+	while ($begin < $in_len) {
+		my $end = index($in, '__', $begin);
+		if ($end == -1) {
+			$out .= substr($in, $begin);
+			$begin = $in_len;
+		} else {
+			$out .= substr($in, $begin, $end - $begin);
+			$begin = $end + 2;
+			$end = index($in, '__', $begin);
+			if ($end == -1) {
+				die "Error: Malformed configuration template\n";
+			}
+			my $varname = substr($in, $begin, $end - $begin);
+			if ($varname eq 'CERT_PATH') {
+				$out .= $paths->{crt};
+			} elsif ($varname eq 'KEY_PATH') {
+				$out .= $paths->{key};
+			} elsif ($varname eq 'CHAIN_PATH') {
+				$out .= $paths->{chain};
+			} elsif ($varname =~ /^(.*)_PATH$/ && exists $file_types{lc $1}) {
+				my $file_type = lc $1;
+				if (not exists $paths->{$file_type}) {
+					die "Error: This software requires a " . lc($file_types{$file_type}) . " file, but SSLMate is not configured to create this type of file. Please add '$file_type' to the cert_formats option, and then run 'sslmate download' to create this file.\n";
+				}
+				$out .= $paths->{$file_type};
+			} else {
+				die "Error: This configuration template is not compatible with this version of the SSLMate client. Please upgrade to the latest client (unknown template variable '$varname').\n";
+			}
+			$begin = $end + 2;
+		}
+	}
+
+	return $out;
+}
+
 sub command_mkconfig {
 	local @ARGV = @_;
 	my $getopt = Getopt::Long::Parser->new;
@@ -3256,18 +3296,7 @@ sub command_mkconfig {
 	}
 
 	my $paths = get_cert_paths($common_name);
-	my %vars = ('__KEY_PATH__'	=> $paths->{key},
-		    '__CERT_PATH__'	=> $paths->{crt},
-		    '__CHAIN_PATH__'	=> $paths->{chain},
-		    '__CHAINED_PATH__'	=> $paths->{chained});
-
-	my $template = $response->{template};
-	for my $var (keys %vars) {
-		my $value = $vars{$var};
-		$template =~ s/$var/$value/g;
-	}
-
-	print $template;
+	print interpolate_config_template($response->{template}, $paths);
 	return 0;
 }
 
