@@ -909,6 +909,9 @@ sub prepare_http_approval {
 				} elsif ($status == 4) {
 					# This method couldn't handle this host. Try the next method...
 					push @methods_stderr, $stderr;
+				} elsif ($status == 5) {
+					# This method isn't usable. Try the next method...
+					push @methods_stderr, $stderr;
 				} else {
 					# This method could handle this host, but there was an error.
 					# Do not try any further methods, but do continue to the next option.
@@ -951,6 +954,9 @@ sub prepare_dns_approval {
 					# This method can't be used without parameters
 				} elsif ($status == 4) {
 					# This method couldn't handle this host. Try the next method...
+					push @methods_stderr, $stderr;
+				} elsif ($status == 5) {
+					# This method isn't usable. Try the next method...
 					push @methods_stderr, $stderr;
 				} else {
 					# This method could handle this host, but there was an error.

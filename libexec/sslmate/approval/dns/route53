@@ -75,8 +75,12 @@ try:
 	import ConfigParser # Python 2
 except ImportError:
 	import configparser as ConfigParser # Python 3
-from boto import connect_route53
-from boto.route53.record import ResourceRecordSets
+try:
+	from boto import connect_route53
+	from boto.route53.record import ResourceRecordSets
+except ImportError:
+	sys.stderr.write("route53: Error: The boto python module must be installed to set up DNS approval through Route 53\n")
+	sys.exit(5)
 
 def bad_usage():
 	sys.stderr.write('Usage: %s add|del name type value\n' % sys.argv[0])
