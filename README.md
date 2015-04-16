@@ -10,7 +10,7 @@ To use the `sslmate` command, you must create a free account at https://sslmate.
 
 SSLMate officially supports:
 
- * Debian 6 and 7
+ * Debian 6, 7, and 8
  * Ubuntu 10.04, 12.04, 13.10, and 14.04
  * RHEL/CentOS 6 and 7
  * Mac OS X 10.9 and above
@@ -19,22 +19,34 @@ Packages (.deb, .rpm, and .pkg) for the above operating systems [are available](
 
 SSLMate can run on other Unix-based operating systems provided the following software is installed:
 
-* Perl v5.10.0 or newer.
-* The following Perl modules, which can be installed by running `cpan MODULENAME` or by installing the corresponding distro package.
+ * Perl v5.10.0 or newer.
+ * The following Perl modules, which can be installed by running `cpan MODULENAME` or by installing the corresponding distro package.
 
-```
-Module Name         Debian/Ubuntu Package        RHEL/CentOS Package
--------------------------------------------------------------------------
-URI                 liburi-perl                  perl-URI
-Term::ReadKey       libterm-readkey-perl         perl-TermReadKey
-JSON::PP (*)        libjson-perl                 perl-JSON
-WWW::Curl (**)      libwww-curl-perl             perl-WWW-Curl
-```
+   ```
+   Module Name         Debian/Ubuntu Package        RHEL/CentOS Package
+   -------------------------------------------------------------------------
+   URI                 liburi-perl                  perl-URI
+   Term::ReadKey       libterm-readkey-perl         perl-TermReadKey
+   JSON::PP [1]        libjson-perl                 perl-JSON
+   WWW::Curl [2]       libwww-curl-perl             perl-WWW-Curl
+   ```
 
-Notes:
+  Notes:
 
-* `JSON::PP` is included with Perl 5.14 and later.
-* `WWW::Curl` is optional; if not available SSLMate will fall back to executing the `curl` command directly.
+   1. `JSON::PP` is included with Perl 5.14 and later.
+   2. `WWW::Curl` is optional; if not available SSLMate will fall back to executing the `curl` command directly.
+
+
+## Optional Dependencies
+
+To use automatic DNS approval with Route 53, the following additional software must be installed:
+
+ * Python 2.6, Python 2.7, Python 3, or newer.
+ * Boto (Python module) 2.2 or newer.
+   * Debian 6 package:      `python-boto` (requires [squeeze-backports](http://backports.debian.org/Instructions/))
+   * Debian 7+ package:     `python-boto`
+   * Ubuntu 12.04+ package: `python-boto`
+   * RHEL/CentOS package:   `python-boto` (requires [EPEL repository](https://fedoraproject.org/wiki/EPEL))
 
 
 ## Installation
