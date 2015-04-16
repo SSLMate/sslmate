@@ -87,11 +87,9 @@
 		<cmdsynopsis>
 			<command>sslmate mkconfig <arg choice="plain"><replaceable>TEMPLATE</replaceable></arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
 		</cmdsynopsis>
-		<!--
 		<cmdsynopsis>
 			<command>sslmate import <arg choice="plain"><replaceable>KEYFILE</replaceable></arg> <arg choice="plain"><replaceable>CERTFILE</replaceable></arg></command>
 		</cmdsynopsis>
-		-->
 		<cmdsynopsis>
 			<command>sslmate resend-email <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
 		</cmdsynopsis>
@@ -167,10 +165,25 @@
 							</listitem>
 						</varlistentry>
 						<varlistentry>
-							<term><option>--batch</option></term>
+							<term><option>--approval=email|dns</option></term>
 
 							<listitem>
-								<para>Don't prompt for approver email address or confirmation.  The approver email address must be specified with <option>--email=<replaceable>ADDRESS</replaceable></option> if you use this option.</para>
+								<para>
+									Use the given method to prove ownership of your domain.
+								</para>
+								<para>
+									When "email" is used (the default), you must respond to an email sent
+									to one of the administrative addresses for your domain.  You will be
+									prompted for the email address when running <command>sslmate buy</command>,
+									or you can specify it on the command line with the
+									<option>--email=<replaceable>ADDRESS</replaceable></option> option.
+								</para>
+								<para>
+									When "dns" is used, you must add a specific DNS record under your domain.
+									If you use Route 53 and have appropriate AWS credentials configured, the
+									DNS record will be automatically added.  Otherwise, the DNS record will
+									be displayed and you will need to add it manually.
+								</para>
 							</listitem>
 						</varlistentry>
 						<varlistentry>
@@ -178,9 +191,9 @@
 
 							<listitem>
 								<para>
-									Send the domain ownership email to the given email address instead of prompting for one.
+									Send the domain ownership email to the given email address.
 									This address must be one of the addresses that is listed when you run
-									<command>sslmate buy</command> interactively.
+									<command>sslmate buy</command> interactively.  Only applicable if email approval is used.
 								</para>
 							</listitem>
 						</varlistentry>
@@ -209,6 +222,37 @@
 								<para>
 									When the real certificate is issued, it can be downloaded
 									with the <command>sslmate download</command> command.
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
+							<term><option>--ev</option></term>
+
+							<listitem>
+								<para>
+									Purchase an extended validation (EV) certificate, instead of a domain validation (DV)
+									certificate.
+								</para>
+								<para>
+									EV certificates provide equivalent security to DV certificates, but are subject to
+									a more rigorous approval process.  An EV certificate verifies not only that the bearer
+									of the certificate controls the domain in question, but also that the domain is owned by
+									a legally established business or organization with a verifiable identity.  When viewing
+									a website with an EV certificate, web browsers display a green address bar along with
+									the verified name of the organization.
+								</para>
+								<para>
+									To purchase EV certificates, you must first provide additional information about your
+									organization on your <ulink url="https://sslmate.com/account">online SSLMate account
+									page</ulink>.  Unlike a DV certificate, an EV certificate takes several days to issue
+									while your identity is verified.  When purchasing an EV certificate, <command>sslmate
+									buy</command> returns immediately with a temporary self-signed certificate (as if the
+									<option>--temp</option> had been specified).  When your real certificate is issued, you
+									will receive an email and be able to download it with the <command>sslmate download</command>
+									command.
+								</para>
+								<para>
+									If you're not sure what kind of certificate you need, buy a DV certificate (the default).
 								</para>
 							</listitem>
 						</varlistentry>
@@ -269,6 +313,10 @@
 									by older web browsers (such as IE 8 on Windows XP, Android 2.3,
 									and Java 6).  If in doubt, use RSA.
 								</para>
+								<para>
+									The default key type can be changed by setting the <option>key_type</option>
+									configuration option (see the CONFIGURATION section for details).
+								</para>
 							</listitem>
 						</varlistentry>
 					</variablelist>
@@ -286,13 +334,6 @@
 						The following options are understood:
 					</para>
 					<variablelist>
-						<varlistentry>
-							<term><option>--batch</option></term>
-
-							<listitem>
-								<para>Don't prompt for confirmation.</para>
-							</listitem>
-						</varlistentry>
 						<varlistentry>
 							<term><option>--no-wait</option></term>
 
@@ -343,7 +384,7 @@
 							<listitem>
 								<para>
 									Renew the certificate even if it's not about to expire.  Note that the
-									renewed certificate will expire one year from the current date, not from
+									renewed certificate will expire one year from the today's date, not from
 									the expiration date of the current certificate.
 								</para>
 							</listitem>
@@ -442,16 +483,7 @@
 								</para>
 								<para>
 									You will be prompted for confirmation unless you also specify the
-									<option>--batch</option> option.
-								</para>
-							</listitem>
-						</varlistentry>
-						<varlistentry>
-							<term><option>--batch</option></term>
-
-							<listitem>
-								<para>
-									Don't prompt for confirmation if <option>--all</option> is used.
+									<option>--batch</option> global option.
 								</para>
 							</listitem>
 						</varlistentry>
@@ -578,12 +610,10 @@
 										<term>auto_renew</term>
 										<listitem><para>The certificate's auto-renew setting.</para></listitem>
 									</varlistentry>
-									<!--
 									<varlistentry>
 										<term>type</term>
 										<listitem><para>The certificate's type ("DV" or "EV").</para></listitem>
 									</varlistentry>
-									-->
 									<varlistentry>
 										<term>approver_email</term>
 										<listitem><para>The approver email address.</para></listitem>
@@ -598,13 +628,38 @@
 							</listitem>
 						</varlistentry>
 						<varlistentry>
+							<term><option>--sort=<replaceable>COLUMNS</replaceable></option></term>
+
+							<listitem>
+								<para>
+									Sort the output by the given column(s), where <replaceable>COLUMNS</replaceable> is
+									a comma-separated list of column names as understood by the <option>--columns</option>
+									option.  If more than one column is specified, the latter columns are used to break
+									ties if the earlier columns are equal.
+								</para>
+								<para>
+									Columns are sorted in ascending order by default.  To sort a column in descending
+									order, prefix it with a ^ symbol.
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
 							<term><option>-z</option></term>
 
 							<listitem>
 								<para>
-									Generate machine-parseable output, in which columns and lines are separated by a
-									NUL character.  You must explicitly enumerate the columns you want with the
-									<option>--columns</option>.
+									Generate machine-parseable output.  By default, columns and lines are separated by a
+									NUL character, but this can be customized by setting the <varname>OFS</varname>
+									(output field separator) and <varname>ORS</varname> (output record separator) environment
+									variables.
+								</para>
+								<para>
+									When using <option>-z</option>, you must explicitly enumerate the columns you
+									want with the <option>--columns</option> option.
+								</para>
+								<para>
+									The output of <option>-z</option> is guaranteed not to change format, making it suitable
+									for use in scripts.
 								</para>
 							</listitem>
 						</varlistentry>
@@ -622,6 +677,22 @@
 					</para>
 					<variablelist>
 						<varlistentry>
+							<term><option>--approval=email|dns</option></term>
+
+							<listitem>
+								<para>
+									Change the approval method for this certificate.  The new method will be
+									used for approving future reissues and renewals of the certificate.  If the
+									certificate is currently pending approval, the approval process will be
+									re-initiated.
+								</para>
+								<para>
+									For more information about approval methods, see the documentation
+									for <command>sslmate buy</command>.
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
 							<term><option>--email=<replaceable>ADDRESS</replaceable></option></term>
 
 							<listitem>
@@ -633,7 +704,8 @@
 								</para>
 								<para>
 									The new address must be one of the acceptable addresses that is listed when you
-									run <command>sslmate buy</command> for this host name.
+									run <command>sslmate buy</command> for this host name.  This option is only
+									applicable when email approval is used.
 								</para>
 							</listitem>
 						</varlistentry>
@@ -651,7 +723,6 @@
 				</listitem>
 			</varlistentry>
 
-			<!--
 			<varlistentry>
 				<term><option>import <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>KEYFILE</replaceable></arg> <arg choice="plain"><replaceable>CERTFILE</replaceable></arg></option></term>
 				<listitem>
@@ -674,8 +745,8 @@
 					</para>
 					<variablelist>
 						<varlistentry>
-							<term><option>- -auto-renew</option></term>
-							<term><option>- -no-auto-renew</option></term>
+							<term><option>--auto-renew</option></term>
+							<term><option>--no-auto-renew</option></term>
 
 							<listitem>
 								<para>
@@ -686,7 +757,7 @@
 							</listitem>
 						</varlistentry>
 						<varlistentry>
-							<term><option>- -no-install</option></term>
+							<term><option>--no-install</option></term>
 
 							<listitem>
 								<para>
@@ -697,26 +768,33 @@
 							</listitem>
 						</varlistentry>
 						<varlistentry>
-							<term><option>- -batch</option></term>
-
-							<listitem>
-								<para>Don't prompt for approver email address or confirmation.  The approver email address must be specified with <option>- -email=<replaceable>ADDRESS</replaceable></option> if you use this option.</para>
-							</listitem>
-						</varlistentry>
-						<varlistentry>
-							<term><option>- -email=<replaceable>ADDRESS</replaceable></option></term>
+							<term><option>--approval=email|dns</option></term>
 
 							<listitem>
 								<para>
-									Send the domain ownership email to the given email address instead of prompting for one.
-									This address must be one of the addresses that is listed when you run
-									<command>sslmate import</command> interactively.
+									When renewing, use the given method to prove ownership of your domain.
+								</para>
+								<para>
+									For more information about approval methods, see the documentation
+									for <command>sslmate buy</command>.
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
+							<term><option>--email=<replaceable>ADDRESS</replaceable></option></term>
+
+							<listitem>
+								<para>
+									When renewing, send the domain ownership email to the given email address instead of
+									prompting for one.  This address must be one of the addresses that is listed when you run
+									<command>sslmate import</command> interactively.  This option is only applicable when
+									email approval is used.
 								</para>
 							</listitem>
 						</varlistentry>
 						<varlistentry>
 							<term><option>-f</option></term>
-							<term><option>- -force</option></term>
+							<term><option>--force</option></term>
 
 							<listitem>
 								<para>
@@ -729,7 +807,6 @@
 					</variablelist>
 				</listitem>
 			</varlistentry>
-			-->
 
 			<varlistentry>
 				<term><option>test <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></option></term>
@@ -848,11 +925,17 @@
 				<term><option>link</option></term>
 				<listitem>
 					<para>
-						Link this server with your SSLMate account.
+						Link this system with your SSLMate account.
 						<command>sslmate link</command> prompts for your SSLMate username and
 						password and writes your API credentials to your personal SSLMate configuration
 						file, permitting you to use the <command>sslmate</command> commands without
 						having to enter your username and password.
+					</para>
+					<para>
+						Note: if you have enabled a daily purchase limit through your
+						<ulink url="https://sslmate.com/account">online SSLMate account page</ulink>,
+						you will always need to enter your password after exceeding the limit, even if
+						you have linked this system.
 					</para>
 				</listitem>
 			</varlistentry>
@@ -917,6 +1000,32 @@
 		</para>
 		<variablelist>
 			<varlistentry>
+				<term><option>--batch</option></term>
+
+				<listitem>
+					<para>
+						Don't prompt for confirmation or for additional information.  This
+						option should be used when running <command>sslmate</command> unattended from scripts.
+					</para>
+					<para>
+						Any information which <command>sslmate</command> would have prompted for must be specified
+						on the command line instead.  For example, when buying a certificate,
+						you must specify the approval method with the <option>--approval</option>
+						option, and, if applicable, the approver email address with the
+						<option>--email=<replaceable>ADDRESS</replaceable></option> option.
+					</para>
+				</listitem>
+			</varlistentry>
+			<varlistentry>
+				<term><option>--verbose</option></term>
+
+				<listitem>
+					<para>
+						Display additional information about what <command>sslmate</command> is doing.
+					</para>
+				</listitem>
+			</varlistentry>
+			<varlistentry>
 				<term><option>--p <replaceable>PROFILE</replaceable></option></term>
 				<term><option>--profile=<replaceable>PROFILE</replaceable></option></term>
 
@@ -969,6 +1078,18 @@
 			<varlistentry>
 				<term><option>wildcard_filename <replaceable>PREFIX</replaceable></option></term>
 				<listitem><para>When creating files for wildcard certificates, use <replaceable>PREFIX</replaceable> in the filename instead of a * character.</para></listitem>
+			</varlistentry>
+			<!-- TODO: document cert_formats
+			<varlistentry>
+				<term><option>cert_formats <replaceable>FORMATS</replaceable></option></term>
+				<listitem>
+					<para>Hello world.</para>
+				</listitem>
+			</varlistentry>
+			-->
+			<varlistentry>
+				<term><option>key_type rsa|ecdsa</option></term>
+				<listitem><para>The key type to use by default when buying or reissuing a certificate.  Can be overridden by the <option>--key-type</option> command line flag.  See the documentation for <command>sslmate buy</command> for details.</para></listitem>
 			</varlistentry>
 			<varlistentry>
 				<term><option>api_endpoint <replaceable>URI</replaceable></option></term>
