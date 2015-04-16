@@ -58,7 +58,7 @@ use Term::ReadKey;		# libterm-readkey-perl		perl-TermReadKey
 
 our $has_curl = not($ENV{SSLMATE_USE_EXTERNAL_CURL}) && eval { require WWW::Curl::Easy; 1 };
 
-our $VERSION = '0.7.0-pre5';
+our $VERSION = '0.7.0-pre6';
 our $API_ENDPOINT = 'https://sslmate.com/api/v2';
 our $PKCS12_PASSWORD = 'sslmate';
 
