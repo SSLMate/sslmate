@@ -909,8 +909,9 @@ sub prepare_http_approval {
 				} elsif ($status == 4) {
 					# This method couldn't handle this host. Try the next method...
 					push @methods_stderr, $stderr;
-				} elsif ($status == 5) {
-					# This method isn't usable. Try the next method...
+				} elsif ($status == 5 || $status == 126 || $status == 127) {
+					# This method isn't usable due to missing dependencies. Try the next method...
+					# (126 and 127 are returned by /usr/bin/env and are actually standarized by SUSv2)
 					push @methods_stderr, $stderr;
 				} else {
 					# This method could handle this host, but there was an error.
@@ -955,8 +956,9 @@ sub prepare_dns_approval {
 				} elsif ($status == 4) {
 					# This method couldn't handle this host. Try the next method...
 					push @methods_stderr, $stderr;
-				} elsif ($status == 5) {
-					# This method isn't usable. Try the next method...
+				} elsif ($status == 5 || $status == 126 || $status == 127) {
+					# This method isn't usable due to missing dependencies. Try the next method...
+					# (126 and 127 are returned by /usr/bin/env and are actually standarized by SUSv2)
 					push @methods_stderr, $stderr;
 				} else {
 					# This method could handle this host, but there was an error.
