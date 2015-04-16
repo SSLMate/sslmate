@@ -1006,13 +1006,13 @@ sub prepare_approval {
 		}
 	}
 	my $successful = 0;
-	if ($new_cert->{approval_method} eq 'http') {
+	if ($new_cert->{approval_method} eq 'http' && not($new_cert->{http_approval}->{status}->{ready})) {
 		$successful = eval {
 			prepare_http_approval('add', $new_cert->{http_approval}->{options});
 			1;
 		};
 		print STDERR "Error: unable to set up automatic HTTP approval for " . $new_cert->{cn} . ": $@" if not $successful;
-	} elsif ($new_cert->{approval_method} eq 'dns') {
+	} elsif ($new_cert->{approval_method} eq 'dns' && not($new_cert->{dns_approval}->{status}->{ready})) {
 		$successful = eval {
 			prepare_dns_approval('add', $new_cert->{dns_approval}->{options});
 			1;
@@ -1598,7 +1598,7 @@ sub do_buy {
 			csr		=> $csr };
 
 	print "Placing order...\n";
-	($status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), undef, $request) or $exit_with_error->();
+	($status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['dns_approval.status','http_approval.status'] }, $request) or $exit_with_error->();
 	if ($status != 200) {
 		print STDERR "Error: " . $new_cert->{message} . "\n";
 		$cert = undef;
@@ -1844,7 +1844,7 @@ sub command_reissue {
 
 	# 4. Update the CSR server-side
 	print "Reissuing cert...\n";
-	($cert_status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), undef, { csr => $csr }) or $exit_with_error->();
+	($cert_status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['dns_approval.status','http_approval.status'] }, { csr => $csr }) or $exit_with_error->();
 	if ($cert_status != 200) {
 		print STDERR "Error: " . $new_cert->{message} . "\n";
 		$cert = undef;
@@ -2024,7 +2024,7 @@ sub command_renew {
 
 	# Retrieve the current cert object from the server
 	my ($status, $cert);
-	($status, $cert) = authed_api_call('GET', '/certs/' . qs_escape($cn), { expand => ['current','pending'] }) or exit 1;
+	($status, $cert) = authed_api_call('GET', '/certs/' . qs_escape($cn), { expand => ['current','pending','dns_approval.status','http_approval.status'] }) or exit 1;
 	if ($status != 200) {
 		print STDERR "Error: " . $cert->{message} . "\n";
 		exit 1;
@@ -2092,7 +2092,7 @@ sub command_renew {
 		my $csr = openssl_req($paths->{key}, $cert->{dn});
 		print "Done.\n";
 
-		($status, $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), undef, { csr => \$csr }) or exit 1;
+		($status, $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['dns_approval.status','http_approval.status'] }, { csr => \$csr }) or exit 1;
 		if ($status != 200) {
 			print STDERR "Error: " . $new_cert->{message} . "\n";
 			exit 1;
@@ -2757,7 +2757,7 @@ sub command_edit {
 		approver_email => $approver_email,
 	};
 
-	($cert_status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['pending'] }, $request) or return 1;
+	($cert_status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['pending','dns_approval.status','http_approval.status'] }, $request) or return 1;
 	if ($cert_status != 200) {
 		print STDERR "Error: " . $new_cert->{message} . "\n";
 		return 1;
@@ -3153,7 +3153,7 @@ sub do_import {
 			csr		=> \$csr };
 
 	print "Importing certificate for $cn...\n";
-	($status, my $new_cert_obj) = authed_api_call('POST', '/certs/' . qs_escape($cn), undef, $request) or $exit_with_error->();
+	($status, my $new_cert_obj) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['dns_approval.status','http_approval.status'] }, $request) or $exit_with_error->();
 	if ($status != 200) {
 		print STDERR "Error: " . $new_cert_obj->{message} . "\n";
 		$cert_obj = undef;
