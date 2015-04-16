@@ -2807,9 +2807,11 @@ sub command_edit {
 		print STDERR "Error: " . $new_cert->{message} . "\n";
 		return 1;
 	}
-	if (!prepare_approval($cert, $new_cert)) {
-		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/approval_method approver_email/));
-		return 1;
+	if (defined $approval_method) {
+		if (!prepare_approval($cert, $new_cert)) {
+			authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/approval_method approver_email/));
+			return 1;
+		}
 	}
 
 	#
