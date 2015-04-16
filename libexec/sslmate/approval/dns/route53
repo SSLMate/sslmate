@@ -79,7 +79,7 @@ try:
 	from boto import connect_route53
 	from boto.route53.record import ResourceRecordSets
 except ImportError:
-	sys.stderr.write("route53: Error: The boto python module must be installed to set up DNS approval through Route 53\n")
+	sys.stderr.write("route53: Error: Version 2.2 or higher of the boto python module must be installed to configure DNS approval through Route 53\n")
 	sys.exit(5)
 
 def bad_usage():
