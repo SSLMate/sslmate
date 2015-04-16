@@ -1010,6 +1010,10 @@ sub prompt_for_manual_dns_approval {
 		print "    " . join(' ', @$option{qw{name type value}}) . "\n";
 	}
 	print "\n";
+	print "You may remove any DNS record you previously added for this certificate.\n";
+	print "You should leave the new DNS record in place as long as this certificate\n";
+	print "is in use.\n";
+	print "\n";
 	while (1) {
 		my $answer = prompt_user('Press ENTER when done (or q to quit): ');
 		if ($answer eq '') {
