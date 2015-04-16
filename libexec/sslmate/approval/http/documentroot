@@ -82,6 +82,9 @@ then
 	printf "documentroot: Removing $document_root$path... "
 	rm -f "$document_root$path"
 	printf "Done.\n"
+elif [ $action = "noop" ]
+then
+	:
 else
 	echo "Usage: $USAGE" >&2
 	exit 2

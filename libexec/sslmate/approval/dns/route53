@@ -142,6 +142,9 @@ except Exception as e:
 	sys.stderr.write('route53: Error (for %s): %s\n' % (rr_name, e))
 	sys.exit(4)
 
+if action == 'noop':
+	sys.exit(0)
+
 try:
 	current = conn.get_all_rrsets(hosted_zone_id, rr_type, rr_name, maxitems=1)
 	currently_exists = len(current) > 0 and rr_value in current[0].resource_records
