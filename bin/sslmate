@@ -926,8 +926,11 @@ sub prepare_http_approval {
 			}
 		}
 	}
-	print STDERR $$_ for @methods_stderr;
-	die "No HTTP approval method available for " . english_join('or', @tried_hostnames) . ".\n";
+
+	if ($verbose) {
+		print STDERR $$_ for @methods_stderr;
+	}
+	die "No HTTP approval method available for " . english_join('or', @tried_hostnames) . "." . (not($verbose) && @methods_stderr ? " Specify the --verbose option for details." : "") . "\n";
 }
 
 sub prepare_dns_approval {
@@ -973,8 +976,10 @@ sub prepare_dns_approval {
 			}
 		}
 	}
-	print STDERR $$_ for @methods_stderr;
-	die "No DNS approval method available for " . english_join('or', @tried_names) . ".\n";
+	if ($verbose) {
+		print STDERR $$_ for @methods_stderr;
+	}
+	die "No DNS approval method available for " . english_join('or', @tried_names) . "." . (not($verbose) && @methods_stderr ? " Specify the --verbose option for details." : "") . "\n";
 }
 
 sub compare_approval_option {
