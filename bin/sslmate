@@ -1047,21 +1047,23 @@ sub prepare_approval {
 		}
 	}
 	my $successful = 0;
-	if ($new_cert->{approval_method} eq 'http' && not($new_cert->{http_approval}->{status}->{ready})) {
+	if ($new_cert->{approval_method} eq 'http') {
 		$successful = eval {
 			prepare_http_approval('add', $new_cert->{http_approval}->{options});
 			1;
 		};
+		$successful = 1 if $new_cert->{http_approval}->{status}->{ready};
 		if (not $successful) {
 			my $why = $@;
 			chomp $why;
 			print STDERR "Error: unable to automatically configure HTTP approval for " . $new_cert->{cn} . ": $why\n";
 		}
-	} elsif ($new_cert->{approval_method} eq 'dns' && not($new_cert->{dns_approval}->{status}->{ready})) {
+	} elsif ($new_cert->{approval_method} eq 'dns') {
 		$successful = eval {
 			prepare_dns_approval('add', $new_cert->{dns_approval}->{options});
 			1;
 		};
+		$successful = 1 if $new_cert->{dns_approval}->{status}->{ready};
 		if (not $successful) {
 			my $why = $@;
 			chomp $why;
