@@ -1000,6 +1000,26 @@ sub compare_approval_options {
 	return 1;
 }
 
+sub prompt_for_manual_dns_approval {
+	my ($options) = @_;
+
+	print "\n";
+	print "Please add one of the following DNS records to your domain's DNS:\n";
+	print "\n";
+	for my $option (@$options) {
+		print "    " . join(' ', @$option{qw{name type value}}) . "\n";
+	}
+	print "\n";
+	while (1) {
+		my $answer = prompt_user('Press ENTER when done (or q to quit): ');
+		if ($answer eq '') {
+			return 1;
+		} elsif ($answer eq 'q') {
+			return 0;
+		}
+	}
+}
+
 sub prepare_approval {
 	my ($old_cert, $new_cert) = @_;
 
@@ -1028,13 +1048,26 @@ sub prepare_approval {
 			prepare_http_approval('add', $new_cert->{http_approval}->{options});
 			1;
 		};
-		print STDERR "Error: unable to set up automatic HTTP approval for " . $new_cert->{cn} . ": $@" if not $successful;
+		if (not $successful) {
+			my $why = $@;
+			chomp $why;
+			print STDERR "Error: unable to automatically configure HTTP approval for " . $new_cert->{cn} . ": $why\n";
+		}
 	} elsif ($new_cert->{approval_method} eq 'dns' && not($new_cert->{dns_approval}->{status}->{ready})) {
 		$successful = eval {
 			prepare_dns_approval('add', $new_cert->{dns_approval}->{options});
 			1;
 		};
-		print STDERR "Error: unable to set up DNS approval records for " . $new_cert->{cn} . ": $@" if not $successful;
+		if (not $successful) {
+			my $why = $@;
+			chomp $why;
+			if ($batch) {
+				print STDERR "Error: unable to automatically configure DNS approval for " . $new_cert->{cn} . ": $why\n";
+			} else {
+				print "Notice: unable to automatically configure DNS approval for " . $new_cert->{cn}. ": $why\n";
+				$successful = prompt_for_manual_dns_approval($new_cert->{dns_approval}->{options});
+			}
+		}
 	} else {
 		$successful = 1;
 	}
