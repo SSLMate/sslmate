@@ -65,7 +65,9 @@ our $PKCS12_PASSWORD = 'sslmate';
 our $DEFAULT_LIBEXEC_DIR = undef;
 our $LIBEXEC_DIR = $ENV{'SSLMATE_LIBEXEC_DIR'} // $DEFAULT_LIBEXEC_DIR // "$FindBin::Bin/../libexec/sslmate";
 
+our $batch = 0;
 our $quiet = 0;
+our $verbose = 0;
 our $config_profile;
 our %global_config;
 our %personal_config;
@@ -96,8 +98,10 @@ sub print_usage {
 	print $out " sslmate help                     Display help\n";
 	print $out " sslmate version                  Print the version of SSLMate that's installed\n";
 	print $out "\n";
-	print $out "Valid options:\n";
+	print $out "Valid global options:\n";
 	print $out " -p, --profile=NAME               Use the given configuration profile\n";
+	print $out " --batch                          Never prompt for confirmation or information\n";
+	print $out " --verbose                        Display additional information\n";
 	print $out "\n";
 	print $out "Run 'sslmate help COMMAND' for more information on a specific command.\n";
 }
@@ -1498,7 +1502,7 @@ sub do_wait_for_cert {
 }
 
 sub do_buy {
-	my ($cn, $cert_type, $years, $force, $no_wait, $accept_dummy, $auto_renew, $batch, $approval_method, $approver_email, $key_type, %opts) = @_;
+	my ($cn, $cert_type, $years, $force, $no_wait, $accept_dummy, $auto_renew, $approval_method, $approver_email, $key_type, %opts) = @_;
 
 	# Future TODO: support reusing key file if one already exists
 
@@ -1670,7 +1674,6 @@ sub command_buy {
 		print "                      email an invoice to the given address\n";
 		print "\n";
 		print "Batch options:\n";
-		print " --batch              don't prompt for confirmation\n";
 		print " --email=ADDRESS      use the given approver email address\n";
 		print " --no-wait            return immediately; don't wait for cert to be issued\n";
 		print " --temp               return immediately with a temporary certificate\n";
@@ -1684,7 +1687,6 @@ sub command_buy {
 	my %opts;
 	my $auto_renew = undef;
 	my $force = 0;
-	my $batch = 0;
 	my $ev = 0;
 	my $approval_method = 'email';
 	my $approver_email = undef;
@@ -1696,7 +1698,7 @@ sub command_buy {
 	$getopt->configure(qw(no_ignore_case permute bundling));
 	$getopt->getoptions('auto-renew!', \$auto_renew,
 			    'force|f', \$force,
-			    'batch', \$batch,
+			    'batch', \$batch, # compat with pre-1.0
 			    'ev', \$ev,
 			    'approval=s', \$approval_method,
 			    'email=s', \$approver_email,
@@ -1748,7 +1750,7 @@ sub command_buy {
 	}
 
 	init_default_paths;
-	return do_buy($cn, $cert_type, $years, $force, $no_wait, $accept_dummy, $auto_renew, $batch, $approval_method, $approver_email, $key_type, %opts);
+	return do_buy($cn, $cert_type, $years, $force, $no_wait, $accept_dummy, $auto_renew, $approval_method, $approver_email, $key_type, %opts);
 }
 
 sub command_reissue {
@@ -1891,7 +1893,6 @@ sub command_revoke {
 		print "\n";
 		print "Valid options:\n";
 		print " -a, --all    revoke ALL certificates, even the most recent\n";
-		print " --batch      don't prompt for confirmation if --all is used\n";
 		print "\n";
 		print "Note: By default, 'sslmate revoke' revokes all but the most recent certificate.\n";
 		print "      To revoke even the most recent certificate, use the --all option.\n";
@@ -1902,12 +1903,10 @@ sub command_revoke {
 	}
 
 	my $all = 0;
-	my $batch = 0;
 
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
-	$getopt->getoptions('all|a', \$all,
-			    'batch', \$batch) or return 2;
+	$getopt->getoptions('all|a', \$all) or return 2;
 
 	if (@ARGV != 1) {
 		print STDERR "Error: you must specify the hostname of the certificate to revoke.\n";
@@ -1937,7 +1936,7 @@ sub command_revoke {
 			print "Do you understand and want to continue?\n\n";
 			exit 1 unless prompt_yesno();
 		} else {
-			print "Error: will not continue unless --batch option is specified.\n";
+			print "Error: will not continue unless --batch global option is specified.\n";
 			exit 1;
 		}
 	}
@@ -1984,7 +1983,6 @@ sub command_renew {
 		print "                      email an invoice to the given address\n";
 		print "\n";
 		print "Batch options:\n";
-		print " --batch              don't prompt for confirmation\n";
 		print " --no-wait            return immediately; don't wait for new cert to be issued\n";
 		print "\n";
 		print "Advanced options:\n";
@@ -1994,13 +1992,12 @@ sub command_renew {
 
 	my %opts;
 	my $force = 0;
-	my $batch = 0;
 	my $no_wait = 0;
 
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
 	$getopt->getoptions('force|f', \$force,
-			    'batch', \$batch,
+			    'batch', \$batch, # compat with pre-1.0
 			    'no-wait', \$no_wait,
 			    'coupon=s', \$opts{coupon_code},
 			    'email-invoice-to=s', \$opts{email_invoice_to},
@@ -2963,7 +2960,6 @@ sub command_import {
 		print " --auto-renew       automatically renew this certificate before it expires\n";
 		print " --no-auto-renew    don't automatically renew this certificate\n";
 		print " --no-install       don't copy the key/cert to the local key/cert directories\n";
-		print " --batch            don't prompt for confirmation\n";
 		print " --email=ADDRESS    use the given approver email address\n";
 		return 0;
 	}
@@ -2971,7 +2967,6 @@ sub command_import {
 	my $auto_renew = undef;
 	my $force = 0;
 	my $install = 1;
-	my $batch = 0;
 	my $approval_method = 'email';
 	my $approver_email = undef;
 
@@ -2980,7 +2975,6 @@ sub command_import {
 	$getopt->getoptions('auto-renew!', \$auto_renew,
 			    'force|f', \$force,
 			    'install!', \$install,
-			    'batch', \$batch,
 			    'approval=s', \$approval_method,
 			    'email=s', \$approver_email) or return 2;
 
@@ -3013,12 +3007,12 @@ sub command_import {
 
 	init_default_paths;
 
-	do_import($force, $auto_renew, $install, $ARGV[0], $ARGV[1], undef, $batch, $approval_method, $approver_email);
+	do_import($force, $auto_renew, $install, $ARGV[0], $ARGV[1], undef, $approval_method, $approver_email);
 	return 0;
 }
 
 sub do_import {
-	my ($force, $auto_renew, $install_locally, $source_key_path, $source_crt_path, $cn, $batch, $approval_method, $approver_email) = @_;
+	my ($force, $auto_renew, $install_locally, $source_key_path, $source_crt_path, $cn, $approval_method, $approver_email) = @_;
 
 	# 1. Read the key
 	open(my $source_key_file, '<', $source_key_path) or die "Error: Unable to open $source_key_path: $!\n";
@@ -3364,7 +3358,10 @@ sub main {
 
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case no_permute bundling));
-	$getopt->getoptions('profile|p=s', \$config_profile) or return 2;
+	$getopt->getoptions('profile|p=s', \$config_profile,
+			    'batch', \$batch,
+#			    'quiet', \$quiet,
+			    'verbose', \$verbose) or return 2;
 
 	if (@ARGV == 0) {
 		print_usage(*STDERR);
