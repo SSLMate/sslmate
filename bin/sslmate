@@ -2530,7 +2530,7 @@ sub make_cert_info {
 	return {
 		name => $cert->{cn},
 		status => $latest ? $latest->{state} : undef,
-		expiration => $latest && $latest->{expiration} ? strftime('%Y-%m-%d', localtime($latest->{expiration})) : undef,
+		expiration => $latest ? $latest->{expiration} : undef,
 		local_status => $local_status,
 		fingerprint => $latest ? $latest->{sha1_fingerprint} : undef,
 		sha256_fingerprint => $latest ? $latest->{sha256_fingerprint} : undef,
@@ -2549,6 +2549,10 @@ sub format_cert_row {
 		my ($raw_hash) = @_;
 		$raw_hash =~ s/([0-9a-zA-z][0-9a-zA-Z])/:\U$1\E/g;
 		return substr($raw_hash, 1);
+	};
+	local *format_expiration = sub {
+		my ($seconds) = @_;
+		return strftime('%Y-%m-%d', localtime($seconds));
 	};
 	local *format_status = sub {
 		my ($raw_status) = @_;
@@ -2588,6 +2592,7 @@ sub format_cert_row {
 		return $value ? 'Yes' : 'No';
 	};
 	my %formatters = (
+		expiration => \&format_expiration,
 		status => \&format_status,
 		local_status => \&format_local_status,
 		fingerprint => \&format_hash,
