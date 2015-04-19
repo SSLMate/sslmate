@@ -1,3 +1,10 @@
+sslmate (1.0.0-1) unstable; urgency=low
+
+  * New upstream release.
+  * Add python, python-boto as Recommends:.
+
+ -- SSLMate Software Release Role <software@sslmate.com>  Sun, 19 Apr 2015 10:33:13 -0700
+
 sslmate (0.6.2-1) unstable; urgency=low
 
   * New upstream release.
