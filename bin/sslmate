@@ -3357,7 +3357,14 @@ sub command_mkconfig {
 sub command_help {
 	local @ARGV = @_;
 
-	if (@ARGV == 0 || $ARGV[0] eq 'help') {
+	my $print_libexec_dir = 0;
+	my $getopt = Getopt::Long::Parser->new;
+	$getopt->configure(qw(no_ignore_case permute bundling));
+	$getopt->getoptions('libexec-dir', \$print_libexec_dir) or return 2;
+
+	if ($print_libexec_dir) {
+		print "$LIBEXEC_DIR\n";
+	} elsif (@ARGV == 0 || $ARGV[0] eq 'help') {
 		print_usage(*STDOUT);
 	} else {
 		main($ARGV[0], "-?");
