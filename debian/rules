@@ -1,6 +1,7 @@
 #!/usr/bin/make -f
 
 export PREFIX=/usr
+export LIBEXECDIR=$(PREFIX)/lib/sslmate
 
 %:
 	dh $@
