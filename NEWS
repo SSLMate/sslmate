@@ -1,3 +1,35 @@
+v1.0.0 (2015-04-20)
+  * Add `sslmate import` command for importing existing certificates to
+    your account.
+  * Add `sslmate list` command for listing your account's certificates.
+  * Add `sslmate edit` command for changing the settings of a certificate
+    (e.g. auto-renew, approver email address).
+  * Add `sslmate resend-email` command for resending the approval email
+    for a pending certificate.
+  * Add support for DNS approval.
+  * Add support for EV certs.
+  * Add support for ECDSA keys and certs.
+  * Add support for daily purchase limit.
+  * Add wildcard_filename config option for setting the character used
+    in a wildcard cert filename, instead of '*'.
+  * buy/reissue/renew now exit with status 12 if cert is not downloaded
+    and --no-wait is not used.
+  * Print path to private key when buy/reissue terminates before cert
+    can be downloaded.
+  * Improve display of key and cert paths.
+  * Preserve permissions of original .key file when reissuing.
+  * Deprecate honor_umask config option.
+  * Better support for non-ASCII domain names.
+  * Require --force to buy a certificate when an active certificate with
+    that name already exists in your account.
+  * Fix bug where reissue and renew commands could exit with a non-zero
+    status upon success.
+  * Add global --batch option.
+  * Add global --verbose option.
+  * Add support for alternative key/certificate formats, such as PKCS#12
+    (experimental).
+  * Add support for HTTP approval (experimental).
+
 v0.6.2 (2014-12-18)
   * Include recommended security settings when running `sslmate
     mkconfig`, unless --no-security option is specified.
