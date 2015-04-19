@@ -20,7 +20,7 @@ DEPENDENCIES
 
 SSLMate officially supports:
 
- * Debian 6 and 7
+ * Debian 6, 7, and 8
  * Ubuntu 10.04, 12.04, 13.10, and 14.04
  * RHEL/CentOS 6 and 7
  * Mac OS X 10.9 and above
@@ -40,15 +40,35 @@ following software is installed:
    -------------------------------------------------------------------------
    URI                 liburi-perl                  perl-URI
    Term::ReadKey       libterm-readkey-perl         perl-TermReadKey
-   JSON::PP (*)        libjson-perl                 perl-JSON
-   WWW::Curl (**)      libwww-curl-perl             perl-WWW-Curl
+   JSON::PP [1]        libjson-perl                 perl-JSON
+   WWW::Curl [2]       libwww-curl-perl             perl-WWW-Curl
 
 
    Notes:
-     * JSON::PP is included with Perl 5.14 and later.
+     [1] JSON::PP is included with Perl 5.14 and later.
 
-    ** WWW::Curl is optional; if not available SSLMate will fall back
-       to executing the `curl` command directly.
+     [2] WWW::Curl is optional; if not available SSLMate will fall back
+         to executing the `curl` command directly.
+
+
+OPTIONAL DEPENDENCIES
+
+To use automatic DNS approval with Route 53, the following additional
+software must be installed:
+
+ * Python 2.6, Python 2.7, Python 3, or newer.
+
+ * Boto (Python module) 2.2 or newer.
+
+   Debian 6 package:      python-boto (requires squeeze-backports [1])
+   Debian 7+ package:     python-boto
+   Ubuntu 12.04+ package: python-boto
+   RHEL/CentOS package:   python-boto (requires EPEL repository [2])
+
+
+   Notes:
+     [1] http://backports.debian.org/Instructions/
+     [2] https://fedoraproject.org/wiki/EPEL
 
 
 INSTALLATION
@@ -72,5 +92,5 @@ GETTING HELP
   * Consult <https://sslmate.com/help>.
 
   * Email <support@sslmate.com> or Tweet to @SSLMate.
- 
+
 
