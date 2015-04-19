@@ -1,0 +1,191 @@
+#!/usr/bin/env python
+
+#
+# DNS approval handler for SSLMate using Route 53.
+# To use, place the following in your dns_approval_map file:
+#
+#       example.com. route53 PARAMS...
+#
+# where example.com. is your domain name (note the trailing dot), and
+# PARAMS...  is zero or more of the following parameters, space-separated:
+#
+#   aws_access_key_id=ID
+#   aws_secret_access_key=KEY
+#       AWS credentials.  If these parameters are not specified, credentials
+#       are read from ~/.aws/credentials.
+#
+#   aws_credentials_profile=PROFILE
+#       The section in ~/.aws/credentials from which to read credentials.
+#       Defaults to 'default'.  Only applicable if aws_access_key_id and
+#       aws_secret_access_key parameters not specified.
+#
+#   hosted_zone_id=ID
+#       The Route 53 hosted zone ID for this domain.  This parameter is
+#       optional; normally the hosted zone ID is auto-detected.
+#
+# Example:
+#
+#       example.com. route53 aws_access_key_id=AKIAJCXHASUVYTZGFSZA aws_secret_access_key=a9MXAPifglXkAK41X733imBjOi4FBuSQlP/3Fq3U
+#
+# The AWS credentials must have the following IAM permissions:
+#
+#   - route53:ListHostedZones on *
+#   - route53:GetChange on arn:aws:route53:::change/*
+#   - route53:ListResourceRecordSets on arn:aws:route53:::hostedzone/HOSTED_ZONE_ID
+#   - route53:ChangeResourceRecordSets on arn:aws:route53:::hostedzone/HOSTED_ZONE_ID
+#
+# This handler requires Python and Boto.
+#
+# This program is meant to be invoked by the SSLMate client. Do not
+# execute directly.
+#
+
+#
+# Copyright (c) 2015 Opsmate, Inc.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a
+# copy of this software and associated documentation files (the "Software"),
+# to deal in the Software without restriction, including without limitation
+# the rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Software, and to permit persons to whom the
+# Software is furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included
+# in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+# OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+# ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+# OTHER DEALINGS IN THE SOFTWARE.
+#
+# Except as contained in this notice, the name(s) of the above copyright
+# holders shall not be used in advertising or otherwise to promote the
+# sale, use or other dealings in this Software without prior written
+# authorization.
+#
+
+
+import time
+import sys
+import os
+try:
+	import ConfigParser # Python 2
+except ImportError:
+	import configparser as ConfigParser # Python 3
+try:
+	from boto import connect_route53
+	from boto.route53.record import ResourceRecordSets
+except ImportError:
+	sys.stderr.write("route53: Error: Version 2.2 or higher of the boto python module must be installed to configure DNS approval through Route 53\n")
+	sys.exit(5)
+
+def bad_usage():
+	sys.stderr.write('Usage: %s add|del name type value\n' % sys.argv[0])
+	sys.exit(2)
+
+if len(sys.argv) != 5:
+	bad_usage();
+
+action = sys.argv[1]
+rr_name = sys.argv[2]
+rr_type = sys.argv[3]
+rr_value = sys.argv[4]
+
+aws_access_key_id = None
+aws_secret_access_key = None
+hosted_zone_id = None
+aws_credentials_profile = 'default'
+try:
+	for name in os.environ['PARAMS'].split():
+		if name == 'aws_access_key_id':
+			aws_access_key_id = os.environ['PARAM_' + name]
+		elif name == 'aws_secret_access_key':
+			aws_secret_access_key = os.environ['PARAM_' + name]
+		elif name == 'hosted_zone_id':
+			hosted_zone_id = os.environ['PARAM_' + name]
+		elif name == 'aws_credentials_profile':
+			aws_credentials_profile = os.environ['PARAM_' + name]
+		else:
+			sys.stderr.write('route53: Error: Unrecognized parameter %s\n' % name)
+			sys.exit(3)
+except KeyError as e:
+	sys.stderr.write('route53: Error: Missing required environment variable %s - was this program invoked by SSLMate?\n' % e.args[0])
+	sys.exit(3)
+
+if aws_access_key_id is None:
+	# Get AWS credentials from ~/.aws/credentials, an INI-style file (see http://blogs.aws.amazon.com/security/post/Tx3D6U6WSFGOK2H/A-New-and-Standardized-Way-to-Manage-Credentials-in-the-AWS-SDKs)
+	aws_credentials_path = os.path.join(os.path.expanduser("~"), '.aws', 'credentials')
+	if not os.path.exists(aws_credentials_path):
+		sys.stderr.write('route53: Error: %s does not exist; please place your AWS credentials in either this file or in the SSLMate DNS approval map file\n' % aws_credentials_path)
+		sys.exit(4)
+	try:
+		aws_credentials_config = ConfigParser.RawConfigParser()
+		aws_credentials_config.read(aws_credentials_path)
+		aws_access_key_id = aws_credentials_config.get(aws_credentials_profile, 'aws_access_key_id')
+		aws_secret_access_key = aws_credentials_config.get(aws_credentials_profile, 'aws_secret_access_key')
+	except ConfigParser.Error as e:
+		sys.stderr.write('route53: Error: %s: %s\n' % (aws_credentials_path, e))
+		sys.exit(4)
+
+try:
+	conn = connect_route53(aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
+
+	if hosted_zone_id is None:
+		result = conn.get_all_hosted_zones()
+		for zone in sorted(result['ListHostedZonesResponse']['HostedZones'], key=lambda zone: zone['Name'].count('.'), reverse=True):
+			if rr_name == zone['Name'] or rr_name.endswith('.' + zone['Name']):
+				hosted_zone_id = zone['Id'][12:] # Slice off '/hostedzone/' prefix to get the actual ID
+				break
+		if hosted_zone_id is None:
+			sys.stderr.write('route53: Error: Unable to find a hosted zone for %s (when using access key ID %s). Does your Route 53 account contain a hosted zone for this domain?\n' % (rr_name, aws_access_key_id))
+			sys.exit(4)
+except Exception as e:
+	sys.stderr.write('route53: Error (for %s): %s\n' % (rr_name, e))
+	sys.exit(4)
+
+if action == 'noop':
+	sys.exit(0)
+
+try:
+	current = conn.get_all_rrsets(hosted_zone_id, rr_type, rr_name, maxitems=1)
+	currently_exists = len(current) > 0 and rr_value in current[0].resource_records
+
+	if action == 'add':
+		if not currently_exists:
+			sys.stdout.write('route53: Adding %s record for %s... ' % (rr_type, rr_name))
+			sys.stdout.flush()
+			changes = ResourceRecordSets(conn, hosted_zone_id)
+			changes.add_change('UPSERT', rr_name, rr_type, ttl=5).add_value(rr_value)
+			result = changes.commit()
+			change_id = result['ChangeResourceRecordSetsResponse']['ChangeInfo']['Id'].split('/')[-1]
+			while True:
+				change = conn.get_change(change_id)
+				status = change['GetChangeResponse']['ChangeInfo']['Status']
+				if status == 'INSYNC':
+					break
+				elif status == 'PENDING':
+					time.sleep(2)
+				else:
+					sys.stderr.write('route53: Error: bad response from AWS: unknown status %s for change %s\n' % (status, change_id))
+					sys.exit(1)
+			sys.stdout.write('Done.\n')
+			sys.stdout.flush()
+	elif action == 'del':
+		if currently_exists:
+			sys.stdout.write('route53: Removing %s record for %s... ' % (rr_type, rr_name))
+			sys.stdout.flush()
+			changes = ResourceRecordSets(conn, hosted_zone_id)
+			changes.add_change('DELETE', rr_name, rr_type, ttl=5).add_value(rr_value)
+			changes.commit()
+			sys.stdout.write('Done.\n')
+			sys.stdout.flush()
+	else:
+		bad_usage();
+except Exception as e:
+	sys.stderr.write('route53: Error (for %s): %s\n' % (rr_name, e))
+	sys.exit(1)
+
+sys.exit(0)
