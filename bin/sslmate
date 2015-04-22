@@ -674,7 +674,7 @@ sub external_api_call {
 	local $SIG{PIPE} = 'IGNORE';
 
 	my ($response_fh, $config_fh);
-	my $curl_pid = eval { open2($response_fh, $config_fh, 'curl', '-K', '-') };
+	my $curl_pid = eval { open2($response_fh, $config_fh, 'curl', '-q', '-K', '-') };
 	die "Error: Unable to execute the 'curl' command - is curl installed?\n" unless defined($curl_pid);
 	print $config_fh "user-agent = \"" . escape_curl_param("SSLMate-external/$VERSION") . "\"\n";
 	print $config_fh "silent\n";
