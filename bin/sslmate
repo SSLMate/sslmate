@@ -56,9 +56,23 @@ use URI::Escape;		# liburi-perl			perl-URI
 use JSON::PP; # core in 5.13.9+	# libjson-perl			perl-JSON
 use Term::ReadKey;		# libterm-readkey-perl		perl-TermReadKey
 
-our $has_curl = not($ENV{SSLMATE_USE_EXTERNAL_CURL}) && eval { require WWW::Curl::Easy; 1 };
+sub has_curl_command {
+	my $pid = fork;
+	die "Error: fork failed: $!" unless defined $pid;
+	if ($pid == 0) {
+		open(STDIN, '<', '/dev/null');
+		open(STDOUT, '>', '/dev/null');
+		open(STDERR, '>', '/dev/null');
+		exec('curl', '--version');
+		exit 1;
+	}
+	waitpid($pid, 0) or die "Error: waitpid failed: $!";
+	return $? == 0;
+}
 
-our $VERSION = '1.0.0';
+our $use_curl_module = not(has_curl_command) && not($ENV{SSLMATE_USE_EXTERNAL_CURL}) && eval { require WWW::Curl::Easy; 1 };
+
+our $VERSION = '1.0.1';
 our $API_ENDPOINT = 'https://sslmate.com/api/v2';
 our $PKCS12_PASSWORD = 'sslmate';
 
@@ -674,7 +688,7 @@ sub external_api_call {
 	local $SIG{PIPE} = 'IGNORE';
 
 	my ($response_fh, $config_fh);
-	my $curl_pid = eval { open2($response_fh, $config_fh, 'curl', '-K', '-') };
+	my $curl_pid = eval { open2($response_fh, $config_fh, 'curl', '-q', '-K', '-') };
 	die "Error: Unable to execute the 'curl' command - is curl installed?\n" unless defined($curl_pid);
 	print $config_fh "user-agent = \"" . escape_curl_param("SSLMate-external/$VERSION") . "\"\n";
 	print $config_fh "silent\n";
@@ -760,7 +774,7 @@ sub api_call {
 	my $next_retry_delay = 2;
 
 	while (1) {
-		my ($http_status, $content_type, $response_data) = $has_curl ?
+		my ($http_status, $content_type, $response_data) = $use_curl_module ?
 					native_api_call($method, $command, $creds, $post_data) :
 					external_api_call($method, $command, $creds, $post_data);
 
@@ -3339,7 +3353,7 @@ sub command_mkconfig {
 						  include_security_settings => $no_security_opt ? undef : 1 }) or return 1;
 
 	if ($status != 200) {
-		if ($response->{reason} // '' eq 'template_not_found') {
+		if (($response->{reason} // '') eq 'template_not_found') {
 			print STDERR "Error: $template_name: Unknown configuration template.\n";
 			print STDERR "Run 'sslmate mkconfig --templates' for a list for available templates.\n";
 			return 1;
