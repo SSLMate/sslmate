@@ -3339,7 +3339,7 @@ sub command_mkconfig {
 						  include_security_settings => $no_security_opt ? undef : 1 }) or return 1;
 
 	if ($status != 200) {
-		if ($response->{reason} // '' eq 'template_not_found') {
+		if (($response->{reason} // '') eq 'template_not_found') {
 			print STDERR "Error: $template_name: Unknown configuration template.\n";
 			print STDERR "Run 'sslmate mkconfig --templates' for a list for available templates.\n";
 			return 1;
