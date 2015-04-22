@@ -1,3 +1,8 @@
+v1.0.1 (2015-04-22)
+  * Minor bug fixes.
+  * Fix segfault on Ubuntu 14.10 by using external curl command for
+    HTTP client.
+
 v1.0.0 (2015-04-20)
   * Add `sslmate import` command for importing existing certificates to
     your account.

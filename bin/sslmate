@@ -72,7 +72,7 @@ sub has_curl_command {
 
 our $use_curl_module = not(has_curl_command) && not($ENV{SSLMATE_USE_EXTERNAL_CURL}) && eval { require WWW::Curl::Easy; 1 };
 
-our $VERSION = '1.0.0';
+our $VERSION = '1.0.1';
 our $API_ENDPOINT = 'https://sslmate.com/api/v2';
 our $PKCS12_PASSWORD = 'sslmate';
 
