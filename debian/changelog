@@ -1,3 +1,10 @@
+sslmate (1.0.1-1) unstable; urgency=low
+
+  * Depend on curl instead of libwww-curl-perl.
+  * New upstream release.
+
+ -- SSLMate Software Release Role <software@sslmate.com>  Wed, 22 Apr 2015 16:10:45 -0700
+
 sslmate (1.0.0-1) unstable; urgency=low
 
   * New upstream release.
