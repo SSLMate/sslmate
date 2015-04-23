@@ -75,6 +75,7 @@ our $use_curl_module = not(has_curl_command) && not($ENV{SSLMATE_USE_EXTERNAL_CU
 our $VERSION = '1.0.1';
 our $API_ENDPOINT = 'https://sslmate.com/api/v2';
 our $PKCS12_PASSWORD = 'sslmate';
+our $DEFAULT_CERT_TIMEOUT = 600;
 
 our $DEFAULT_LIBEXEC_DIR = undef;
 our $LIBEXEC_DIR = $ENV{'SSLMATE_LIBEXEC_DIR'} // $DEFAULT_LIBEXEC_DIR // "$FindBin::Bin/../libexec/sslmate";
@@ -1287,11 +1288,11 @@ sub extract_pubkey_from_crt {
 }
 
 sub wait_for_cert {
-	my ($cn, $cert_instance_id, $accept_dummy) = @_;
+	my ($cn, $cert_instance_id, $timeout, $accept_dummy) = @_;
 
 	my $start_time = time;
-	my $warn_after = $start_time + 180;
-	my $timeout_after = $start_time + 600;
+	my $warn_after = $start_time + int($timeout / 3);
+	my $timeout_after = $start_time + $timeout;
 	my $warned = 0;
 
 	while (1) {
@@ -1515,12 +1516,12 @@ sub command_link {
 }
 
 sub do_wait_for_cert {
-	my ($cn, $cert_instance, $no_wait, $accept_dummy, $paths, $new_key_filename) = @_;
+	my ($cn, $cert_instance, $timeout, $accept_dummy, $paths, $new_key_filename) = @_;
 
 	if ($cert_instance->{approval_method} eq 'email') {
 		print "You will soon receive an email at " . $cert_instance->{approver_email} . " from " . $cert_instance->{approval_email_from} . ". Follow the instructions in the email to verify your ownership of your domain.\n\n";
 
-		if ($no_wait) {
+		if ($timeout == 0) {
 			print "Once you've verified ownership, you will be able to download your certificate with the 'sslmate download' command.\n";
 			return 0;
 		} elsif ($accept_dummy) {
@@ -1532,7 +1533,7 @@ sub do_wait_for_cert {
 
 	print "Waiting for ownership confirmation...\n" unless $accept_dummy;
 
-	my ($crt, $chain_crt, $is_dummy) = wait_for_cert($cn, $cert_instance->{id}, $accept_dummy) or return 0;
+	my ($crt, $chain_crt, $is_dummy) = wait_for_cert($cn, $cert_instance->{id}, $timeout, $accept_dummy) or return 0;
 	$chain_crt //= '';
 
 	write_cert_files($paths, $new_key_filename, $crt, $chain_crt);
@@ -1560,7 +1561,7 @@ sub do_wait_for_cert {
 }
 
 sub do_buy {
-	my ($cn, $cert_type, $years, $force, $no_wait, $accept_dummy, $auto_renew, $approval_method, $approver_email, $key_type, %opts) = @_;
+	my ($cn, $cert_type, $years, $force, $timeout, $accept_dummy, $auto_renew, $approval_method, $approver_email, $key_type, %opts) = @_;
 
 	# Future TODO: support reusing key file if one already exists
 
@@ -1706,10 +1707,10 @@ sub do_buy {
 	}
 
 	print "Order complete.\n\n";
-	if (!do_wait_for_cert($cn, $cert_instance, $no_wait, $accept_dummy, $paths, $paths->{key})) {
+	if (!do_wait_for_cert($cn, $cert_instance, $timeout, $accept_dummy, $paths, $paths->{key})) {
 		print "\n";
 		print_cert_paths($paths, undef, 'pending');
-		return 12 unless $no_wait;
+		return 12 unless $timeout == 0;
 	}
 	return 0;
 }
@@ -1734,6 +1735,7 @@ sub command_buy {
 		print "Batch options:\n";
 		print " --approval=METHOD    use the given approval method (email or dns)\n";
 		print " --email=ADDRESS      use the given approver email address\n";
+		print " --timeout=SECONDS    wait at most SECONDS seconds for cert to be issued\n";
 		print " --no-wait            return immediately; don't wait for cert to be issued\n";
 		print " --temp               return immediately with a temporary certificate\n";
 		print "\n";
@@ -1749,6 +1751,7 @@ sub command_buy {
 	my $ev = 0;
 	my $approval_method = 'email';
 	my $approver_email = undef;
+	my $timeout = undef;
 	my $no_wait = 0;
 	my $accept_dummy = 0;
 	my $key_type = undef;
@@ -1761,6 +1764,7 @@ sub command_buy {
 			    'ev', \$ev,
 			    'approval=s', \$approval_method,
 			    'email=s', \$approver_email,
+			    'timeout=i', \$timeout,
 			    'no-wait', \$no_wait,
 			    'temp', \$accept_dummy,
 			    'key-type=s', \$key_type,
@@ -1779,10 +1783,20 @@ sub command_buy {
 		print STDERR "Error: --no-wait and --temp are mutually exclusive.\n";
 		return 2;
 	}
-	if ($ev && !$no_wait && !$accept_dummy) {
-		# --ev implies --temp, unless --no-wait or --temp were already specified
+	if (defined($timeout) && $accept_dummy) {
+		print STDERR "Error: --timeout and --temp are mutually exclusive.\n";
+		return 2;
+	}
+	if (defined($timeout) && $no_wait) {
+		print STDERR "Error: --timeout and --no-wait are mutually exclusive.\n";
+		return 2;
+	}
+	$timeout = 0 if $no_wait;
+	if ($ev && defined($timeout) && !$accept_dummy) {
+		# --ev implies --temp, unless --timeout or --temp were already specified
 		$accept_dummy = 1;
 	}
+	$timeout //= $DEFAULT_CERT_TIMEOUT;
 	if (defined($approver_email) && $approval_method ne 'email') {
 		print STDERR "Error: --email is only valid with --approval=email.\n";
 		return 2;
@@ -1809,7 +1823,7 @@ sub command_buy {
 	}
 
 	init_default_paths;
-	return do_buy($cn, $cert_type, $years, $force, $no_wait, $accept_dummy, $auto_renew, $approval_method, $approver_email, $key_type, %opts);
+	return do_buy($cn, $cert_type, $years, $force, $timeout, $accept_dummy, $auto_renew, $approval_method, $approver_email, $key_type, %opts);
 }
 
 sub command_reissue {
@@ -1820,6 +1834,7 @@ sub command_reissue {
 		print "Example: sslmate reissue www.example.com\n";
 		print "\n";
 		print "Batch options:\n";
+		print " --timeout=SECONDS  wait at most SECONDS seconds for new cert to be issued\n";
 		print " --no-wait          return immediately; don't wait for new cert to be issued\n";
 		print "\n";
 		print "Advanced options:\n";
@@ -1829,12 +1844,14 @@ sub command_reissue {
 	}
 
 	my $force = 0;
+	my $timeout = undef;
 	my $no_wait = 0;
 	my $key_type = undef;
 
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
 	$getopt->getoptions('force|f', \$force,
+			    'timeout=i', \$timeout,
 			    'no-wait', \$no_wait,
 			    'key-type=s', \$key_type) or return 2;
 
@@ -1843,6 +1860,11 @@ sub command_reissue {
 		print STDERR "Example: sslmate reissue www.example.com\n";
 		return 2;
 	}
+	if (defined($timeout) && $no_wait) {
+		print STDERR "Error: --timeout and --no-wait are mutually exclusive.\n";
+		return 2;
+	}
+	$timeout = 0 if $no_wait;
 
 	my $cn = lc $ARGV[0];
 	validate_cn($cn) or return 1;
@@ -1928,17 +1950,17 @@ sub command_reissue {
 		$exit_with_error->();
 	}
 
-	$no_wait = 1 if $cert_instance->{type} eq 'ev';
+	$timeout //= ($cert_instance->{type} eq 'ev' ? 0 : $DEFAULT_CERT_TIMEOUT);
 
 	print "Reissue complete.\n\n";
-	if (!do_wait_for_cert($cn, $cert_instance, $no_wait, 0, $paths, $new_key_filename)) {
+	if (!do_wait_for_cert($cn, $cert_instance, $timeout, 0, $paths, $new_key_filename)) {
 		print "\n";
 		if (config_has('key_directory') && config_has('cert_directory')) {
 			print "Note: the new private key has been temporarily saved in $new_key_filename and will be installed automatically when 'sslmate download' downloads the new certificate.\n";
 		} else {
 			print_cert_paths({ %$paths, key => $new_key_filename }, undef, 'pending');
 		}
-		return 12 unless $no_wait;
+		return 12 unless $timeout == 0;
 	}
 	return 0;
 }
@@ -2042,6 +2064,7 @@ sub command_renew {
 		print "                      email an invoice to the given address\n";
 		print "\n";
 		print "Batch options:\n";
+		print " --timeout=SECONDS    wait at most SECONDS seconds for new cert to be issued\n";
 		print " --no-wait            return immediately; don't wait for new cert to be issued\n";
 		print "\n";
 		print "Advanced options:\n";
@@ -2051,12 +2074,14 @@ sub command_renew {
 
 	my %opts;
 	my $force = 0;
+	my $timeout = undef;
 	my $no_wait = 0;
 
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
 	$getopt->getoptions('force|f', \$force,
 			    'batch', \$batch, # compat with pre-1.0
+			    'timeout', \$timeout,
 			    'no-wait', \$no_wait,
 			    'coupon=s', \$opts{coupon_code},
 			    'email-invoice-to=s', \$opts{email_invoice_to},
@@ -2069,6 +2094,12 @@ sub command_renew {
 		print STDERR "See 'sslmate help renew' for help.\n";
 		return 2;
 	}
+
+	if (defined($timeout) && $no_wait) {
+		print STDERR "Error: --timeout and --no-wait are mutually exclusive.\n";
+		return 2;
+	}
+	$timeout = 0 if $no_wait;
 
 	my $cn = $ARGV[0];
 	my $years = undef;
@@ -2191,11 +2222,11 @@ sub command_renew {
 		$exit_with_error->();
 	}
 
-	$no_wait = 1 if $cert_instance->{type} eq 'ev';
+	$timeout //= ($cert_instance->{type} eq 'ev' ? 0 : $DEFAULT_CERT_TIMEOUT);
 
 	print "Renewal complete.\n\n";
-	if (!do_wait_for_cert($cn, $cert_instance, $no_wait, 0, $paths)) {
-		return 12 unless $no_wait;
+	if (!do_wait_for_cert($cn, $cert_instance, $timeout, 0, $paths)) {
+		return 12 unless $timeout == 0;
 	}
 	return 0;
 }

@@ -113,6 +113,17 @@ Send the domain ownership email to the given email address\&. This address must 
 interactively\&. Only applicable if email approval is used\&.
 .RE
 .PP
+\fB\-\-timeout=\fR\fB\fISECONDS\fR\fR
+.RS 4
+Wait up to
+\fISECONDS\fR
+seconds for the certificate to be issued\&. If the certificate is not issued before the timeout elapses,
+\fBsslmate\fR
+exits without downloading any certificate files\&. Instead, the certificate must be downloaded later with the
+\fBsslmate download\fR
+command\&.
+.RE
+.PP
 \fB\-\-no\-wait\fR
 .RS 4
 Return immediately after placing the order instead of waiting for the certificate to be issued\&. If this option is used, no certificate files are downloaded; instead the certificate must be downloaded separately with the
@@ -188,6 +199,17 @@ Renew the certificate for the given hostname\&.
 .sp
 The following options are understood:
 .PP
+\fB\-\-timeout=\fR\fB\fISECONDS\fR\fR
+.RS 4
+Wait up to
+\fISECONDS\fR
+seconds for the certificate to be issued\&. If the certificate is not issued before the timeout elapses,
+\fBsslmate\fR
+exits without downloading any certificate files\&. Instead, the certificate must be downloaded later with the
+\fBsslmate download\fR
+command\&.
+.RE
+.PP
 \fB\-\-no\-wait\fR
 .RS 4
 Return immediately after placing the order instead of waiting for the new certificate to be issued\&. If this option is used, no certificate files are downloaded; instead the new certificate must be downloaded separately with the
@@ -230,6 +252,17 @@ revoke it\&. Use the
 command to revoke a certificate after you have reissued it\&.
 .sp
 The following options are understood:
+.PP
+\fB\-\-timeout=\fR\fB\fISECONDS\fR\fR
+.RS 4
+Wait up to
+\fISECONDS\fR
+seconds for the certificate to be issued\&. If the certificate is not issued before the timeout elapses,
+\fBsslmate\fR
+exits without downloading any certificate files\&. Instead, the certificate must be downloaded later with the
+\fBsslmate download\fR
+command\&.
+.RE
 .PP
 \fB\-\-no\-wait\fR
 .RS 4

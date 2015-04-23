@@ -198,6 +198,18 @@
 							</listitem>
 						</varlistentry>
 						<varlistentry>
+							<term><option>--timeout=<replaceable>SECONDS</replaceable></option></term>
+
+							<listitem>
+								<para>
+									Wait up to <replaceable>SECONDS</replaceable> seconds for the certificate to be issued.
+									If the certificate is not issued before the timeout elapses, <command>sslmate</command>
+									exits without downloading any certificate files. Instead, the certificate must be downloaded
+									later with the <command>sslmate download</command> command.
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
 							<term><option>--no-wait</option></term>
 
 							<listitem>
@@ -335,6 +347,18 @@
 					</para>
 					<variablelist>
 						<varlistentry>
+							<term><option>--timeout=<replaceable>SECONDS</replaceable></option></term>
+
+							<listitem>
+								<para>
+									Wait up to <replaceable>SECONDS</replaceable> seconds for the certificate to be issued.
+									If the certificate is not issued before the timeout elapses, <command>sslmate</command>
+									exits without downloading any certificate files. Instead, the certificate must be downloaded
+									later with the <command>sslmate download</command> command.
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
 							<term><option>--no-wait</option></term>
 
 							<listitem>
@@ -408,6 +432,18 @@
 						The following options are understood:
 					</para>
 					<variablelist>
+						<varlistentry>
+							<term><option>--timeout=<replaceable>SECONDS</replaceable></option></term>
+
+							<listitem>
+								<para>
+									Wait up to <replaceable>SECONDS</replaceable> seconds for the certificate to be issued.
+									If the certificate is not issued before the timeout elapses, <command>sslmate</command>
+									exits without downloading any certificate files. Instead, the certificate must be downloaded
+									later with the <command>sslmate download</command> command.
+								</para>
+							</listitem>
+						</varlistentry>
 						<varlistentry>
 							<term><option>--no-wait</option></term>
 
