@@ -48,6 +48,7 @@ use IO::Handle;
 use IPC::Open2;
 use List::Util qw(max sum);
 use FindBin;
+use Encode;
 
 				# Debian/Ubuntu package		RHEL/CentOS package
 				# --------------------------------------------------
@@ -223,7 +224,7 @@ sub prompt_password {
 	}
 	ReadMode(0);
 
-	return $password; # XXX: should this be passed through decode_input?
+	return decode_input($password);
 }
 
 sub restore_file_permissions {
@@ -638,7 +639,7 @@ sub native_api_call {
 	}
 	if ($creds) {
 		$curl->setopt(WWW::Curl::Easy::CURLOPT_USERNAME(), $creds->{username});
-		$curl->setopt(WWW::Curl::Easy::CURLOPT_PASSWORD(), $creds->{password});
+		$curl->setopt(WWW::Curl::Easy::CURLOPT_PASSWORD(), encode('utf8', $creds->{password}));
 	}
 	$curl->setopt(WWW::Curl::Easy::CURLOPT_URL(), (get_config('api_endpoint') // $API_ENDPOINT) . $command);
 
@@ -697,7 +698,7 @@ sub external_api_call {
 	print $config_fh "request = \"" . escape_curl_param($method) . "\"\n";
 	print $config_fh "url = \"" . escape_curl_param((get_config('api_endpoint') // $API_ENDPOINT) . $command) . "\"\n";
 	if ($creds) {
-		print $config_fh "user = \"" . escape_curl_param(join(':', $creds->{username}, $creds->{password})) . "\"\n";
+		print $config_fh "user = \"" . escape_curl_param(join(':', $creds->{username}, encode('utf8', $creds->{password}))) . "\"\n";
 	}
 	if ($method eq 'POST') {
 		$post_data //= '';
