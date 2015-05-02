@@ -199,9 +199,22 @@ sub prompt_password {
 	ReadMode(3);
 	my %ctrl = GetControlChars;
 	while (defined(my $key = ReadKey(0))) {
-		if ($key eq "\n" || $key eq "\r") {
+		if ($key eq "\n" || $key eq "\r" || ord($key) eq $ctrl{EOF}) { # e.g. Ctrl+D
 			print "\n";
 			last;
+		} elsif ((ord$key) eq $ctrl{INTERRUPT}) { # e.g. Ctrl+C
+			$password = undef;
+			last;
+		} elsif (ord($key) eq $ctrl{ERASE}) {
+			if ($password ne '') {
+				chop $password;
+				print "\b \b";
+			}
+		} elsif (ord($key) eq $ctrl{KILL} || ord($key) eq $ctrl{ERASEWORD}) { # e.g. Ctrl+U, Ctrl+W
+			while ($password ne '') {
+				chop $password;
+				print "\b \b";
+			}
 		} else {
 			$password = $password . $key;
 			print "*";
