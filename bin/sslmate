@@ -196,7 +196,7 @@ sub prompt_password {
 	print $message;
 
 	my $password = '';
-	ReadMode(3);
+	ReadMode(4);
 	my %ctrl = GetControlChars;
 	while (defined(my $key = ReadKey(0))) {
 		if ($key eq "\n" || $key eq "\r" || ord($key) eq $ctrl{EOF}) { # e.g. Ctrl+D
