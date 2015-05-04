@@ -1562,7 +1562,7 @@ sub do_wait_for_cert {
 }
 
 sub do_buy {
-	my ($cn, $cert_type, $years, $force, $timeout, $accept_dummy, $auto_renew, $approval_method, $approver_email, $key_type, %opts) = @_;
+	my ($cn, $csr, $cert_type, $years, $force, $timeout, $accept_dummy, $auto_renew, $approval_method, $approver_email, $key_type, %opts) = @_;
 
 	# Future TODO: support reusing key file if one already exists
 
@@ -1642,23 +1642,25 @@ sub do_buy {
 	#
 	# 2. Generate key/CSR
 	#
-	my $key_file = open_key_file($paths->{key}, $force);
-
+	my $key_file;
 	my $exit_with_error = sub {
-		unlink($paths->{key});
+		unlink($paths->{key}) if defined($key_file);
 		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/type approval_method approver_email csr/)) if defined($cert);
 		exit 1;
 	};
+	unless (defined $csr) {
+		$key_file = open_key_file($paths->{key}, $force);
 
-	print "Generating private key... "; STDOUT->flush;
-	truncate($key_file, 0);
-	genkey($key_file, $key_type) or $exit_with_error->();
-	close($key_file);
-	print "Done.\n";
+		print "Generating private key... "; STDOUT->flush;
+		truncate($key_file, 0);
+		genkey($key_file, $key_type) or $exit_with_error->();
+		close($key_file);
+		print "Done.\n";
 
-	print "Generating CSR... "; STDOUT->flush;
-	my $csr = openssl_req($paths->{key}, $cert->{dn});
-	print "Done.\n";
+		print "Generating CSR... "; STDOUT->flush;
+		$csr = openssl_req($paths->{key}, $cert->{dn});
+		print "Done.\n";
+	}
 
 	#
 	# 3. Create/update the cert object on the server
@@ -1756,6 +1758,7 @@ sub command_buy {
 	my $no_wait = 0;
 	my $accept_dummy = 0;
 	my $key_type = undef;
+	my $csr_path = undef;
 
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
@@ -1769,6 +1772,7 @@ sub command_buy {
 			    'no-wait', \$no_wait,
 			    'temp', \$accept_dummy,
 			    'key-type=s', \$key_type,
+			    'csr=s', \$csr_path,
 			    'coupon=s', \$opts{coupon_code},
 			    'email-invoice-to=s', \$opts{email_invoice_to},
 			    'invoice-note=s', \$opts{invoice_note}) or return 2;
@@ -1808,6 +1812,17 @@ sub command_buy {
 		return 2;
 	}
 
+	my $csr = undef;
+	if (defined $csr_path) {
+		my $csr_fh;
+		if (!open($csr_fh, '<', $csr_path)) {
+			print STDERR "Error: $csr_path: $!\n";
+			return 1;
+		}
+		$csr = do { local $/; <$csr_fh> };
+		close($csr_fh);
+	}
+
 	my $cn = lc $ARGV[0];
 	my $years = undef;
 	my $cert_type = $ev ? 'ev' : 'dv';
@@ -1824,7 +1839,7 @@ sub command_buy {
 	}
 
 	init_default_paths;
-	return do_buy($cn, $cert_type, $years, $force, $timeout, $accept_dummy, $auto_renew, $approval_method, $approver_email, $key_type, %opts);
+	return do_buy($cn, $csr, $cert_type, $years, $force, $timeout, $accept_dummy, $auto_renew, $approval_method, $approver_email, $key_type, %opts);
 }
 
 sub command_reissue {
