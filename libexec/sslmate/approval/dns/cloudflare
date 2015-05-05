@@ -117,6 +117,7 @@ sub call_cloudflare {
 	}
 
 	$content_type //= '';
+	$content_type =~ s/;.*$//;
 	if ($content_type ne 'application/json') {
 		print STDERR "cloudflare: Error: received unexpected response from CloudFlare server: response not JSON (content-type=$content_type; status=$http_status)\n";
 		return undef;
@@ -165,7 +166,7 @@ while (1) {
 }
 
 if (not defined($zone_id)) {
-	print STDERR "cloudflare: Error: Unable to find a zone for $rr_name in account $cloudflare_email.  Does your Cloudflare account contain a zone for this domain?\n";
+	print STDERR "cloudflare: Error: Unable to find a zone for $rr_name in account $cloudflare_email.  Does your CloudFlare account contain a zone for this domain?\n";
 	exit(4);
 }
 
