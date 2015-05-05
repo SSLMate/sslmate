@@ -52,28 +52,14 @@ use Encode;
 
 				# Debian/Ubuntu package		RHEL/CentOS package
 				# --------------------------------------------------
-# WWW::Curl::Easy		# libwww-curl-perl		perl-WWW-Curl
 use URI::Escape;		# liburi-perl			perl-URI
 use JSON::PP; # core in 5.13.9+	# libjson-perl			perl-JSON
 use Term::ReadKey;		# libterm-readkey-perl		perl-TermReadKey
 
-sub has_curl_command {
-	my $pid = fork;
-	die "Error: fork failed: $!" unless defined $pid;
-	if ($pid == 0) {
-		open(STDIN, '<', '/dev/null');
-		open(STDOUT, '>', '/dev/null');
-		open(STDERR, '>', '/dev/null');
-		exec('curl', '--version');
-		exit 1;
-	}
-	waitpid($pid, 0) or die "Error: waitpid failed: $!";
-	return $? == 0;
-}
+use lib "$FindBin::Bin/../lib";
+use SSLMate;
+use SSLMate::HTTPSClient;
 
-our $use_curl_module = not(has_curl_command) && not($ENV{SSLMATE_USE_EXTERNAL_CURL}) && eval { require WWW::Curl::Easy; 1 };
-
-our $VERSION = '1.0.1';
 our $API_ENDPOINT = 'https://sslmate.com/api/v2';
 our $PKCS12_PASSWORD = 'sslmate';
 our $DEFAULT_CERT_TIMEOUT = 600;
@@ -88,7 +74,7 @@ our $config_profile;
 our %global_config;
 our %personal_config;
 our %ephemeral_config;
-our $curl;
+our $https_client;
 our $http_approval_map;
 our $dns_approval_map;
 
@@ -143,18 +129,6 @@ sub decode_input {
 	}
 	return $output;
 }
-
-sub new_curl {
-	my $curl = WWW::Curl::Easy->new;
-	$curl->setopt(WWW::Curl::Easy::CURLOPT_PROTOCOLS(), 3);		# Only safe protocols (HTTP and HTTPS, not SMTP, SSH, etc.)
-	$curl->setopt(WWW::Curl::Easy::CURLOPT_FOLLOWLOCATION(), 1);	# Follow redirects
-	$curl->setopt(WWW::Curl::Easy::CURLOPT_MAXREDIRS(), 20);	# Allow at most 20 redirections
-	$curl->setopt(WWW::Curl::Easy::CURLOPT_SSL_VERIFYPEER(), 1);	# Check certificates
-	$curl->setopt(WWW::Curl::Easy::CURLOPT_SSL_VERIFYHOST(), 2);	# Check certificates (2 is not a typo)
-	$curl->setopt(WWW::Curl::Easy::CURLOPT_USERAGENT(), "SSLMate/$VERSION");
-	return $curl;
-}
-
 
 sub object_subset {
 	my $obj = shift;
@@ -626,125 +600,6 @@ sub qs_escape {
 	return uri_escape_utf8($str, '^A-Za-z0-9\-\._');
 }
 
-sub native_api_call {
-	my ($method, $command, $creds, $post_data) = @_;
-
-	$curl //= new_curl;
-	if ($method eq 'GET') {
-		$curl->setopt(WWW::Curl::Easy::CURLOPT_HTTPGET(), 1);
-	} elsif ($method eq 'POST') {
-		$post_data //= '';
-		$curl->setopt(WWW::Curl::Easy::CURLOPT_POSTFIELDS(), $post_data);
-		$curl->setopt(WWW::Curl::Easy::CURLOPT_POSTFIELDSIZE(), length $post_data);
-	}
-	if ($creds) {
-		$curl->setopt(WWW::Curl::Easy::CURLOPT_USERNAME(), $creds->{username});
-		$curl->setopt(WWW::Curl::Easy::CURLOPT_PASSWORD(), encode('utf8', $creds->{password}));
-	}
-	$curl->setopt(WWW::Curl::Easy::CURLOPT_URL(), (get_config('api_endpoint') // $API_ENDPOINT) . $command);
-
-	my $response_data = '';
-	open(my $response_fh, '>', \$response_data);
-	$curl->setopt(WWW::Curl::Easy::CURLOPT_WRITEDATA(), $response_fh);
-
-	my $result = $curl->perform;
-	close($response_fh);
-	if ($result != 0) {
-		print STDERR "Error: unable to contact SSLMate server: " . $curl->strerror($result) . "\n";
-		undef $curl;
-		return undef;
-	}
-	my $http_status = $curl->getinfo(WWW::Curl::Easy::CURLINFO_HTTP_CODE());
-	my $content_type = $curl->getinfo(WWW::Curl::Easy::CURLINFO_CONTENT_TYPE());
-
-	return ($http_status, $content_type, \$response_data);
-}
-
-sub escape_curl_param {
-	my ($param) = @_;
-	$param =~ s/\\/\\\\/g;
-	$param =~ s/\"/\\\"/g;
-	$param =~ s/\t/\\t/g;
-	$param =~ s/\n/\\n/g;
-	$param =~ s/\r/\\r/g;
-	$param =~ s/\v/\\v/g;
-	return $param;
-}
-
-sub decode_curl_error {
-	my ($exit_code) = @_;
-
-	return "Unable to resolve server address" if $exit_code == 6;
-	return "Unable to connect to server" if $exit_code == 7;
-	return "Timeout" if $exit_code == 28;
-	return "SSL handshake failed" if $exit_code == 35;
-	return "SSL certificate error" if $exit_code == 51;
-	return "SSL certificate cannot be authenticated" if $exit_code == 60;
-
-	return "curl exited with status $exit_code";
-}
-
-sub external_api_call {
-	my ($method, $command, $creds, $post_data) = @_;
-
-	local $SIG{PIPE} = 'IGNORE';
-
-	my ($response_fh, $config_fh);
-	my $curl_pid = eval { open2($response_fh, $config_fh, 'curl', '-q', '-K', '-') };
-	die "Error: Unable to execute the 'curl' command - is curl installed?\n" unless defined($curl_pid);
-	print $config_fh "user-agent = \"" . escape_curl_param("SSLMate-external/$VERSION") . "\"\n";
-	print $config_fh "silent\n";
-	print $config_fh "include\n";
-	print $config_fh "request = \"" . escape_curl_param($method) . "\"\n";
-	print $config_fh "url = \"" . escape_curl_param((get_config('api_endpoint') // $API_ENDPOINT) . $command) . "\"\n";
-	if ($creds) {
-		print $config_fh "user = \"" . escape_curl_param(join(':', $creds->{username}, encode('utf8', $creds->{password}))) . "\"\n";
-	}
-	if ($method eq 'POST') {
-		$post_data //= '';
-		print $config_fh "data = \"" . escape_curl_param($post_data) . "\"\n";
-	}
-	close($config_fh);
-
-	my ($http_status, $content_type, $response_data);
-	if (!eof($response_fh)) {
-		do {
-			# HTTP/1.1 200 OK
-			my $http_status_line = <$response_fh>;
-			$http_status_line =~ s/\r?\n$//;
-			(undef, $http_status, undef) = split(' ', $http_status_line);
-
-			# Content-Type: application/json
-			$content_type = undef;
-			while (defined(my $line = <$response_fh>)) {
-				$line =~ s/\r?\n$//;
-				last if $line eq ''; # end of headers
-				if ($line =~ /^Content-Type:\s*(.*)$/i) {
-					$content_type = $1;
-				}
-			}
-		} while ($http_status == 100);
-
-		$response_data = do { local $/; <$response_fh> };
-	}
-	close($response_fh);
-	waitpid($curl_pid, 0) or die "waitpid failed: $!";
-	if ($? != 0) {
-		if (WIFEXITED($?)) {
-			print STDERR "Error: unable to contact SSLMate server: " . decode_curl_error(WEXITSTATUS($?)) . "\n";
-		} else {
-			print STDERR "Error: unable to contact SSLMate server: curl terminated with status $?\n";
-		}
-		return undef;
-	}
-	if (not $http_status) {
-		print STDERR "Error: unable to contact SSLMate server: curl produced unexpected output\n";
-		return undef;
-	}
-
-	return ($http_status, $content_type, \$response_data);
-}
-
 sub make_query_string {
 	my ($request_data) = @_;
 
@@ -768,6 +623,8 @@ sub make_query_string {
 sub api_call {
 	my ($method, $command, $creds, $query_string, $post_data) = @_;
 
+	$https_client //= SSLMate::HTTPSClient->new;
+
 	$query_string = make_query_string($query_string) if ref($query_string) eq 'HASH';
 	$post_data = make_query_string($post_data) if ref($post_data) eq 'HASH';
 	$command .= "?$query_string" if defined($query_string) && length($query_string);
@@ -775,12 +632,19 @@ sub api_call {
 	my $max_total_delay = 20;
 	my $next_retry_delay = 2;
 
+	my $uri = (get_config('api_endpoint') // $API_ENDPOINT) . $command;
+	my $encoded_creds;
+	if (defined $creds) {
+		$encoded_creds = { username => $creds->{username}, password => encode('utf8', $creds->{password}) };
+	}
 	while (1) {
-		my ($http_status, $content_type, $response_data) = $use_curl_module ?
-					native_api_call($method, $command, $creds, $post_data) :
-					external_api_call($method, $command, $creds, $post_data);
-
-		return unless defined($http_status);
+		my ($http_status, $content_type, $response_data) = eval {
+			$https_client->request($method, $uri, undef, $encoded_creds, $post_data)
+		};
+		if (not defined $http_status) {
+			print STDERR "Error: Unable to contact SSLMate server: $@";
+			return;
+		}
 
 		$content_type //= '';
 
@@ -884,6 +748,7 @@ sub exec_approval_method {
 		open(STDERR, '>&', $method_stderr) or die "Error: dup failed: $!";
 		close($from_method_stderr);
 
+		$ENV{PERL5LIB} = join(':', @INC); # Ensure handler can find SSLMate module if it's written in Perl
 		$ENV{PARAMS} = join(' ', sort keys %{$method->{params}});
 		for my $name (keys %{$method->{params}}) {
 			$ENV{"PARAM_$name"} = $method->{params}->{$name};
@@ -3454,7 +3319,7 @@ sub command_version {
 
 	die "Error: --no-check and --is-latest are mutually-exclusive.\n" if $is_latest && !$check;
 
-	print "SSLMate $VERSION\n" unless $is_latest;
+	print "SSLMate $SSLMate::VERSION\n" unless $is_latest;
 	if ($check) {
 		load_config;
 		my ($status, $response) = anon_api_call('GET', '/latest_client_version');
@@ -3466,7 +3331,7 @@ sub command_version {
 			print STDERR "Error: unable to determine latest available version: " . $response->{message} . "\n";
 			exit 1 if $is_latest;
 		} else {
-			if ($VERSION ne $response->{latest_client_version}) {
+			if ($SSLMate::VERSION ne $response->{latest_client_version}) {
 				exit 10 if $is_latest;
 				print "New version of SSLMate available: " . $response->{latest_client_version} . "\n";
 			}
