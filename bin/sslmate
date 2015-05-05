@@ -2653,6 +2653,7 @@ sub command_edit {
 		print $out " --email=ADDRESS     change the approver email of this cert\n";
 		print $out " --auto-renew        enable auto-renew for this cert\n";
 		print $out " --no-auto-renew     disable auto-renew for this cert\n";
+		print $out " --type=dv|ev        change the type of cert (takes effect when renewing)\n";
 	};
 
 	local @ARGV = @_;
@@ -2665,12 +2666,14 @@ sub command_edit {
 	my $auto_renew;
 	my $approval_method;
 	my $approver_email;
+	my $type;
 
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
 	$getopt->getoptions('auto-renew!', \$auto_renew,
 			    'approval=s', \$approval_method,
-			    'email=s', \$approver_email) or return 2;
+			    'email=s', \$approver_email,
+			    'type=s', \$type) or return 2;
 	if (@ARGV == 0) {
 		print STDERR "Error: you must specify the name of the certificate to edit.\n";
 		print_our_usage(*STDERR);
@@ -2717,6 +2720,7 @@ sub command_edit {
 		auto_renew => $auto_renew,
 		approval_method => $approval_method,
 		approver_email => $approver_email,
+		type => $type,
 	};
 
 	($cert_status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['pending','dns_approval.status','http_approval.status'] }, $request) or return 1;
