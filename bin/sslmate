@@ -600,33 +600,13 @@ sub qs_escape {
 	return uri_escape_utf8($str, '^A-Za-z0-9\-\._');
 }
 
-sub make_query_string {
-	my ($request_data) = @_;
-
-	my @elts;
-	for my $key (keys %$request_data) {
-		next unless defined $request_data->{$key};
-		if (ref($request_data->{$key}) eq 'ARRAY') {
-			for my $value (@{$request_data->{$key}}) {
-				next unless defined $value;
-				push @elts, qs_escape($key) . '=' . qs_escape($value);
-			}
-		} elsif (ref($request_data->{$key}) eq 'SCALAR') {
-			push @elts, qs_escape($key) . '=' . qs_escape(${$request_data->{$key}});
-		} else {
-			push @elts, qs_escape($key) . '=' . qs_escape($request_data->{$key});
-		}
-	}
-	$request_data = join('&', @elts);
-}
-
 sub api_call {
 	my ($method, $command, $creds, $query_string, $post_data) = @_;
 
 	$https_client //= SSLMate::HTTPSClient->new;
 
-	$query_string = make_query_string($query_string) if ref($query_string) eq 'HASH';
-	$post_data = make_query_string($post_data) if ref($post_data) eq 'HASH';
+	$query_string = SSLMate::HTTPSClient::make_query_string($query_string) if ref($query_string) eq 'HASH';
+	$post_data = SSLMate::HTTPSClient::make_query_string($post_data) if ref($post_data) eq 'HASH';
 	$command .= "?$query_string" if defined($query_string) && length($query_string);
 
 	my $max_total_delay = 20;

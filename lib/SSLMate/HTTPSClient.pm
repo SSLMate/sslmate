@@ -33,6 +33,7 @@ use warnings;
 
 use SSLMate;
 use IPC::Open2;
+use URI::Escape;
 use POSIX qw(:sys_wait_h);
 
 sub new_curl {
@@ -225,6 +226,31 @@ sub new {
 #	print STDERR "has_lwp=" . $self->{has_lwp} . "\n";
 	bless $self, $class;
 	return $self;
+}
+
+sub qs_escape {
+	my ($str) = @_;
+	return uri_escape_utf8($str, '^A-Za-z0-9\-\._');
+}
+
+sub make_query_string {
+	my ($request_data) = @_;
+
+	my @elts;
+	for my $key (keys %$request_data) {
+		next unless defined $request_data->{$key};
+		if (ref($request_data->{$key}) eq 'ARRAY') {
+			for my $value (@{$request_data->{$key}}) {
+				next unless defined $value;
+				push @elts, qs_escape($key) . '=' . qs_escape($value);
+			}
+		} elsif (ref($request_data->{$key}) eq 'SCALAR') {
+			push @elts, qs_escape($key) . '=' . qs_escape(${$request_data->{$key}});
+		} else {
+			push @elts, qs_escape($key) . '=' . qs_escape($request_data->{$key});
+		}
+	}
+	$request_data = join('&', @elts);
 }
 
 1;
