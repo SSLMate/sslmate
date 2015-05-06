@@ -93,7 +93,7 @@ sub call_digitalocean {
 
 	$https_client //= SSLMate::HTTPSClient->new;
 
-	my $headers //= {
+	my $headers = {
 		'Authorization' => "Bearer $api_key",
 	};
 	if (defined($post_data)) {

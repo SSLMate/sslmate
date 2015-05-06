@@ -98,7 +98,7 @@ sub call_cloudflare {
 
 	$https_client //= SSLMate::HTTPSClient->new;
 
-	my $headers //= {
+	my $headers = {
 		'X-Auth-Email' => $cloudflare_email,
 		'X-Auth-Key' => $cloudflare_key,
 	};
