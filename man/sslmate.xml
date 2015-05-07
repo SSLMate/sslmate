@@ -764,6 +764,21 @@
 								</para>
 							</listitem>
 						</varlistentry>
+						<varlistentry>
+							<term><option>--type=dv|ev</option></term>
+
+							<listitem>
+								<para>
+									Change the type of this certificate (domain validation or extended validation).
+									See the <command>sslmate buy</command> documentation for a discussion of certificate types.
+								</para>
+								<para>
+									Changes to the certificate type take effect only when renewing.  To "upgrade" an existing
+									DV certificate to EV, first change its type with <command>sslmate edit</command> and then
+									force an early renewal with <command>sslmate renew --force</command>.
+								</para>
+							</listitem>
+						</varlistentry>
 					</variablelist>
 				</listitem>
 			</varlistentry>

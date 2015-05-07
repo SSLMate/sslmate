@@ -498,6 +498,18 @@ for this host name\&. This option is only applicable when email approval is used
 .RS 4
 Enable or disable auto\-renew for this certificate\&.
 .RE
+.PP
+\fB\-\-type=dv|ev\fR
+.RS 4
+Change the type of this certificate (domain validation or extended validation)\&. See the
+\fBsslmate buy\fR
+documentation for a discussion of certificate types\&.
+.sp
+Changes to the certificate type take effect only when renewing\&. To "upgrade" an existing DV certificate to EV, first change its type with
+\fBsslmate edit\fR
+and then force an early renewal with
+\fBsslmate renew \-\-force\fR\&.
+.RE
 .RE
 .PP
 \fBimport \fR\fB[\fIOPTIONS\fR]\fR\fB \fR\fB\fIKEYFILE\fR\fR\fB \fR\fB\fICERTFILE\fR\fR
