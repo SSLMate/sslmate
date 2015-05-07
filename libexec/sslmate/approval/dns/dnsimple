@@ -93,7 +93,6 @@ for my $name (split(' ', env('PARAMS'))) {
 $dnsimple_endpoint //= 'https://api.dnsimple.com/v1';
 
 unless (defined($dnsimple_email) && (defined($dnsimple_token) || defined($dnsimple_password))) {
-	# TODO: get these elsewhere?
 	print STDERR "dnsimple: Error: email and token parameters not provided\n";
 	exit(4);
 }

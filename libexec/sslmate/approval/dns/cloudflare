@@ -87,7 +87,6 @@ for my $name (split(' ', env('PARAMS'))) {
 }
 
 unless (defined($cloudflare_email) && defined($cloudflare_key)) {
-	# TODO: get these elsewhere?
 	print STDERR "cloudflare: Error: email and key parameters not provided\n";
 	exit(4);
 }

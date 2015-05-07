@@ -82,7 +82,6 @@ for my $name (split(' ', env('PARAMS'))) {
 }
 
 unless (defined $api_key) {
-	# TODO: get key elsewhere?
 	print STDERR "digitalocean: Error: key parameter not provided\n";
 	exit(4);
 }
