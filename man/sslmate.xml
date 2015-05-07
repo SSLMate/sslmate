@@ -219,6 +219,9 @@
 									the certificate must be downloaded separately with the <command>sslmate download</command>
 									command.
 								</para>
+								<para>
+									This option is equivalent to <option>--timeout 0</option>.
+								</para>
 							</listitem>
 						</varlistentry>
 						<varlistentry>
@@ -368,6 +371,9 @@
 									the new certificate must be downloaded separately with the <command>sslmate download</command>
 									command.
 								</para>
+								<para>
+									This option is equivalent to <option>--timeout 0</option>.
+								</para>
 							</listitem>
 						</varlistentry>
 						<varlistentry>
@@ -453,6 +459,9 @@
 									to be issued. If this option is used, no certificate files are downloaded; instead
 									the new certificate must be downloaded separately with the <command>sslmate download</command>
 									command.
+								</para>
+								<para>
+									This option is equivalent to <option>--timeout 0</option>.
 								</para>
 							</listitem>
 						</varlistentry>
