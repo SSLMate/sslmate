@@ -280,6 +280,20 @@ sub get_config {
 	return $default_value;
 }
 
+sub get_config_with_prefix {
+	my ($prefix) = @_;
+
+	my %ret;
+
+	for my $config (\%global_config, \%personal_config, \%ephemeral_config) {
+		for my $key (grep { index($_, $prefix) == 0 } keys %$config) {
+			$ret{substr($key, length $prefix)} = $config->{$key};
+		}
+	}
+
+	return \%ret;
+}
+
 sub migrate_config_option {
 	my ($config_ref, $old_name, $new_name) = @_;
 
@@ -693,6 +707,9 @@ sub load_approval_map {
 		chomp $line;
 		my ($hostname, $command, @param_words) = split(' ', $line);
 		my $params = {};
+		unless ($command =~ /^\//) {
+			$params = get_config_with_prefix("$type.$command.");
+		}
 		my $index = 0;
 		for (@param_words) {
 			if (my ($name, $value) = /^([^=]+)=(.*)$/) {
@@ -711,7 +728,7 @@ sub available_approval_methods {
 	my @methods;
 	my $dirpath = "$LIBEXEC_DIR/approval/$type";
 	if (opendir(my $dh, $dirpath)) {
-		@methods = map { { command => $_, params => {} } } grep { !/^\./ && -x "$dirpath/$_" } readdir($dh);
+		@methods = map { { command => $_, params => get_config_with_prefix("$type.$_.") } } grep { !/^\./ && -x "$dirpath/$_" } readdir($dh);
 		closedir($dh);
 	}
 	return @methods;
