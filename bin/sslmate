@@ -1659,7 +1659,7 @@ sub command_buy {
 		return 2;
 	}
 	$timeout = 0 if $no_wait;
-	if ($ev && defined($timeout) && !$accept_dummy) {
+	if ($ev && !defined($timeout) && !$accept_dummy) {
 		# --ev implies --temp, unless --timeout or --temp were already specified
 		$accept_dummy = 1;
 	}
@@ -1959,7 +1959,7 @@ sub command_renew {
 	$getopt->configure(qw(no_ignore_case permute bundling));
 	$getopt->getoptions('force|f', \$force,
 			    'batch', \$batch, # compat with pre-1.0
-			    'timeout', \$timeout,
+			    'timeout=i', \$timeout,
 			    'no-wait', \$no_wait,
 			    'coupon=s', \$opts{coupon_code},
 			    'email-invoice-to=s', \$opts{email_invoice_to},
