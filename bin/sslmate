@@ -925,6 +925,7 @@ sub prepare_approval {
 	} elsif ($old_cert->{exists} && $old_cert->{approval_method} eq 'dns') {
 		if ($new_cert->{approval_method} ne 'dns' ||
 				!compare_approval_options($old_cert->{dns_approval}->{options}, $new_cert->{dns_approval}->{options})) {
+			print "Removing old DNS records...\n";
 			my $successful = eval {
 				prepare_dns_approval('del', $old_cert->{dns_approval}->{options});
 				1;
@@ -945,6 +946,7 @@ sub prepare_approval {
 			print STDERR "Error: unable to automatically configure HTTP approval for " . $new_cert->{cn} . ": $why\n";
 		}
 	} elsif ($new_cert->{approval_method} eq 'dns') {
+		print "Adding DNS record...\n";
 		$successful = eval {
 			prepare_dns_approval('add', $new_cert->{dns_approval}->{options});
 			1;
@@ -1544,7 +1546,6 @@ sub do_buy {
 			approver_email	=> $approver_email,
 			csr		=> $csr };
 
-	print "Placing order...\n";
 	($status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['dns_approval.status','http_approval.status'] }, $request) or $exit_with_error->();
 	if ($status != 200) {
 		print STDERR "Error: " . $new_cert->{message} . "\n";
@@ -1557,6 +1558,7 @@ sub do_buy {
 	#
 	# 4. Buy the certificate from SSLMate
 	#
+	print "Placing order...\n";
 	$request = { years			=> $years,
 		     authorized_charge		=> $authorized_charge,
 		     authorized_charge_currency	=> $authorized_charge_currency,
@@ -1823,7 +1825,6 @@ sub command_reissue {
 	print "Done.\n";
 
 	# 4. Update the CSR server-side
-	print "Reissuing cert...\n";
 	($cert_status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['dns_approval.status','http_approval.status'] }, { csr => $csr }) or $exit_with_error->();
 	if ($cert_status != 200) {
 		print STDERR "Error: " . $new_cert->{message} . "\n";
@@ -1833,6 +1834,7 @@ sub command_reissue {
 	prepare_approval($cert, $new_cert) or $exit_with_error->();
 
 	# 5. Reissue the certificate
+	print "Reissuing cert...\n";
 	my ($reissue_status, $cert_instance) = authed_api_call('POST', '/certs/' . qs_escape($cn) . '/reissue') or $exit_with_error->();
 	if ($reissue_status != 200) {
 		print STDERR "Error: " . $cert_instance->{message} . "\n";
@@ -3140,7 +3142,6 @@ sub do_import {
 			approver_email	=> $approver_email,
 			csr		=> \$csr };
 
-	print "Importing certificate for $cn...\n";
 	($status, my $new_cert_obj) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['dns_approval.status','http_approval.status'] }, $request) or $exit_with_error->();
 	if ($status != 200) {
 		print STDERR "Error: " . $new_cert_obj->{message} . "\n";
@@ -3151,6 +3152,7 @@ sub do_import {
 	prepare_approval($cert_obj, $new_cert_obj) or $exit_with_error->();
 
 	# 9. Create a new cert instance with this crt file
+	print "Importing certificate for $cn...\n";
 	my $cert_instance;
 	($status, $cert_instance) = authed_api_call('POST', '/certs/' . qs_escape($cn) . '/instances',
 							{ expand => ['chain'] },
