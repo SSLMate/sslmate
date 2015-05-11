@@ -56,7 +56,7 @@ use URI::Escape;		# liburi-perl			perl-URI
 use JSON::PP; # core in 5.13.9+	# libjson-perl			perl-JSON
 use Term::ReadKey;		# libterm-readkey-perl		perl-TermReadKey
 
-use lib "$FindBin::Bin/../lib";
+use lib "$FindBin::Bin/../perllib";
 use SSLMate;
 use SSLMate::HTTPSClient;
 

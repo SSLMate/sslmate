@@ -11,7 +11,7 @@ PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
 DOCDIR ?= $(PREFIX)/share/doc/sslmate
 MANDIR ?= $(PREFIX)/share/man
-LIBDIR ?= $(PREFIX)/lib
+PERLLIBDIR ?= $(PREFIX)/share/sslmate/perllib
 LIBEXECDIR ?= $(PREFIX)/libexec/sslmate
 DISTDIR ?= $(PROJECT)-$(VERSION)
 DISTFILE ?= $(DISTDIR).tar
@@ -31,7 +31,7 @@ build-man:
 bin/sslmate.bin: bin/sslmate
 	sed \
 		-e "s|DEFAULT_LIBEXEC_DIR = undef|DEFAULT_LIBEXEC_DIR = '$(LIBEXECDIR)'|" \
-		-e "s|^use lib.*|use lib '$(LIBDIR)';|" \
+		-e "s|^use lib.*|use lib '$(PERLLIBDIR)';|" \
 		< $< > $@
 
 #
@@ -48,7 +48,7 @@ clean-man:
 #
 # Install
 #
-install: install-bin install-doc install-man install-lib install-libexec
+install: install-bin install-doc install-man install-perllib install-libexec
 
 install-bin: bin/sslmate.bin
 	mkdir -m 755 -p $(DESTDIR)$(BINDIR)
@@ -62,10 +62,10 @@ install-man:
 	mkdir -m 755 -p $(DESTDIR)$(MANDIR)/man1
 	install -m 644 man/man1/sslmate.1 $(DESTDIR)$(MANDIR)/man1/
 
-install-lib:
-	mkdir -m 755 -p $(DESTDIR)$(LIBDIR)/SSLMate
-	install -m 644 lib/SSLMate.pm $(DESTDIR)$(LIBDIR)/
-	install -m 644 lib/SSLMate/*.pm $(DESTDIR)$(LIBDIR)/SSLMate/
+install-perllib:
+	mkdir -m 755 -p $(DESTDIR)$(PERLLIBDIR)/SSLMate
+	install -m 644 perllib/SSLMate.pm $(DESTDIR)$(PERLLIBDIR)/
+	install -m 644 perllib/SSLMate/*.pm $(DESTDIR)$(PERLLIBDIR)/SSLMate/
 
 install-libexec:
 	mkdir -m 755 -p $(DESTDIR)$(LIBEXECDIR)/approval/http
@@ -84,7 +84,7 @@ install-paths:
 #
 # Uninstall
 #
-uninstall: uninstall-bin uninstall-doc uninstall-man uninstall-lib uninstall-libexec
+uninstall: uninstall-bin uninstall-doc uninstall-man uninstall-perllib uninstall-libexec
 
 uninstall-bin:
 	rm -f $(DESTDIR)$(BINDIR)/sslmate
@@ -97,10 +97,10 @@ uninstall-doc:
 uninstall-man:
 	rm -f $(DESTDIR)$(MANDIR)/man1/sslmate.1
 
-uninstall-lib:
-	rm -f $(DESTDIR)$(LIBDIR)/SSLMate/*.pm
-	rm -f $(DESTDIR)$(LIBDIR)/SSLMate.pm
-	rmdir --ignore-fail-on-non-empty $(DESTDIR)$(LIBDIR)/SSLMate
+uninstall-perllib:
+	rm -f $(DESTDIR)$(PERLLIBDIR)/SSLMate/*.pm
+	rm -f $(DESTDIR)$(PERLLIBDIR)/SSLMate.pm
+	rmdir --ignore-fail-on-non-empty $(DESTDIR)$(PERLLIBDIR)/SSLMate
 
 uninstall-libexec:
 	rm -f $(DESTDIR)$(LIBEXECDIR)/approval/http/documentroot
@@ -131,6 +131,6 @@ get-version:
 .PHONY: all \
 	build build-bin build-man \
 	clean clean-bin clean-man \
-	install install-bin install-man install-lib install-libexec install-paths \
-	uninstall uninstall-bin uninstall-man uninstall-lib uninstall-libexec uninstall-paths \
+	install install-bin install-man install-perllib install-libexec install-paths \
+	uninstall uninstall-bin uninstall-man uninstall-perllib uninstall-libexec uninstall-paths \
 	dist get-version
