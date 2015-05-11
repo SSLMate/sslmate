@@ -1,3 +1,10 @@
+v1.1.0 (2015-05-12)
+ * Support DNS approval with CloudFlare, DigitalOcean, and DNSimple.
+ * Allow DNS approval to be selected from approver email list.
+ * Allow type of cert (dv/ev) to be changed by `sslmate edit`.
+ * Add --timeout option to buy, reissue, renew
+ * Minor bug fixes/enhancements.
+
 v1.0.1 (2015-04-22)
   * Minor bug fixes.
   * Fix segfault on Ubuntu 14.10 by using external curl command for
