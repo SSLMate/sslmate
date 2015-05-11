@@ -1217,27 +1217,34 @@ sub format_money {
 	return sprintf("%.2f", $amount / 100);
 }
 
-sub prompt_for_approver_email {
-	my ($approver_emails) = @_;
+sub prompt_for_approval {
+	my ($product_info) = @_;
 
-	my $num_emails = int(@$approver_emails);
-
-	my $i = 1;
-	for my $email (@$approver_emails) {
-		print "$i. $email\n";
-		$i++;
+	my @choices;
+	if (grep { $_ eq 'email' } @{$product_info->{approval_methods}}) {
+		for my $email (@{$product_info->{approver_emails}}) {
+			my $i = int(@choices) + 1;
+			print "$i. $email\n";
+			push @choices, [ 'email', $email ];
+		}
+	}
+	if (grep { $_ eq 'dns' } @{$product_info->{approval_methods}}) {
+		my $i = int(@choices) + 1;
+		print "$i. Add a DNS record\n";
+		push @choices, [ 'dns' ];
 	}
 
-	my $mesg = "Enter 1-$num_emails (or q to quit): ";
+	my $num_choices = int(@choices);
+	my $mesg = "Enter 1-$num_choices (or q to quit): ";
 
 	while (1) {
 		my $answer = prompt_user($mesg);
 		if ($answer eq 'q') {
-			return undef;
-		} elsif ($answer =~ /^\d+$/ and $answer >= 1 and $answer <= $num_emails) {
-			return $approver_emails->[$answer - 1];
+			return;
+		} elsif ($answer =~ /^\d+$/ and $answer >= 1 and $answer <= $num_choices) {
+			return @{$choices[$answer - 1]};
 		} else {
-			print "That is not a number between 1 and $num_emails.\n";
+			print "That is not a number between 1 and $num_choices.\n";
 		}
 	}
 }
@@ -1498,10 +1505,13 @@ sub do_buy {
 					exit 1;
 				}
 			} else {
-				print "We need to send you an email to verify that you own this domain.\n";
-				print "Where should we send this email?\n";
+				print "To prove that you are authorized to obtain a certificate for $cn,\n";
+				print "you must respond to an email sent to one of the following addresses, or add\n";
+				print "a DNS record to your domain.\n";
 				print "\n";
-				$approver_email = prompt_for_approver_email($product_info->{approver_emails}) or exit 1;
+				print "How would you like to prove authorization?\n";
+				print "\n";
+				($approval_method, $approver_email) = prompt_for_approval($product_info) or exit 1;
 			}
 		}
 
@@ -3113,10 +3123,13 @@ sub do_import {
 					exit 1;
 				}
 			} else {
-				print "When it's time to renew this certificate, we will need to send you an email to\n";
-				print "verify that you own this domain.  Where should we send this email?\n";
+				print "To prove that you are authorized to obtain a certificate for $cn,\n";
+				print "you must respond to an email sent to one of the following addresses, or add\n";
+				print "a DNS record to your domain.\n";
 				print "\n";
-				$approver_email = prompt_for_approver_email($product_info->{approver_emails}) or exit 1;
+				print "How would you like to prove authorization?\n";
+				print "\n";
+				($approval_method, $approver_email) = prompt_for_approval($product_info) or exit 1;
 			}
 		}
 	}
