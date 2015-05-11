@@ -1265,27 +1265,29 @@ sub prompt_for_order_confirmation {
 	print "============ Order summary ============\n";
 	my @sans = grep { $_ ne $product_info->{cn} } @{$product_info->{default_sans}};
 	if (@sans) {
-		print "     Hostnames: ";
+		print "      Hostnames: ";
 	} else {
-		print "      Hostname: ";
+		print "       Hostname: ";
 	}
 	print $product_info->{cn} . "\n";
 	for my $san (@sans) {
-		print "                " . $san . "\n";
+		print "                 " . $san . "\n";
 	}
 	if (defined $product_info->{years}) {
-		print "       Product: " . $product_info->{description} . "\n";
-		print "         Price: " . format_money($product_info->{price}->{base_price}) . " / year\n";
-		print "         Years: " . $product_info->{years} . "\n";
+		print "        Product: " . $product_info->{description} . "\n";
+		print "          Price: " . format_money($product_info->{price}->{base_price}) . " / year\n";
+		print "          Years: " . $product_info->{years} . "\n";
 	} else {
-		print "       Product: " . $product_info->{description} . "\n";
-		print "         Price: " . format_money($product_info->{price}->{base_price}) . "\n";
+		print "        Product: " . $product_info->{description} . "\n";
+		print "          Price: " . format_money($product_info->{price}->{base_price}) . "\n";
 	}
 	if (defined $other_info{auto_renew}) {
-		print "    Auto-Renew: " . ($other_info{auto_renew} ? "Yes" : "No") . "\n";
+		print "     Auto-Renew: " . ($other_info{auto_renew} ? "Yes" : "No") . "\n";
 	}
 	if (defined $other_info{approver_email}) {
-		print "Approver Email: " . $other_info{approver_email} . "\n";
+		print " Approver Email: " . $other_info{approver_email} . "\n";
+	} elsif (defined $other_info{approval_method}) {
+		print "Approval Method: " . format_approval_method($other_info{approval_method}) . "\n";
 	}
 	print "\n";
 	print "=========== Payment details ===========\n";
@@ -1503,6 +1505,7 @@ sub do_buy {
 
 		prompt_for_order_confirmation($product_info,
 					      approver_email => $approver_email,
+					      approval_method => $approval_method,
 					      auto_renew => $auto_renew // $cert->{auto_renew}) or exit 1;
 
 		$authorized_charge_currency = $product_info->{price}->{currency};
@@ -2058,6 +2061,7 @@ sub command_renew {
 
 		prompt_for_order_confirmation($product_info,
 					      approver_email => $cert->{approver_email},
+					      approval_method => $cert->{approval_method},
 					      auto_renew => $cert->{auto_renew}) or exit 1;
 
 		$authorized_charge_currency = $product_info->{price}->{currency};
