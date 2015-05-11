@@ -690,6 +690,14 @@ sub format_chain {
 	       defined($chain) ? $chain : '';
 }
 
+sub format_approval_method {
+	my ($raw_method) = @_;
+	return 'Email' if $raw_method eq 'email';
+	return 'HTTP' if $raw_method eq 'http';
+	return 'DNS' if $raw_method eq 'dns';
+	return $raw_method;
+}
+
 sub load_approval_map {
 	my ($type) = @_;
 
@@ -2502,13 +2510,6 @@ sub format_cert_row {
 		return 'DV' if $raw_type eq 'dv';
 		return 'EV' if $raw_type eq 'ev';
 		return $raw_type;
-	};
-	local *format_approval_method = sub {
-		my ($raw_method) = @_;
-		return 'Email' if $raw_method eq 'email';
-		return 'HTTP' if $raw_method eq 'http';
-		return 'DNS' if $raw_method eq 'dns';
-		return $raw_method;
 	};
 	local *format_yesno = sub {
 		my ($value) = @_;
