@@ -71,6 +71,9 @@ install-libexec:
 	mkdir -m 755 -p $(DESTDIR)$(LIBEXECDIR)/approval/http
 	mkdir -m 755 -p $(DESTDIR)$(LIBEXECDIR)/approval/dns
 	install -m 755 libexec/sslmate/approval/http/documentroot $(DESTDIR)$(LIBEXECDIR)/approval/http/documentroot
+	install -m 755 libexec/sslmate/approval/dns/cloudflare $(DESTDIR)$(LIBEXECDIR)/approval/dns/cloudflare
+	install -m 755 libexec/sslmate/approval/dns/digitalocean $(DESTDIR)$(LIBEXECDIR)/approval/dns/digitalocean
+	install -m 755 libexec/sslmate/approval/dns/dnsimple $(DESTDIR)$(LIBEXECDIR)/approval/dns/dnsimple
 	install -m 755 libexec/sslmate/approval/dns/route53 $(DESTDIR)$(LIBEXECDIR)/approval/dns/route53
 
 install-paths:
@@ -101,6 +104,9 @@ uninstall-lib:
 
 uninstall-libexec:
 	rm -f $(DESTDIR)$(LIBEXECDIR)/approval/http/documentroot
+	rm -f $(DESTDIR)$(LIBEXECDIR)/approval/dns/cloudflare
+	rm -f $(DESTDIR)$(LIBEXECDIR)/approval/dns/digitalocean
+	rm -f $(DESTDIR)$(LIBEXECDIR)/approval/dns/dnsimple
 	rm -f $(DESTDIR)$(LIBEXECDIR)/approval/dns/route53
 	rmdir --ignore-fail-on-non-empty $(DESTDIR)$(LIBEXECDIR)/approval/http
 	rmdir --ignore-fail-on-non-empty $(DESTDIR)$(LIBEXECDIR)/approval/dns
