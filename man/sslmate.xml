@@ -28,8 +28,8 @@
 	-->
 	<refentryinfo>
 		<title>SSLMate</title>
-		<date>2015-04-22</date>
-		<productname>SSLMate 1.0.1</productname>
+		<date>2015-05-12</date>
+		<productname>SSLMate 1.1.0</productname>
 
 		<author>
 			<othername>SSLMate</othername>
@@ -198,6 +198,18 @@
 							</listitem>
 						</varlistentry>
 						<varlistentry>
+							<term><option>--timeout=<replaceable>SECONDS</replaceable></option></term>
+
+							<listitem>
+								<para>
+									Wait up to <replaceable>SECONDS</replaceable> seconds for the certificate to be issued.
+									If the certificate is not issued before the timeout elapses, <command>sslmate</command>
+									exits without downloading any certificate files. Instead, the certificate must be downloaded
+									later with the <command>sslmate download</command> command.
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
 							<term><option>--no-wait</option></term>
 
 							<listitem>
@@ -206,6 +218,9 @@
 									to be issued. If this option is used, no certificate files are downloaded; instead
 									the certificate must be downloaded separately with the <command>sslmate download</command>
 									command.
+								</para>
+								<para>
+									This option is equivalent to <option>--timeout 0</option>.
 								</para>
 							</listitem>
 						</varlistentry>
@@ -335,6 +350,18 @@
 					</para>
 					<variablelist>
 						<varlistentry>
+							<term><option>--timeout=<replaceable>SECONDS</replaceable></option></term>
+
+							<listitem>
+								<para>
+									Wait up to <replaceable>SECONDS</replaceable> seconds for the certificate to be issued.
+									If the certificate is not issued before the timeout elapses, <command>sslmate</command>
+									exits without downloading any certificate files. Instead, the certificate must be downloaded
+									later with the <command>sslmate download</command> command.
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
 							<term><option>--no-wait</option></term>
 
 							<listitem>
@@ -343,6 +370,9 @@
 									to be issued. If this option is used, no certificate files are downloaded; instead
 									the new certificate must be downloaded separately with the <command>sslmate download</command>
 									command.
+								</para>
+								<para>
+									This option is equivalent to <option>--timeout 0</option>.
 								</para>
 							</listitem>
 						</varlistentry>
@@ -409,6 +439,18 @@
 					</para>
 					<variablelist>
 						<varlistentry>
+							<term><option>--timeout=<replaceable>SECONDS</replaceable></option></term>
+
+							<listitem>
+								<para>
+									Wait up to <replaceable>SECONDS</replaceable> seconds for the certificate to be issued.
+									If the certificate is not issued before the timeout elapses, <command>sslmate</command>
+									exits without downloading any certificate files. Instead, the certificate must be downloaded
+									later with the <command>sslmate download</command> command.
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
 							<term><option>--no-wait</option></term>
 
 							<listitem>
@@ -417,6 +459,9 @@
 									to be issued. If this option is used, no certificate files are downloaded; instead
 									the new certificate must be downloaded separately with the <command>sslmate download</command>
 									command.
+								</para>
+								<para>
+									This option is equivalent to <option>--timeout 0</option>.
 								</para>
 							</listitem>
 						</varlistentry>
@@ -716,6 +761,21 @@
 							<listitem>
 								<para>
 									Enable or disable auto-renew for this certificate.
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
+							<term><option>--type=dv|ev</option></term>
+
+							<listitem>
+								<para>
+									Change the type of this certificate (domain validation or extended validation).
+									See the <command>sslmate buy</command> documentation for a discussion of certificate types.
+								</para>
+								<para>
+									Changes to the certificate type take effect only when renewing.  To "upgrade" an existing
+									DV certificate to EV, first change its type with <command>sslmate edit</command> and then
+									force an early renewal with <command>sslmate renew --force</command>.
 								</para>
 							</listitem>
 						</varlistentry>

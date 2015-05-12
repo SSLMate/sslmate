@@ -1,0 +1,209 @@
+#!/usr/bin/env perl
+
+#
+# DNS approval handler for SSLMate using DigitalOcean.
+# To use, place the following in your dns_approval_map file:
+#
+#       example.com. digitalocean PARAMS...
+#
+# where example.com. is your domain name (note the trailing dot), and
+# PARAMS...  is zero or more of the following parameters, space-separated:
+#
+#   key=KEY
+#       Your DigitalOcean API key
+#
+# Example:
+#
+#       example.com. digitalocean key=62d020a5eb6fe22c0e86e4ed29f7ab77df4df8ec8ccdb9014409a84aee1b33c6
+#
+# This program is meant to be invoked by the SSLMate client. Do not
+# execute directly.
+#
+
+#
+# Copyright (c) 2015 Opsmate, Inc.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a
+# copy of this software and associated documentation files (the "Software"),
+# to deal in the Software without restriction, including without limitation
+# the rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Software, and to permit persons to whom the
+# Software is furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included
+# in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+# OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+# ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+# OTHER DEALINGS IN THE SOFTWARE.
+#
+# Except as contained in this notice, the name(s) of the above copyright
+# holders shall not be used in advertising or otherwise to promote the
+# sale, use or other dealings in this Software without prior written
+# authorization.
+#
+
+use 5.010; # 5.10
+use strict;
+use warnings;
+use SSLMate::HTTPSClient;
+use JSON::PP;
+use IO::Handle;
+
+sub bad_usage {
+	print STDERR "Usage: $0 add|del name type value\n";
+	exit(2);
+}
+
+sub env {
+	my ($name) = @_;
+	if (not defined($ENV{$name})) {
+		print STDERR "digitalocean: Error: missing required environment variable $name - was this program invoked by SSLMate?\n";
+		exit(3);
+	}
+	return $ENV{$name};
+}
+
+bad_usage if @ARGV != 4;
+my ($action, $rr_name, $rr_type, $rr_value) = @ARGV;
+my ($api_key);
+
+for my $name (split(' ', env('PARAMS'))) {
+	if ($name eq 'key') {
+		$api_key = env('PARAM_key');
+	} else {
+		print STDERR "digitalocean: Error: Unrecognized parameter $name\n";
+		exit(3);
+	}
+}
+
+unless (defined $api_key) {
+	print STDERR "digitalocean: Error: key parameter not provided\n";
+	exit(4);
+}
+
+my $https_client;
+sub call_digitalocean {
+	my ($method, $command, $post_data, $missing_ok) = @_;
+
+	$https_client //= SSLMate::HTTPSClient->new;
+
+	my $headers = {
+		'Authorization' => "Bearer $api_key",
+	};
+	if (defined($post_data)) {
+		$headers->{'Content-Type'} = 'application/json';
+		$post_data = encode_json($post_data) if ref($post_data) eq 'HASH';
+	}
+
+	my ($http_status, $content_type, $response_data) = eval {
+		$https_client->request($method, "https://api.digitalocean.com/v2$command", $headers, undef, $post_data)
+	};
+	if (not defined $http_status) {
+		print STDERR "digitalocean: Error: Unable to contact DigitalOcean server: $@";
+		return undef;
+	}
+
+	my $response_obj;
+	if (defined $content_type) {
+		$content_type =~ s/;.*$//;
+		if ($content_type ne 'application/json') {
+			print STDERR "digitalocean: Error: received unexpected response from DigitalOcean server: response not JSON (content-type=$content_type; status=$http_status)\n";
+			return undef;
+		}
+
+		$response_obj = eval { decode_json($$response_data) };
+		if (!defined($response_obj)) {
+			chomp $@;
+			print STDERR "digitalocean: Error: received malformed response from DigitalOcean server: $@\n";
+			return undef;
+		}
+	} else {
+		$response_obj = {};
+	}
+
+	if (int($http_status / 100) == 2 || ($http_status == 404 && $missing_ok)) {
+		return ($http_status, $response_obj);
+	} elsif ($http_status == 401) {
+		print STDERR "digitalocean: Error (for $rr_name): Invalid API key\n";
+		return undef;
+	} else {
+		print STDERR "digitalocean: Error (for $rr_name): " . $response_obj->{message} . " ($http_status)\n";
+		return undef;
+	}
+
+}
+
+# DigitalOcean doesn't use trailing dots
+$rr_name =~ s/\.$//;
+my $dotless_rr_value = $rr_value;
+$dotless_rr_value =~ s/\.$// if $rr_type eq 'CNAME';
+
+# 1. Determine the domain of the hosted zone
+my @subdomain;
+my $domain = $rr_name;
+my $response;
+while (defined $domain) {
+	my $status;
+	($status, $response) = call_digitalocean('GET', "/domains/$domain/records", undef, 1);
+	defined($response) or exit(4);
+	last if int($status / 100) == 2;
+	if ($domain =~ /^([^.]+)[.](.*)$/) {
+		push @subdomain, $1;
+		$domain = $2;
+	} else {
+		$domain = undef;
+	}
+}
+
+if (not defined($domain)) {
+	print STDERR "digitalocean: Error: Unable to find a zone for $rr_name.  Does your DigitalOcean account contain a zone for this domain?\n";
+	exit(4);
+}
+
+exit(0) if $action eq 'noop';
+
+my $subdomain = @subdomain ? join('.', @subdomain) : '@';
+
+# 2. Check if the record already exists
+my $existing_record_id;
+while (1) {
+	for my $record (@{$response->{domain_records}}) {
+		if ($record->{name} eq $subdomain &&
+				$record->{type} eq $rr_type &&
+				($record->{data} eq $rr_value || $record->{data} eq $dotless_rr_value)) {
+			$existing_record_id = $record->{id};
+			last;
+		}
+	}
+	last if defined($existing_record_id);
+	last unless defined $response->{links}->{pages}->{next};
+	(undef, $response) = call_digitalocean('GET', $response->{links}->{pages}->{next});
+	defined($response) or exit(1);
+}
+
+# 3. Add or remove the record
+if ($action eq 'add') {
+	if (not defined($existing_record_id)) {
+		print "digitalocean: Adding $rr_type record for $rr_name... ";
+		STDOUT->flush;
+		call_digitalocean('POST', "/domains/$domain/records", { type => $rr_type, name => $subdomain, data => $rr_value }) or exit(1);
+		sleep(30); # DigitalOcean doesn't provide an API for reporting when DNS records become visible, but tests indicate that they become visible within 30 seconds.
+		print "Done.\n";
+	}
+} elsif ($action eq 'del') {
+	if (defined $existing_record_id) {
+		print "digitalocean: Removing $rr_type record for $rr_name... ";
+		STDOUT->flush;
+		call_digitalocean('DELETE', "/domains/$domain/records/$existing_record_id") or exit(1);
+		print "Done.\n";
+	}
+} else {
+	bad_usage;
+}
+
+exit(0);

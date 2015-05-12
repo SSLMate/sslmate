@@ -5,12 +5,13 @@
 #
 
 PROJECT = sslmate
-VERSION = 1.0.1
+VERSION = 1.1.0
 
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
 DOCDIR ?= $(PREFIX)/share/doc/sslmate
 MANDIR ?= $(PREFIX)/share/man
+PERLLIBDIR ?= $(PREFIX)/share/sslmate/perllib
 LIBEXECDIR ?= $(PREFIX)/libexec/sslmate
 DISTDIR ?= $(PROJECT)-$(VERSION)
 DISTFILE ?= $(DISTDIR).tar
@@ -28,7 +29,10 @@ build-man:
 #	$(MAKE) -C man all
 
 bin/sslmate.bin: bin/sslmate
-	sed "s|DEFAULT_LIBEXEC_DIR = undef|DEFAULT_LIBEXEC_DIR = '$(LIBEXECDIR)'|" < $< > $@
+	sed \
+		-e "s|DEFAULT_LIBEXEC_DIR = undef|DEFAULT_LIBEXEC_DIR = '$(LIBEXECDIR)'|" \
+		-e "s|^use lib.*|use lib '$(PERLLIBDIR)';|" \
+		< $< > $@
 
 #
 # Clean
@@ -44,7 +48,7 @@ clean-man:
 #
 # Install
 #
-install: install-bin install-doc install-man install-libexec
+install: install-bin install-doc install-man install-perllib install-libexec
 
 install-bin: bin/sslmate.bin
 	mkdir -m 755 -p $(DESTDIR)$(BINDIR)
@@ -58,10 +62,18 @@ install-man:
 	mkdir -m 755 -p $(DESTDIR)$(MANDIR)/man1
 	install -m 644 man/man1/sslmate.1 $(DESTDIR)$(MANDIR)/man1/
 
+install-perllib:
+	mkdir -m 755 -p $(DESTDIR)$(PERLLIBDIR)/SSLMate
+	install -m 644 perllib/SSLMate.pm $(DESTDIR)$(PERLLIBDIR)/
+	install -m 644 perllib/SSLMate/*.pm $(DESTDIR)$(PERLLIBDIR)/SSLMate/
+
 install-libexec:
 	mkdir -m 755 -p $(DESTDIR)$(LIBEXECDIR)/approval/http
 	mkdir -m 755 -p $(DESTDIR)$(LIBEXECDIR)/approval/dns
 	install -m 755 libexec/sslmate/approval/http/documentroot $(DESTDIR)$(LIBEXECDIR)/approval/http/documentroot
+	install -m 755 libexec/sslmate/approval/dns/cloudflare $(DESTDIR)$(LIBEXECDIR)/approval/dns/cloudflare
+	install -m 755 libexec/sslmate/approval/dns/digitalocean $(DESTDIR)$(LIBEXECDIR)/approval/dns/digitalocean
+	install -m 755 libexec/sslmate/approval/dns/dnsimple $(DESTDIR)$(LIBEXECDIR)/approval/dns/dnsimple
 	install -m 755 libexec/sslmate/approval/dns/route53 $(DESTDIR)$(LIBEXECDIR)/approval/dns/route53
 
 install-paths:
@@ -72,7 +84,7 @@ install-paths:
 #
 # Uninstall
 #
-uninstall: uninstall-bin uninstall-doc uninstall-man uninstall-libexec
+uninstall: uninstall-bin uninstall-doc uninstall-man uninstall-perllib uninstall-libexec
 
 uninstall-bin:
 	rm -f $(DESTDIR)$(BINDIR)/sslmate
@@ -85,8 +97,16 @@ uninstall-doc:
 uninstall-man:
 	rm -f $(DESTDIR)$(MANDIR)/man1/sslmate.1
 
+uninstall-perllib:
+	rm -f $(DESTDIR)$(PERLLIBDIR)/SSLMate/*.pm
+	rm -f $(DESTDIR)$(PERLLIBDIR)/SSLMate.pm
+	rmdir --ignore-fail-on-non-empty $(DESTDIR)$(PERLLIBDIR)/SSLMate
+
 uninstall-libexec:
 	rm -f $(DESTDIR)$(LIBEXECDIR)/approval/http/documentroot
+	rm -f $(DESTDIR)$(LIBEXECDIR)/approval/dns/cloudflare
+	rm -f $(DESTDIR)$(LIBEXECDIR)/approval/dns/digitalocean
+	rm -f $(DESTDIR)$(LIBEXECDIR)/approval/dns/dnsimple
 	rm -f $(DESTDIR)$(LIBEXECDIR)/approval/dns/route53
 	rmdir --ignore-fail-on-non-empty $(DESTDIR)$(LIBEXECDIR)/approval/http
 	rmdir --ignore-fail-on-non-empty $(DESTDIR)$(LIBEXECDIR)/approval/dns
@@ -111,6 +131,6 @@ get-version:
 .PHONY: all \
 	build build-bin build-man \
 	clean clean-bin clean-man \
-	install install-bin install-man install-libexec install-paths \
-	uninstall uninstall-bin uninstall-man uninstall-libexec uninstall-paths \
+	install install-bin install-man install-perllib install-libexec install-paths \
+	uninstall uninstall-bin uninstall-man uninstall-perllib uninstall-libexec uninstall-paths \
 	dist get-version

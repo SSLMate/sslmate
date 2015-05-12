@@ -1,0 +1,204 @@
+#!/usr/bin/env perl
+
+#
+# DNS approval handler for SSLMate using CloudFlare.
+# To use, place the following in your dns_approval_map file:
+#
+#       example.com. cloudflare PARAMS...
+#
+# where example.com. is your domain name (note the trailing dot), and
+# PARAMS...  is zero or more of the following parameters, space-separated:
+#
+#   email=ADDRESS
+#       The email address of your CloudFlare account
+#
+#   key=KEY
+#       Your CloudFlare API key
+#
+# Example:
+#
+#       example.com. cloudflare email=admin@example.com key=adc83b19e793491b1c6ea0fd8b46cd9f32e59
+#
+# This program is meant to be invoked by the SSLMate client. Do not
+# execute directly.
+#
+
+#
+# Copyright (c) 2015 Opsmate, Inc.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a
+# copy of this software and associated documentation files (the "Software"),
+# to deal in the Software without restriction, including without limitation
+# the rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Software, and to permit persons to whom the
+# Software is furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included
+# in all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+# OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+# ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+# OTHER DEALINGS IN THE SOFTWARE.
+#
+# Except as contained in this notice, the name(s) of the above copyright
+# holders shall not be used in advertising or otherwise to promote the
+# sale, use or other dealings in this Software without prior written
+# authorization.
+#
+
+use 5.010; # 5.10
+use strict;
+use warnings;
+use SSLMate::HTTPSClient;
+use JSON::PP;
+use IO::Handle;
+
+sub bad_usage {
+	print STDERR "Usage: $0 add|del name type value\n";
+	exit(2);
+}
+
+sub env {
+	my ($name) = @_;
+	if (not defined($ENV{$name})) {
+		print STDERR "cloudflare: Error: missing required environment variable $name - was this program invoked by SSLMate?\n";
+		exit(3);
+	}
+	return $ENV{$name};
+}
+
+bad_usage if @ARGV != 4;
+my ($action, $rr_name, $rr_type, $rr_value) = @ARGV;
+my ($cloudflare_email, $cloudflare_key);
+
+for my $name (split(' ', env('PARAMS'))) {
+	if ($name eq 'email') {
+		$cloudflare_email = env('PARAM_email');
+	} elsif ($name eq 'key') {
+		$cloudflare_key = env('PARAM_key');
+	} else {
+		print STDERR "cloudflare: Error: Unrecognized parameter $name\n";
+		exit(3);
+	}
+}
+
+unless (defined($cloudflare_email) && defined($cloudflare_key)) {
+	print STDERR "cloudflare: Error: email and key parameters not provided\n";
+	exit(4);
+}
+
+my $https_client;
+sub call_cloudflare {
+	my ($method, $command, $query_string, $post_data) = @_;
+
+	$https_client //= SSLMate::HTTPSClient->new;
+
+	my $headers = {
+		'X-Auth-Email' => $cloudflare_email,
+		'X-Auth-Key' => $cloudflare_key,
+	};
+	$headers->{'Content-Type'} = 'application/json' if defined($post_data);
+
+	$query_string = SSLMate::HTTPSClient::make_query_string($query_string) if ref($query_string) eq 'HASH';
+	$post_data = encode_json($post_data) if ref($post_data) eq 'HASH';
+	$command .= "?$query_string" if defined($query_string) && length($query_string);
+
+	my ($http_status, $content_type, $response_data) = eval {
+		$https_client->request($method, "https://api.cloudflare.com$command", $headers, undef, $post_data)
+	};
+	if (not defined $http_status) {
+		print STDERR "cloudflare: Error: Unable to contact CloudFlare server: $@";
+		return undef;
+	}
+
+	$content_type //= '';
+	$content_type =~ s/;.*$//;
+	if ($content_type ne 'application/json') {
+		print STDERR "cloudflare: Error: received unexpected response from CloudFlare server: response not JSON (content-type=$content_type; status=$http_status)\n";
+		return undef;
+	}
+
+	my $response_obj = eval { decode_json($$response_data) };
+	if (!defined($response_obj)) {
+		chomp $@;
+		print STDERR "cloudflare: Error: received malformed response from CloudFlare server: $@\n";
+		return undef;
+	}
+
+	if (not $response_obj->{success}) {
+		for my $error (@{$response_obj->{errors}}) {
+			if ($error->{code} == 9103) {
+				print STDERR "cloudflare: Error (for $rr_name): Invalid account email or API key\n";
+			} else {
+				print STDERR "cloudflare: Error (for $rr_name): " . $error->{message} . " (" . $error->{code} . ")\n";
+			}
+		}
+		return undef;
+	}
+
+	return $response_obj;
+}
+
+# CloudFlare doesn't like trailing dots
+$rr_name =~ s/\.$//;
+$rr_value =~ s/\.$// if $rr_type eq 'CNAME';
+
+# 1. Determine the ID of the zone
+my $zone_id;
+my $domain = $rr_name;
+while (1) {
+	my $response = call_cloudflare('GET', "/client/v4/zones", { name => $domain }) or exit(4);
+	if (@{$response->{result}}) {
+		$zone_id = $response->{result}->[0]->{id};
+		last;
+	}
+
+	if ($domain =~ /^[^.]+[.](.*)$/) {
+		$domain = $1;
+	} else {
+		last;
+	}
+}
+
+if (not defined($zone_id)) {
+	print STDERR "cloudflare: Error: Unable to find a zone for $rr_name in account $cloudflare_email.  Does your CloudFlare account contain a zone for this domain?\n";
+	exit(4);
+}
+
+exit(0) if $action eq 'noop';
+
+# 2. Check if the record already exists
+my $response = call_cloudflare('GET', "/client/v4/zones/$zone_id/dns_records", { type => $rr_type, name => $rr_name }) or exit(1);
+my $existing_record_id;
+for my $result (@{$response->{result}}) {
+	if ($result->{content} eq $rr_value) {
+		$existing_record_id = $result->{id};
+		last;
+	}
+}
+
+# 3. Add or remove the record
+if ($action eq 'add') {
+	if (not defined($existing_record_id)) {
+		print "cloudflare: Adding $rr_type record for $rr_name... ";
+		STDOUT->flush;
+		call_cloudflare('POST', "/client/v4/zones/$zone_id/dns_records", undef, { type => $rr_type, name => $rr_name, content => $rr_value, ttl => 120 }) or exit(1);
+		sleep(10); # CloudFlare doesn't provide an API for reporting when DNS records become visible, but tests indicate that they become visible in well under 10 seconds.
+		print "Done.\n";
+	}
+} elsif ($action eq 'del') {
+	if (defined $existing_record_id) {
+		print "cloudflare: Removing $rr_type record for $rr_name... ";
+		STDOUT->flush;
+		call_cloudflare('DELETE', "/client/v4/zones/$zone_id/dns_records/$existing_record_id") or exit(1);
+		print "Done.\n";
+	}
+} else {
+	bad_usage;
+}
+
+exit(0);
