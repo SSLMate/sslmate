@@ -1,3 +1,6 @@
+v1.1.1 (2015-05-13)
+ * Avoid a warning message if WWW::Curl::Perl is not installed.
+
 v1.1.0 (2015-05-12)
  * Support DNS approval with CloudFlare, DigitalOcean, and DNSimple.
  * Allow DNS approval to be selected from approver email list.

@@ -218,7 +218,7 @@ sub new {
 	my $class = shift;
 	my $self = {
 		has_curl_command => has_curl_command,
-		has_curl_module => eval { require WWW::Curl::Easy; 1 },
+		has_curl_module => eval { require WWW::Curl::Easy; 1 } // 0,
 #		has_lwp => eval { require LWP::UserAgent; $LWP::UserAgent::VERSION >= 6 }, # LWP5 does not properly validate certs!
 	};
 #	print STDERR "has_curl_command=" . $self->{has_curl_command} . "\n";
