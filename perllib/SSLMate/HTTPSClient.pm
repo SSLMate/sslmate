@@ -36,6 +36,8 @@ use IPC::Open2;
 use URI::Escape;
 use POSIX qw(:sys_wait_h);
 
+our $TIMEOUT = 300;
+
 sub new_curl {
 	my $curl = WWW::Curl::Easy->new;
 	$curl->setopt(WWW::Curl::Easy::CURLOPT_PROTOCOLS(), 3);		# Only safe protocols (HTTP and HTTPS, not SMTP, SSH, etc.)
@@ -44,6 +46,7 @@ sub new_curl {
 	$curl->setopt(WWW::Curl::Easy::CURLOPT_SSL_VERIFYPEER(), 1);	# Check certificates
 	$curl->setopt(WWW::Curl::Easy::CURLOPT_SSL_VERIFYHOST(), 2);	# Check certificates (2 is not a typo)
 	$curl->setopt(WWW::Curl::Easy::CURLOPT_USERAGENT(), "SSLMate/$SSLMate::VERSION WWW-Curl/$WWW::Curl::VERSION");
+	$curl->setopt(WWW::Curl::Easy::CURLOPT_TIMEOUT(), $TIMEOUT);
 	return $curl;
 }
 
@@ -147,6 +150,7 @@ sub request_via_curl_command {
 	print $config_fh "user-agent = \"" . escape_curl_param("SSLMate/$SSLMate::VERSION curl") . "\"\n";
 	print $config_fh "silent\n";
 	print $config_fh "include\n";
+	print $config_fh "max-time = \"" . escape_curl_param($TIMEOUT) . "\"\n";
 	print $config_fh "request = \"" . escape_curl_param($method) . "\"\n";
 	print $config_fh "url = \"" . escape_curl_param($uri) . "\"\n";
 	if ($headers) {
