@@ -547,6 +547,56 @@ sub write_pkcs12_file {
 	warn "Warning: 'openssl pkcs12' command failed; could not create PKCS#12 file\n" unless $? == 0;
 }
 
+sub write_jks_file {
+	my ($out_file, $key, $crt, $chain) = @_;
+
+	my $tempdir = File::Temp->newdir();
+	my $temp_pkcs12_filename = "$tempdir/in.p12";
+	my $temp_jks_filename = "$tempdir/out.jks";
+
+	# Write a temporary PKCS#12 file
+	open(my $temp_pkcs12_file, '>', $temp_pkcs12_filename) or die "Unable to open $temp_pkcs12_filename for writing: $!\n";
+	write_pkcs12_file($temp_pkcs12_file, $key, $crt, $chain);
+	close($temp_pkcs12_file);
+
+	# Fork and exec keytool to convert the PKCS#12 file to a Java Key Store
+	pipe(my $keytool_reader, my $keytool_writer) or die "Error: pipe failed: $!";
+	my $keytool_pid = fork;
+	die "Error: fork failed: $!" unless defined $keytool_pid;
+	if ($keytool_pid == 0) {
+		open(STDIN, '<', '/dev/null');
+		open(STDOUT, '>&', $keytool_writer) or die "Error: dup failed: $!";
+		open(STDERR, '>&', $keytool_writer) or die "Error: dup failed: $!";
+		close($keytool_reader);
+		exec('keytool', '-importkeystore',
+				'-srckeystore', $temp_pkcs12_filename,
+				'-srcstoretype', 'pkcs12',
+				'-srcstorepass', $PKCS12_PASSWORD,
+				'-deststorepass', $PKCS12_PASSWORD,
+				'-destkeystore', $temp_jks_filename,
+				'-noprompt');
+		die "Unable to run 'keytool' command: " . ($!{ENOENT} ? 'keytool command not found' : $!) . "\n";
+		exit 1;
+	}
+	close($keytool_writer);
+	my $keytool_output = do { local $/; <$keytool_reader> };
+	chomp $keytool_output;
+	close($keytool_reader);
+	waitpid($keytool_pid, 0) or die "Error: waitpid failed: $!";
+	unless ($? == 0) {
+		warn "Warning: could not create keytool file: $keytool_output\n";
+		return;
+	}
+
+	# Now read the temporary Java Key Store file and write it to $out_file
+	my $temp_jks_file;
+	unless (open($temp_jks_file, '<', $temp_jks_filename)) {
+		warn "Warning: could not create keytool file: $temp_jks_filename: $!\n";
+		return;
+	}
+	print $out_file do { local $/; <$temp_jks_file> };
+}
+
 sub write_cert_file {
 	my ($type, $file, $key, $crt, $chain) = @_;
 
@@ -564,7 +614,7 @@ sub write_cert_file {
 	} elsif ($type eq 'p12') {
 		write_pkcs12_file($file, $key, $crt, $chain);
 	} elsif ($type eq 'jks') {
-		# TODO: jks files
+		write_jks_file($file, $key, $crt, $chain);
 	}
 }
 
