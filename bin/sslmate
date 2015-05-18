@@ -544,7 +544,11 @@ sub write_pkcs12_file {
 	print $to_openssl_stdin join('', $key, $crt, $chain);
 	close($to_openssl_stdin);
 	waitpid($openssl_pid, 0) or die "waitpid failed: $!";
-	warn "Warning: 'openssl pkcs12' command failed; could not create PKCS#12 file\n" unless $? == 0;
+	unless ($? == 0) {
+		warn "Warning: 'openssl pkcs12' command failed; could not create PKCS#12 file\n";
+		return 0;
+	}
+	return 1;
 }
 
 sub write_jks_file {
@@ -556,7 +560,10 @@ sub write_jks_file {
 
 	# Write a temporary PKCS#12 file
 	open(my $temp_pkcs12_file, '>', $temp_pkcs12_filename) or die "Unable to open $temp_pkcs12_filename for writing: $!\n";
-	write_pkcs12_file($temp_pkcs12_file, $key, $crt, $chain);
+	unless (write_pkcs12_file($temp_pkcs12_file, $key, $crt, $chain)) {
+		warn "Warning: could not create Java Key Store file because creating the PKCS#12 file failed\n";
+		return 0;
+	}
 	close($temp_pkcs12_file);
 
 	# Fork and exec keytool to convert the PKCS#12 file to a Java Key Store
@@ -584,17 +591,18 @@ sub write_jks_file {
 	close($keytool_reader);
 	waitpid($keytool_pid, 0) or die "Error: waitpid failed: $!";
 	unless ($? == 0) {
-		warn "Warning: could not create keytool file: $keytool_output\n";
-		return;
+		warn "Warning: could not create Java Key Store file: $keytool_output\n";
+		return 0;
 	}
 
 	# Now read the temporary Java Key Store file and write it to $out_file
 	my $temp_jks_file;
 	unless (open($temp_jks_file, '<', $temp_jks_filename)) {
-		warn "Warning: could not create keytool file: $temp_jks_filename: $!\n";
-		return;
+		warn "Warning: could not create Java Key Store file: $temp_jks_filename: $!\n";
+		return 0;
 	}
 	print $out_file do { local $/; <$temp_jks_file> };
+	return 1;
 }
 
 sub write_cert_file {
@@ -602,20 +610,25 @@ sub write_cert_file {
 
 	if ($type eq 'crt') {
 		print $file $crt;
+		return 1;
 	} elsif ($type eq 'chain') {
 		print $file $chain;
+		return 1;
 	} elsif ($type eq 'chained') {
 		print $file $crt;
 		print $file $chain;
+		return 1;
 	} elsif ($type eq 'combined') {
 		print $file $key;
 		print $file $crt;
 		print $file $chain;
+		return 1;
 	} elsif ($type eq 'p12') {
-		write_pkcs12_file($file, $key, $crt, $chain);
+		return write_pkcs12_file($file, $key, $crt, $chain);
 	} elsif ($type eq 'jks') {
-		write_jks_file($file, $key, $crt, $chain);
+		return write_jks_file($file, $key, $crt, $chain);
 	}
+	return 0;
 }
 
 sub write_cert_files {
@@ -635,14 +648,16 @@ sub write_cert_files {
 			$default_mode = 0666;
 		}
 
-		$files{$type} = File::Temp->new(DIR => dirname($paths->{$type}), TEMPLATE => '.sslmate.XXXXXX');
+		my $tempfile = File::Temp->new(DIR => dirname($paths->{$type}), TEMPLATE => '.sslmate.XXXXXX');
 		if (-e $paths->{$type}) {
-			restore_file_permissions($files{$type}, $paths->{$type});
+			restore_file_permissions($tempfile, $paths->{$type});
 		} else {
-			chmod($default_mode & ~umask, $files{$type});
+			chmod($default_mode & ~umask, $tempfile);
 		}
 
-		write_cert_file($type, $files{$type}, $key, $crt, $chain);
+		write_cert_file($type, $tempfile, $key, $crt, $chain) or next; # TODO: if this fails, should we delete the current file of this type?  Should we hide it from the cert path output?
+
+		$files{$type} = $tempfile;
 	}
 
 	# Rename the new files on top of the old files:
