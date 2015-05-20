@@ -254,7 +254,7 @@ sub request {
 	} elsif ($self->{has_curl_module}) {
 		return $self->request_via_curl_module($method, $uri, $headers, $creds, $post_data);
 	} else {
-		die "Neither WWW::Curl::Easy nor the curl command are installed\n";
+		die "Neither LWP (>= 6) nor the curl command are installed\n";
 	}
 }
 
