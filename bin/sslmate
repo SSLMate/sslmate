@@ -67,6 +67,9 @@ our $DEFAULT_CERT_TIMEOUT = 600;
 our $DEFAULT_LIBEXEC_DIR = undef;
 our $LIBEXEC_DIR = $ENV{'SSLMATE_LIBEXEC_DIR'} // $DEFAULT_LIBEXEC_DIR // "$FindBin::Bin/../libexec/sslmate";
 
+our $DEFAULT_SHARE_DIR = undef;
+our $SHARE_DIR = $ENV{'SSLMATE_SHARE_DIR'} // $DEFAULT_SHARE_DIR // "$FindBin::Bin/../share/sslmate";
+
 our $batch = 0;
 our $quiet = 0;
 our $verbose = 0;
@@ -3370,12 +3373,16 @@ sub command_help {
 	local @ARGV = @_;
 
 	my $print_libexec_dir = 0;
+	my $print_share_dir = 0;
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
-	$getopt->getoptions('libexec-dir', \$print_libexec_dir) or return 2;
+	$getopt->getoptions('libexec-dir', \$print_libexec_dir,
+			    'share-dir', \$print_share_dir) or return 2;
 
 	if ($print_libexec_dir) {
 		print "$LIBEXEC_DIR\n";
+	} elsif ($print_share_dir) {
+		print "$SHARE_DIR\n";
 	} elsif (@ARGV == 0 || $ARGV[0] eq 'help') {
 		print_usage(*STDOUT);
 	} else {
