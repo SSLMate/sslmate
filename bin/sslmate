@@ -3286,6 +3286,8 @@ sub interpolate_config_template {
 				$out .= $paths->{key};
 			} elsif ($varname eq 'CHAIN_PATH') {
 				$out .= $paths->{chain};
+			} elsif ($varname eq 'DHPARAMS_PATH') {
+				$out .= "$SHARE_DIR/dhparams/dh2048-group14.pem";
 			} elsif ($varname =~ /^(.*)_PATH$/ && exists $file_types{lc $1}) {
 				my $file_type = lc $1;
 				if (not exists $paths->{$file_type}) {
