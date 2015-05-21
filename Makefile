@@ -80,11 +80,11 @@ install-libexec:
 
 install-share:
 	mkdir -m 755 -p $(DESTDIR)$(SHAREDIR)/dhparams
-	install -m 755 share/sslmate/dhparams/dh2048-group14.pem $(DESTDIR)$(SHAREDIR)/dhparams/
-	install -m 755 share/sslmate/dhparams/dh3072-group15.pem $(DESTDIR)$(SHAREDIR)/dhparams/
-	install -m 755 share/sslmate/dhparams/dh4096-group16.pem $(DESTDIR)$(SHAREDIR)/dhparams/
-	install -m 755 share/sslmate/dhparams/dh6144-group17.pem $(DESTDIR)$(SHAREDIR)/dhparams/
-	install -m 755 share/sslmate/dhparams/dh8192-group18.pem $(DESTDIR)$(SHAREDIR)/dhparams/
+	install -m 644 share/sslmate/dhparams/dh2048-group14.pem $(DESTDIR)$(SHAREDIR)/dhparams/
+	install -m 644 share/sslmate/dhparams/dh3072-group15.pem $(DESTDIR)$(SHAREDIR)/dhparams/
+	install -m 644 share/sslmate/dhparams/dh4096-group16.pem $(DESTDIR)$(SHAREDIR)/dhparams/
+	install -m 644 share/sslmate/dhparams/dh6144-group17.pem $(DESTDIR)$(SHAREDIR)/dhparams/
+	install -m 644 share/sslmate/dhparams/dh8192-group18.pem $(DESTDIR)$(SHAREDIR)/dhparams/
 
 install-paths:
 	mkdir -m 755 -p $(DESTDIR)/etc/paths.d $(DESTDIR)/etc/manpaths.d
