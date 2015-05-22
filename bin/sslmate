@@ -1510,167 +1510,6 @@ sub do_wait_for_cert {
 	return 1;
 }
 
-sub do_buy {
-	my ($cn, $csr, $cert_type, $years, $force, $timeout, $accept_dummy, $auto_renew, $approval_method, $approver_email, $key_type, %opts) = @_;
-
-	# Future TODO: support reusing key file if one already exists
-
-	#
-	# 0. Retrieve the current cert object from the server
-	#
-	my ($status, $cert);
-	($status, $cert) = authed_api_call('GET', '/certs/' . qs_escape($cn), { expand => ['current','pending','csr'] }) or exit 1;
-	if ($status != 200) {
-		print STDERR "Error: " . $cert->{message} . "\n";
-		exit 1;
-	}
-	$cn = $cert->{cn}; # So that we use the canonical CN
-
-	if (!$cert->{dn}) {
-		print STDERR "Error: your account has no contact details set. Please visit https://sslmate.com/account to update your account.\n";
-		exit 1;
-	}
-	#
-	# 1. Make sure files/certs don't already exist
-	#
-	my $paths = get_cert_paths($cn);
-	unless ($force) {
-		my $errors = 0;
-
-		$errors += has_existing_files(@{$paths}{keys %$paths});
-		if (defined($cert->{pending})) {
-			print STDERR "Error: a certificate for $cn is already pending issuance.\n";
-			print STDERR "Tip: to resend or change a certificate's approver email, use 'sslmate resend-email'.\n";
-			$errors++;
-		}
-		if (defined($cert->{current}) && !$cert->{current}->{expiring}) {
-			print STDERR "Error: your account already has an active certificate for $cn.\n";
-			print STDERR "Tip: to reissue an existing certificate, use 'sslmate reissue'.\n";
-			$errors++;
-		}
-		if ($errors) {
-			print STDERR "Tip: use --force to override the above error" . ($errors == 1 ? "" : "s") . ".\n";
-			exit 1;
-		}
-	}
-
-	my $authorized_charge;
-	my $authorized_charge_currency;
-
-	unless ($batch) {
-		#
-		# Get product/pricing info from the server, ask user for confirmation
-		#
-
-		my $product_info = get_product_info($cert_type // $cert->{type}, $cn, years => $years, coupon_code => $opts{coupon_code}) or exit 1;
-
-		exit 1 unless order_can_be_paid($product_info);
-
-		if ($approval_method eq 'email') {
-			if (defined $approver_email) {
-				if (!grep { $_ eq $approver_email } @{$product_info->{approver_emails}}) {
-					print STDERR "Error: $approver_email: not an acceptable approver email for $cn\n";
-					exit 1;
-				}
-			} else {
-				print "To prove that you are authorized to obtain a certificate for $cn,\n";
-				print "you must respond to an email sent to one of the following addresses, or add\n";
-				print "a DNS record to your domain.\n";
-				print "\n";
-				print "How would you like to prove authorization?\n";
-				print "\n";
-				($approval_method, $approver_email) = prompt_for_approval($product_info) or exit 1;
-			}
-		}
-
-		prompt_for_order_confirmation($product_info,
-					      approver_email => $approver_email,
-					      approval_method => $approval_method,
-					      auto_renew => $auto_renew // $cert->{auto_renew}) or exit 1;
-
-		$authorized_charge_currency = $product_info->{price}->{currency};
-		$authorized_charge = $product_info->{price}->{amount_due};
-	}
-
-	#
-	# 2. Generate key/CSR
-	#
-	my $key_file;
-	my $exit_with_error = sub {
-		unlink($paths->{key}) if defined($key_file);
-		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/type approval_method approver_email csr/)) if defined($cert);
-		exit 1;
-	};
-	unless (defined $csr) {
-		$key_file = open_key_file($paths->{key}, $force);
-
-		print "Generating private key... "; STDOUT->flush;
-		truncate($key_file, 0);
-		genkey($key_file, $key_type) or $exit_with_error->();
-		close($key_file);
-		print "Done.\n";
-
-		print "Generating CSR... "; STDOUT->flush;
-		$csr = openssl_req($paths->{key}, $cert->{dn});
-		print "Done.\n";
-	}
-
-	#
-	# 3. Create/update the cert object on the server
-	#
-	my $request = {	auto_renew	=> $auto_renew,
-			type		=> $cert_type,
-			approval_method	=> $approval_method,
-			approver_email	=> $approver_email,
-			csr		=> $csr };
-
-	($status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['dns_approval.status','http_approval.status'] }, $request) or $exit_with_error->();
-	if ($status != 200) {
-		print STDERR "Error: " . $new_cert->{message} . "\n";
-		$cert = undef;
-		$exit_with_error->();
-	}
-
-	prepare_approval($cert, $new_cert) or $exit_with_error->();
-
-	#
-	# 4. Buy the certificate from SSLMate
-	#
-	print "Placing order...\n";
-	$request = { years			=> $years,
-		     authorized_charge		=> $authorized_charge,
-		     authorized_charge_currency	=> $authorized_charge_currency,
-		     %opts };
-
-	my $cert_instance;
-	($status, $cert_instance) = authed_api_call('POST', '/certs/' . qs_escape($cn) . '/buy', undef, $request) or $exit_with_error->();
-	if ($status != 200 && $cert_instance->{reason} eq 'daily_buy_limit_exceeded') {
-		print STDERR "Error: this purchase would exceed your daily spending limit.\n";
-		print STDERR "To change your limit, visit https://sslmate.com/account\n";
-		$exit_with_error->() if $batch;
-		my $password = prompt_password("Enter your SSLMate password to approve this purchase: ");
-		my ($account_id, undef) = split('_', get_config('api_key'));
-		($status, $cert_instance) = api_call('POST', '/certs/' . qs_escape($cn) . '/buy', { username => $account_id, password => $password }, undef, $request) or $exit_with_error->();
-	}
-
-	if ($status != 200) {
-		if ($cert_instance->{reason} eq 'price_not_authorized') {
-			print STDERR "Error: the price of this certificate has changed. Please run 'sslmate buy' again.\n";
-		} else {
-			print STDERR "Error: " . $cert_instance->{message} . "\n";
-		}
-		$exit_with_error->();
-	}
-
-	print "Order complete.\n\n";
-	if (!do_wait_for_cert($cn, $cert_instance, $timeout, $accept_dummy, $paths, $paths->{key})) {
-		print "\n";
-		print_cert_paths($paths, undef, 'pending');
-		return 12 unless $timeout == 0;
-	}
-	return 0;
-}
-
 sub command_buy {
 	local @ARGV = @_;
 
@@ -1792,7 +1631,163 @@ sub command_buy {
 	}
 
 	init_default_paths;
-	return do_buy($cn, $csr, $cert_type, $years, $force, $timeout, $accept_dummy, $auto_renew, $approval_method, $approver_email, $key_type, %opts);
+
+	# Future TODO: support reusing key file if one already exists
+
+	#
+	# 0. Retrieve the current cert object from the server
+	#
+	my ($status, $cert);
+	($status, $cert) = authed_api_call('GET', '/certs/' . qs_escape($cn), { expand => ['current','pending','csr'] }) or return 1;
+	if ($status != 200) {
+		print STDERR "Error: " . $cert->{message} . "\n";
+		return 1;
+	}
+	$cn = $cert->{cn}; # So that we use the canonical CN
+
+	if (!$cert->{dn}) {
+		print STDERR "Error: your account has no contact details set. Please visit https://sslmate.com/account to update your account.\n";
+		return 1;
+	}
+	#
+	# 1. Make sure files/certs don't already exist
+	#
+	my $paths = get_cert_paths($cn);
+	unless ($force) {
+		my $errors = 0;
+
+		$errors += has_existing_files(@{$paths}{keys %$paths});
+		if (defined($cert->{pending})) {
+			print STDERR "Error: a certificate for $cn is already pending issuance.\n";
+			print STDERR "Tip: to resend or change a certificate's approver email, use 'sslmate resend-email'.\n";
+			$errors++;
+		}
+		if (defined($cert->{current}) && !$cert->{current}->{expiring}) {
+			print STDERR "Error: your account already has an active certificate for $cn.\n";
+			print STDERR "Tip: to reissue an existing certificate, use 'sslmate reissue'.\n";
+			$errors++;
+		}
+		if ($errors) {
+			print STDERR "Tip: use --force to override the above error" . ($errors == 1 ? "" : "s") . ".\n";
+			return 1;
+		}
+	}
+
+	my $authorized_charge;
+	my $authorized_charge_currency;
+
+	unless ($batch) {
+		#
+		# Get product/pricing info from the server, ask user for confirmation
+		#
+
+		my $product_info = get_product_info($cert_type // $cert->{type}, $cn, years => $years, coupon_code => $opts{coupon_code}) or return 1;
+
+		return 1 unless order_can_be_paid($product_info);
+
+		if ($approval_method eq 'email') {
+			if (defined $approver_email) {
+				if (!grep { $_ eq $approver_email } @{$product_info->{approver_emails}}) {
+					print STDERR "Error: $approver_email: not an acceptable approver email for $cn\n";
+					return 1;
+				}
+			} else {
+				print "To prove that you are authorized to obtain a certificate for $cn,\n";
+				print "you must respond to an email sent to one of the following addresses, or add\n";
+				print "a DNS record to your domain.\n";
+				print "\n";
+				print "How would you like to prove authorization?\n";
+				print "\n";
+				($approval_method, $approver_email) = prompt_for_approval($product_info) or return 1;
+			}
+		}
+
+		prompt_for_order_confirmation($product_info,
+					      approver_email => $approver_email,
+					      approval_method => $approval_method,
+					      auto_renew => $auto_renew // $cert->{auto_renew}) or return 1;
+
+		$authorized_charge_currency = $product_info->{price}->{currency};
+		$authorized_charge = $product_info->{price}->{amount_due};
+	}
+
+	#
+	# 2. Generate key/CSR
+	#
+	my $key_file;
+	my $exit_with_error = sub {
+		unlink($paths->{key}) if defined($key_file);
+		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/type approval_method approver_email csr/)) if defined($cert);
+		exit 1;
+	};
+	unless (defined $csr) {
+		$key_file = open_key_file($paths->{key}, $force);
+
+		print "Generating private key... "; STDOUT->flush;
+		truncate($key_file, 0);
+		genkey($key_file, $key_type) or $exit_with_error->();
+		close($key_file);
+		print "Done.\n";
+
+		print "Generating CSR... "; STDOUT->flush;
+		$csr = openssl_req($paths->{key}, $cert->{dn});
+		print "Done.\n";
+	}
+
+	#
+	# 3. Create/update the cert object on the server
+	#
+	my $request = {	auto_renew	=> $auto_renew,
+			type		=> $cert_type,
+			approval_method	=> $approval_method,
+			approver_email	=> $approver_email,
+			csr		=> $csr };
+
+	($status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['dns_approval.status','http_approval.status'] }, $request) or $exit_with_error->();
+	if ($status != 200) {
+		print STDERR "Error: " . $new_cert->{message} . "\n";
+		$cert = undef;
+		$exit_with_error->();
+	}
+
+	prepare_approval($cert, $new_cert) or $exit_with_error->();
+
+	#
+	# 4. Buy the certificate from SSLMate
+	#
+	print "Placing order...\n";
+	$request = { years			=> $years,
+		     authorized_charge		=> $authorized_charge,
+		     authorized_charge_currency	=> $authorized_charge_currency,
+		     %opts };
+
+	my $cert_instance;
+	($status, $cert_instance) = authed_api_call('POST', '/certs/' . qs_escape($cn) . '/buy', undef, $request) or $exit_with_error->();
+	if ($status != 200 && $cert_instance->{reason} eq 'daily_buy_limit_exceeded') {
+		print STDERR "Error: this purchase would exceed your daily spending limit.\n";
+		print STDERR "To change your limit, visit https://sslmate.com/account\n";
+		$exit_with_error->() if $batch;
+		my $password = prompt_password("Enter your SSLMate password to approve this purchase: ");
+		my ($account_id, undef) = split('_', get_config('api_key'));
+		($status, $cert_instance) = api_call('POST', '/certs/' . qs_escape($cn) . '/buy', { username => $account_id, password => $password }, undef, $request) or $exit_with_error->();
+	}
+
+	if ($status != 200) {
+		if ($cert_instance->{reason} eq 'price_not_authorized') {
+			print STDERR "Error: the price of this certificate has changed. Please run 'sslmate buy' again.\n";
+		} else {
+			print STDERR "Error: " . $cert_instance->{message} . "\n";
+		}
+		$exit_with_error->();
+	}
+
+	print "Order complete.\n\n";
+	if (!do_wait_for_cert($cn, $cert_instance, $timeout, $accept_dummy, $paths, $paths->{key})) {
+		print "\n";
+		print_cert_paths($paths, undef, 'pending');
+		return 12 unless $timeout == 0;
+	}
+	return 0;
 }
 
 sub command_reissue {
