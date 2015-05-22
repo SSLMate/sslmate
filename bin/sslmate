@@ -1288,6 +1288,13 @@ sub format_money {
 sub prompt_for_approval {
 	my ($product_info) = @_;
 
+	print "To prove that you are authorized to obtain a certificate for " . $product_info->{cn} . ",\n";
+	print "you must respond to an email sent to one of the following addresses, or add\n";
+	print "a DNS record to your domain.\n";
+	print "\n";
+	print "How would you like to prove authorization?\n";
+	print "\n";
+
 	my @choices;
 	if (grep { $_ eq 'email' } @{$product_info->{approval_methods}}) {
 		for my $email (@{$product_info->{approver_emails}}) {
@@ -1694,12 +1701,6 @@ sub command_buy {
 					return 1;
 				}
 			} else {
-				print "To prove that you are authorized to obtain a certificate for $cn,\n";
-				print "you must respond to an email sent to one of the following addresses, or add\n";
-				print "a DNS record to your domain.\n";
-				print "\n";
-				print "How would you like to prove authorization?\n";
-				print "\n";
 				($approval_method, $approver_email) = prompt_for_approval($product_info) or return 1;
 			}
 		}
@@ -3188,12 +3189,6 @@ sub do_import {
 					exit 1;
 				}
 			} else {
-				print "To prove that you are authorized to obtain a certificate for $cn,\n";
-				print "you must respond to an email sent to one of the following addresses, or add\n";
-				print "a DNS record to your domain.\n";
-				print "\n";
-				print "How would you like to prove authorization?\n";
-				print "\n";
 				($approval_method, $approver_email) = prompt_for_approval($product_info) or exit 1;
 			}
 		}
