@@ -1543,6 +1543,7 @@ sub command_buy {
 	my %opts;
 	my $auto_renew = undef;
 	my $force = 0;
+	my $cert_type = undef;
 	my $ev = 0;
 	my $approval_method = 'email';
 	my $approver_email = undef;
@@ -1557,6 +1558,7 @@ sub command_buy {
 	$getopt->getoptions('auto-renew!', \$auto_renew,
 			    'force|f', \$force,
 			    'batch', \$batch, # compat with pre-1.0
+			    'type=s', \$cert_type,
 			    'ev', \$ev,
 			    'approval=s', \$approval_method,
 			    'email=s', \$approver_email,
@@ -1617,7 +1619,7 @@ sub command_buy {
 
 	my $cn = lc $ARGV[0];
 	my $years = undef;
-	my $cert_type = $ev ? 'ev' : 'dv';
+	$cert_type //= $ev ? 'ev' : 'dv';
 	validate_cn($cn) or return 1;
 
 	load_config;
