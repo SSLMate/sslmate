@@ -682,26 +682,40 @@ sub qs_escape {
 	return uri_escape_utf8($str, '^A-Za-z0-9\-\._');
 }
 
+sub to_json_bool {
+	my ($x) = @_;
+	return $x ? JSON::PP::true : JSON::PP::false;
+}
+
 sub api_call {
-	my ($method, $command, $creds, $query_string, $post_data) = @_;
+	my ($method, $command, $creds, $query_string, $post_data, $post_data_type) = @_;
 
 	$https_client //= SSLMate::HTTPSClient->new;
 
 	$query_string = SSLMate::HTTPSClient::make_query_string($query_string) if ref($query_string) eq 'HASH';
-	$post_data = SSLMate::HTTPSClient::make_query_string($post_data) if ref($post_data) eq 'HASH';
+	$post_data_type //= 'application/x-www-form-urlencoded';
+	if (ref($post_data) eq 'HASH') {
+		if ($post_data_type eq 'application/x-www-form-urlencoded') {
+			$post_data = SSLMate::HTTPSClient::make_query_string($post_data);
+		} elsif ($post_data_type eq 'application/json') {
+			$post_data = encode_json($post_data);
+		}
+	}
 	$command .= "?$query_string" if defined($query_string) && length($query_string);
 
 	my $max_total_delay = 20;
 	my $next_retry_delay = 2;
 
 	my $uri = (get_config('api_endpoint') // $API_ENDPOINT) . $command;
+	my $headers = {};
+	$headers->{'Content-Type'} = $post_data_type if defined($post_data);
 	my $encoded_creds;
 	if (defined $creds) {
 		$encoded_creds = { username => $creds->{username}, password => encode('utf8', $creds->{password}) };
 	}
 	while (1) {
 		my ($http_status, $content_type, $response_data) = eval {
-			$https_client->request($method, $uri, undef, $encoded_creds, $post_data)
+			$https_client->request($method, $uri, $headers, $encoded_creds, $post_data)
 		};
 		if (not defined $http_status) {
 			print STDERR "Error: Unable to contact SSLMate server: $@";
@@ -743,13 +757,13 @@ sub default_api_credentials {
 }
 
 sub anon_api_call {
-	my ($method, $command, $query_string, $post_data) = @_;
-	return api_call($method, $command, undef, $query_string, $post_data);
+	my ($method, $command, $query_string, $post_data, $post_data_type) = @_;
+	return api_call($method, $command, undef, $query_string, $post_data, $post_data_type);
 }
 
 sub authed_api_call {
-	my ($method, $command, $query_string, $post_data) = @_;
-	return api_call($method, $command, default_api_credentials, $query_string, $post_data);
+	my ($method, $command, $query_string, $post_data, $post_data_type) = @_;
+	return api_call($method, $command, default_api_credentials, $query_string, $post_data, $post_data_type);
 }
 
 sub format_chain {
