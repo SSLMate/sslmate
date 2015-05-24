@@ -992,62 +992,99 @@ sub prompt_for_manual_dns_approval {
 	}
 }
 
-sub prepare_approval {
-	my ($old_cert, $new_cert) = @_;
+sub remove_approval_for {
+	my ($hostname, $old_obj, $new_obj) = @_;
 
-	if ($old_cert->{exists} && $old_cert->{approval_method} eq 'http') {
-		if ($new_cert->{approval_method} ne 'http' ||
-				!compare_approval_options($old_cert->{http_approval}->{options}, $new_cert->{http_approval}->{options})) {
+	if ($old_obj->{approval_method} eq 'http') {
+		if (!defined($new_obj) ||
+				$new_obj->{approval_method} ne 'http' ||
+				!compare_approval_options($old_obj->{http_approval}->{options},
+							  $new_obj->{http_approval}->{options})) {
 			my $successful = eval {
-				prepare_http_approval('del', $old_cert->{http_approval}->{options});
+				prepare_http_approval('del', $old_obj->{http_approval}->{options});
 				1;
 			};
 			# Question: Display a warning if not successful?
 		}
-	} elsif ($old_cert->{exists} && $old_cert->{approval_method} eq 'dns') {
-		if ($new_cert->{approval_method} ne 'dns' ||
-				!compare_approval_options($old_cert->{dns_approval}->{options}, $new_cert->{dns_approval}->{options})) {
-			print "Removing old DNS records...\n";
+	} elsif ($old_obj->{approval_method} eq 'dns') {
+		if (!defined($new_obj) ||
+				$new_obj->{approval_method} ne 'dns' ||
+				!compare_approval_options($old_obj->{dns_approval}->{options},
+							  $new_obj->{dns_approval}->{options})) {
+			print "Removing old DNS approval records for $hostname...\n";
 			my $successful = eval {
-				prepare_dns_approval('del', $old_cert->{dns_approval}->{options});
+				prepare_dns_approval('del', $old_obj->{dns_approval}->{options});
 				1;
 			};
 			# Question: Display a warning if not successful?
 		}
 	}
+}
+
+sub add_approval_for {
+	my ($hostname, $obj) = @_;
+
 	my $successful = 0;
-	if ($new_cert->{approval_method} eq 'http') {
+
+	if ($obj->{approval_method} eq 'http') {
 		$successful = eval {
-			prepare_http_approval('add', $new_cert->{http_approval}->{options});
+			prepare_http_approval('add', $obj->{http_approval}->{options});
 			1;
 		};
-		$successful = 1 if $new_cert->{http_approval}->{status}->{ready};
+		$successful = 1 if $obj->{http_approval}->{status}->{ready};
 		if (not $successful) {
 			my $why = $@;
 			chomp $why;
-			print STDERR "Error: unable to automatically configure HTTP approval for " . $new_cert->{cn} . ": $why\n";
+			print STDERR "Error: unable to automatically configure HTTP approval for $hostname: $why\n";
 		}
-	} elsif ($new_cert->{approval_method} eq 'dns') {
-		print "Adding DNS record...\n";
+	} elsif ($obj->{approval_method} eq 'dns') {
+		print "Adding DNS approval record for $hostname...\n";
 		$successful = eval {
-			prepare_dns_approval('add', $new_cert->{dns_approval}->{options});
+			prepare_dns_approval('add', $obj->{dns_approval}->{options});
 			1;
 		};
-		$successful = 1 if $new_cert->{dns_approval}->{status}->{ready};
+		$successful = 1 if $obj->{dns_approval}->{status}->{ready};
 		if (not $successful) {
 			my $why = $@;
 			chomp $why;
 			if ($batch) {
-				print STDERR "Error: unable to automatically configure DNS approval for " . $new_cert->{cn} . ": $why\n";
+				print STDERR "Error: unable to automatically configure DNS approval for $hostname: $why\n";
 			} else {
-				print "Notice: unable to automatically configure DNS approval for " . $new_cert->{cn}. ": $why\n";
-				$successful = prompt_for_manual_dns_approval($new_cert->{dns_approval}->{options});
+				print "Notice: unable to automatically configure DNS approval for $hostname: $why\n";
+				$successful = prompt_for_manual_dns_approval($obj->{dns_approval}->{options});
 			}
 		}
 	} else {
 		$successful = 1;
 	}
+
 	return $successful;
+}
+
+sub prepare_approval {
+	my ($old_cert, $new_cert) = @_;
+
+	if ($old_cert->{exists}) {
+		remove_approval_for($new_cert->{cn}, $old_cert, $new_cert);
+
+		for my $old_san_obj (@{$old_cert->{sans}}) {
+			next unless $old_san_obj->{type} eq 'dns';
+
+			my $new_san_obj = (grep { $_->{type} eq $old_san_obj->{type} &&
+						  $_->{value} eq $old_san_obj->{value} }
+					   @{$new_cert->{sans}})[0];
+			remove_approval_for($old_san_obj->{value}, $old_san_obj, $new_san_obj);
+		}
+	}
+
+	add_approval_for($new_cert->{cn}, $new_cert) or return 0;
+
+	for my $san_obj (@{$new_cert->{sans}}) {
+		next unless $san_obj->{type} eq 'dns';
+		add_approval_for($san_obj->{value}, $san_obj) or return 0;
+	}
+
+	return 1;
 }
 
 sub openssl_genrsa {
@@ -1782,9 +1819,21 @@ sub command_buy {
 	}
 
 	#
+	# Construct a list of SAN objects
+	#
+	my @san_objs;
+	for my $san_hostname (@sans) {
+		push @san_objs, { type => 'dns',
+				  value => $san_hostname,
+				  approval_method => $approval_methods{$san_hostname},
+				  approver_email => $approver_emails{$san_hostname} };
+	}
+
+	#
 	# Ask user for confirmation, if not in batch mode
 	#
 	unless ($batch) {
+		# TODO TODO: pass SANs to the confirmation prompt
 		prompt_for_order_confirmation($product_info,
 					      approver_email => $approver_emails{$cn},
 					      approval_method => $approval_methods{$cn},
@@ -1798,7 +1847,7 @@ sub command_buy {
 	my $key_file;
 	my $exit_with_error = sub {
 		unlink($paths->{key}) if defined($key_file);
-		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/type approval_method approver_email csr/)) if defined($cert);
+		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/type approval_method approver_email max_sans sans csr/), 'application/json') if defined($cert);
 		exit 1;
 	};
 	unless (defined $csr) {
@@ -1818,13 +1867,15 @@ sub command_buy {
 	#
 	# Create/update the cert object on the server
 	#
-	my $request = {	auto_renew	=> $auto_renew,
+	my $request = {	auto_renew	=> to_json_bool($auto_renew // $cert->{auto_renew}),
 			type		=> $cert_type,
 			approval_method	=> $approval_methods{$cn},
 			approver_email	=> $approver_emails{$cn},
+			max_sans	=> $max_sans,
+			sans		=> \@san_objs,
 			csr		=> $csr };
 
-	($status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['dns_approval.status','http_approval.status'] }, $request) or $exit_with_error->();
+	($status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['dns_approval.status','http_approval.status'] }, $request, 'application/json') or $exit_with_error->();
 	if ($status != 200) {
 		print STDERR "Error: " . $new_cert->{message} . "\n";
 		$cert = undef;
