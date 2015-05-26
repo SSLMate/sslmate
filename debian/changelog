@@ -1,3 +1,13 @@
+sslmate (1.2.0-1) unstable; urgency=low
+
+  * Update dependencies.
+    - Depend on LWP >= 6 instead of curl, if available.
+    - Depend on ca-certificates, as they are needed to verify the
+      SSLMate server's SSL certificate.
+  * New upstream release.
+
+ -- SSLMate Software Release Role <software@sslmate.com>  Tue, 26 May 2015 09:40:49 -0700
+
 sslmate (1.1.1-1) unstable; urgency=low
 
   * New upstream release.
