@@ -1,3 +1,9 @@
+v1.2.0 (2015-05-26)
+ * Install strong Diffie-Hellman parameters to /usr/share/sslmate.
+ * Add support for Diffie-Hellman parameters in mkconfig config templates.
+ * If available, use LWP Perl module for HTTPS client instead of
+   spawning a curl process.
+
 v1.1.1 (2015-05-13)
  * Avoid a warning message if WWW::Curl::Perl is not installed.
 
