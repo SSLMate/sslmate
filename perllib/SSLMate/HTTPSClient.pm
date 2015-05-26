@@ -247,10 +247,10 @@ sub request {
 	my $self = shift;
 	my ($method, $uri, $headers, $creds, $post_data) = @_;
 
-	if ($self->{has_lwp}) {
-		return $self->request_via_lwp($method, $uri, $headers, $creds, $post_data);
-	} elsif ($self->{has_curl_command}) {
+	if ($self->{has_curl_command}) {
 		return $self->request_via_curl_command($method, $uri, $headers, $creds, $post_data);
+	} elsif ($self->{has_lwp}) {
+		return $self->request_via_lwp($method, $uri, $headers, $creds, $post_data);
 	} elsif ($self->{has_curl_module}) {
 		return $self->request_via_curl_module($method, $uri, $headers, $creds, $post_data);
 	} else {
