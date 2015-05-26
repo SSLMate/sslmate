@@ -1,3 +1,6 @@
+v1.2.1 (2015-05-26)
+ * Fix certificate errors on OS X by preferring curl over LWP Perl module.
+
 v1.2.0 (2015-05-26)
  * Install strong Diffie-Hellman parameters to /usr/share/sslmate.
  * Add support for Diffie-Hellman parameters in mkconfig config templates.
