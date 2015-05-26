@@ -67,6 +67,9 @@ our $DEFAULT_CERT_TIMEOUT = 600;
 our $DEFAULT_LIBEXEC_DIR = undef;
 our $LIBEXEC_DIR = $ENV{'SSLMATE_LIBEXEC_DIR'} // $DEFAULT_LIBEXEC_DIR // "$FindBin::Bin/../libexec/sslmate";
 
+our $DEFAULT_SHARE_DIR = undef;
+our $SHARE_DIR = $ENV{'SSLMATE_SHARE_DIR'} // $DEFAULT_SHARE_DIR // "$FindBin::Bin/../share/sslmate";
+
 our $batch = 0;
 our $quiet = 0;
 our $verbose = 0;
@@ -544,7 +547,65 @@ sub write_pkcs12_file {
 	print $to_openssl_stdin join('', $key, $crt, $chain);
 	close($to_openssl_stdin);
 	waitpid($openssl_pid, 0) or die "waitpid failed: $!";
-	warn "Warning: 'openssl pkcs12' command failed; could not create PKCS#12 file\n" unless $? == 0;
+	unless ($? == 0) {
+		warn "Warning: 'openssl pkcs12' command failed; could not create PKCS#12 file\n";
+		return 0;
+	}
+	return 1;
+}
+
+sub write_jks_file {
+	my ($out_file, $key, $crt, $chain) = @_;
+
+	my $tempdir = File::Temp->newdir();
+	my $temp_pkcs12_filename = "$tempdir/in.p12";
+	my $temp_jks_filename = "$tempdir/out.jks";
+
+	# Write a temporary PKCS#12 file
+	open(my $temp_pkcs12_file, '>', $temp_pkcs12_filename) or die "Unable to open $temp_pkcs12_filename for writing: $!\n";
+	unless (write_pkcs12_file($temp_pkcs12_file, $key, $crt, $chain)) {
+		warn "Warning: could not create Java Key Store file because creating the PKCS#12 file failed\n";
+		return 0;
+	}
+	close($temp_pkcs12_file);
+
+	# Fork and exec keytool to convert the PKCS#12 file to a Java Key Store
+	pipe(my $keytool_reader, my $keytool_writer) or die "Error: pipe failed: $!";
+	my $keytool_pid = fork;
+	die "Error: fork failed: $!" unless defined $keytool_pid;
+	if ($keytool_pid == 0) {
+		open(STDIN, '<', '/dev/null');
+		open(STDOUT, '>&', $keytool_writer) or die "Error: dup failed: $!";
+		open(STDERR, '>&', $keytool_writer) or die "Error: dup failed: $!";
+		close($keytool_reader);
+		exec('keytool', '-importkeystore',
+				'-srckeystore', $temp_pkcs12_filename,
+				'-srcstoretype', 'pkcs12',
+				'-srcstorepass', $PKCS12_PASSWORD,
+				'-deststorepass', $PKCS12_PASSWORD,
+				'-destkeystore', $temp_jks_filename,
+				'-noprompt');
+		die "Unable to run 'keytool' command: " . ($!{ENOENT} ? 'keytool command not found' : $!) . "\n";
+		exit 1;
+	}
+	close($keytool_writer);
+	my $keytool_output = do { local $/; <$keytool_reader> };
+	chomp $keytool_output;
+	close($keytool_reader);
+	waitpid($keytool_pid, 0) or die "Error: waitpid failed: $!";
+	unless ($? == 0) {
+		warn "Warning: could not create Java Key Store file: $keytool_output\n";
+		return 0;
+	}
+
+	# Now read the temporary Java Key Store file and write it to $out_file
+	my $temp_jks_file;
+	unless (open($temp_jks_file, '<', $temp_jks_filename)) {
+		warn "Warning: could not create Java Key Store file: $temp_jks_filename: $!\n";
+		return 0;
+	}
+	print $out_file do { local $/; <$temp_jks_file> };
+	return 1;
 }
 
 sub write_cert_file {
@@ -552,20 +613,25 @@ sub write_cert_file {
 
 	if ($type eq 'crt') {
 		print $file $crt;
+		return 1;
 	} elsif ($type eq 'chain') {
 		print $file $chain;
+		return 1;
 	} elsif ($type eq 'chained') {
 		print $file $crt;
 		print $file $chain;
+		return 1;
 	} elsif ($type eq 'combined') {
 		print $file $key;
 		print $file $crt;
 		print $file $chain;
+		return 1;
 	} elsif ($type eq 'p12') {
-		write_pkcs12_file($file, $key, $crt, $chain);
+		return write_pkcs12_file($file, $key, $crt, $chain);
 	} elsif ($type eq 'jks') {
-		# TODO: jks files
+		return write_jks_file($file, $key, $crt, $chain);
 	}
+	return 0;
 }
 
 sub write_cert_files {
@@ -585,14 +651,16 @@ sub write_cert_files {
 			$default_mode = 0666;
 		}
 
-		$files{$type} = File::Temp->new(DIR => dirname($paths->{$type}), TEMPLATE => '.sslmate.XXXXXX');
+		my $tempfile = File::Temp->new(DIR => dirname($paths->{$type}), TEMPLATE => '.sslmate.XXXXXX');
 		if (-e $paths->{$type}) {
-			restore_file_permissions($files{$type}, $paths->{$type});
+			restore_file_permissions($tempfile, $paths->{$type});
 		} else {
-			chmod($default_mode & ~umask, $files{$type});
+			chmod($default_mode & ~umask, $tempfile);
 		}
 
-		write_cert_file($type, $files{$type}, $key, $crt, $chain);
+		write_cert_file($type, $tempfile, $key, $crt, $chain) or next; # TODO: if this fails, should we delete the current file of this type?  Should we hide it from the cert path output?
+
+		$files{$type} = $tempfile;
 	}
 
 	# Rename the new files on top of the old files:
@@ -731,34 +799,34 @@ sub load_approval_map {
 	return $map;
 }
 
-sub available_approval_methods {
+sub available_approval_handlers {
 	my ($type) = @_;
-	my @methods;
+	my @handlers;
 	my $dirpath = "$LIBEXEC_DIR/approval/$type";
 	if (opendir(my $dh, $dirpath)) {
-		@methods = map { { command => $_, params => get_config_with_prefix("$type.$_.") } } grep { !/^\./ && -x "$dirpath/$_" } readdir($dh);
+		@handlers = map { { command => $_, params => get_config_with_prefix("$type.$_.") } } grep { !/^\./ && -x "$dirpath/$_" } readdir($dh);
 		closedir($dh);
 	}
-	return @methods;
+	return @handlers;
 }
 
-sub exec_approval_method {
-	my ($type, $method, @args) = @_;
+sub exec_approval_handler {
+	my ($type, $handler, @args) = @_;
 
-	pipe(my $from_method_stderr, my $method_stderr) or die "Error: pipe failed: $!";
-	my $method_pid = fork;
-	die "Error: fork failed: $!" unless defined $method_pid;
-	if ($method_pid == 0) {
+	pipe(my $from_handler_stderr, my $handler_stderr) or die "Error: pipe failed: $!";
+	my $handler_pid = fork;
+	die "Error: fork failed: $!" unless defined $handler_pid;
+	if ($handler_pid == 0) {
 		open(STDIN, '<', '/dev/null');
-		open(STDERR, '>&', $method_stderr) or die "Error: dup failed: $!";
-		close($from_method_stderr);
+		open(STDERR, '>&', $handler_stderr) or die "Error: dup failed: $!";
+		close($from_handler_stderr);
 
 		$ENV{PERL5LIB} = join(':', @INC); # Ensure handler can find SSLMate module if it's written in Perl
-		$ENV{PARAMS} = join(' ', sort keys %{$method->{params}});
-		for my $name (keys %{$method->{params}}) {
-			$ENV{"PARAM_$name"} = $method->{params}->{$name};
+		$ENV{PARAMS} = join(' ', sort keys %{$handler->{params}});
+		for my $name (keys %{$handler->{params}}) {
+			$ENV{"PARAM_$name"} = $handler->{params}->{$name};
 		}
-		my $path = $method->{command};
+		my $path = $handler->{command};
 		unless ($path =~ /^\//) {
 			$path = "$LIBEXEC_DIR/approval/$type/$path";
 		}
@@ -766,46 +834,46 @@ sub exec_approval_method {
 		exec($path, @args);
 		die "Error: Unable to exec '$path': $!\n";
 	}
-	close($method_stderr);
+	close($handler_stderr);
 
-	my $method_stderr_string = do { local $/; <$from_method_stderr> };
-	close($from_method_stderr);
+	my $handler_stderr_string = do { local $/; <$from_handler_stderr> };
+	close($from_handler_stderr);
 
-	waitpid($method_pid, 0) or die "waitpid failed: $!";
-	my $method_exit_code = WIFEXITED($?) ? WEXITSTATUS($?) : -1;
+	waitpid($handler_pid, 0) or die "waitpid failed: $!";
+	my $handler_exit_code = WIFEXITED($?) ? WEXITSTATUS($?) : -1;
 
-	return ($method_exit_code, \$method_stderr_string);
+	return ($handler_exit_code, \$handler_stderr_string);
 }
 
 sub prepare_http_approval {
 	my ($action, $options) = @_;
 	$http_approval_map //= load_approval_map('http');
 	my @tried_hostnames;
-	my @methods_stderr;
+	my @handlers_stderr;
 	for my $option (@$options) {
 		push @tried_hostnames, $option->{hostname};
-		if (defined($http_approval_map) && defined(my $method = $http_approval_map->{$option->{hostname}})) {
-			my ($status, $stderr) = exec_approval_method('http', $method, $action, @$option{qw{hostname path content}});
+		if (defined($http_approval_map) && defined(my $handler = $http_approval_map->{$option->{hostname}})) {
+			my ($status, $stderr) = exec_approval_handler('http', $handler, $action, @$option{qw{hostname path content}});
 			print STDERR $$stderr;
 			return if $status == 0;
 		} else {
-			for my $method (available_approval_methods('http')) {
-				my ($status, $stderr) = exec_approval_method('http', $method, $action, @$option{qw{hostname path content}});
+			for my $handler (available_approval_handlers('http')) {
+				my ($status, $stderr) = exec_approval_handler('http', $handler, $action, @$option{qw{hostname path content}});
 				if ($status == 0) {
 					print STDERR $$stderr;
 					return;
 				} elsif ($status == 3) {
-					# This method can't be used without parameters
+					# This handler can't be used without parameters
 				} elsif ($status == 4) {
-					# This method couldn't handle this host. Try the next method...
-					push @methods_stderr, $stderr;
+					# This handler couldn't handle this host. Try the next handler...
+					push @handlers_stderr, $stderr;
 				} elsif ($status == 5 || $status == 126 || $status == 127) {
-					# This method isn't usable due to missing dependencies. Try the next method...
+					# This handler isn't usable due to missing dependencies. Try the next handler...
 					# (126 and 127 are returned by /usr/bin/env and are actually standarized by SUSv2)
-					push @methods_stderr, $stderr;
+					push @handlers_stderr, $stderr;
 				} else {
-					# This method could handle this host, but there was an error.
-					# Do not try any further methods, but do continue to the next option.
+					# This handler could handle this host, but there was an error.
+					# Do not try any further handlers, but do continue to the next option.
 					print STDERR $$stderr;
 					last;
 				}
@@ -814,48 +882,48 @@ sub prepare_http_approval {
 	}
 
 	if ($verbose) {
-		print STDERR $$_ for @methods_stderr;
+		print STDERR $$_ for @handlers_stderr;
 	}
-	die "No HTTP approval method available for " . english_join('or', @tried_hostnames) . "." . (not($verbose) && @methods_stderr ? " Specify the --verbose option for details." : "") . "\n";
+	die "No HTTP approval handler available for " . english_join('or', @tried_hostnames) . "." . (not($verbose) && @handlers_stderr ? " Specify the --verbose option for details." : "") . "\n";
 }
 
 sub prepare_dns_approval {
 	my ($action, $options) = @_;
 	$dns_approval_map //= load_approval_map('dns');
 	my @tried_names;
-	my @methods_stderr;
+	my @handlers_stderr;
 	for my $option (@$options) {
 		my $name = $option->{name};
 		push @tried_names, $name;
-		my $method;
+		my $handler;
 		if (defined($dns_approval_map)) {
-			while (!defined($method) && $name ne '') {
-				$method = $dns_approval_map->{$name};
+			while (!defined($handler) && $name ne '') {
+				$handler = $dns_approval_map->{$name};
 				$name =~ s/^[^.]*\.//;
 			}
 		}
-		if (defined($method)) {
-			my ($status, $stderr) = exec_approval_method('dns', $method, $action, @$option{qw{name type value}});
+		if (defined($handler)) {
+			my ($status, $stderr) = exec_approval_handler('dns', $handler, $action, @$option{qw{name type value}});
 			print STDERR $$stderr;
 			return if $status == 0;
 		} else {
-			for my $method (available_approval_methods('dns')) {
-				my ($status,$stderr) = exec_approval_method('dns', $method, $action, @$option{qw{name type value}});
+			for my $handler (available_approval_handlers('dns')) {
+				my ($status,$stderr) = exec_approval_handler('dns', $handler, $action, @$option{qw{name type value}});
 				if ($status == 0) {
 					print STDERR $$stderr;
 					return;
 				} elsif ($status == 3) {
-					# This method can't be used without parameters
+					# This handler can't be used without parameters
 				} elsif ($status == 4) {
-					# This method couldn't handle this host. Try the next method...
-					push @methods_stderr, $stderr;
+					# This handler couldn't handle this host. Try the next handler...
+					push @handlers_stderr, $stderr;
 				} elsif ($status == 5 || $status == 126 || $status == 127) {
-					# This method isn't usable due to missing dependencies. Try the next method...
+					# This handler isn't usable due to missing dependencies. Try the next handler...
 					# (126 and 127 are returned by /usr/bin/env and are actually standarized by SUSv2)
-					push @methods_stderr, $stderr;
+					push @handlers_stderr, $stderr;
 				} else {
-					# This method could handle this host, but there was an error.
-					# Do not try any further methods, but do continue to the next option.
+					# This handler could handle this host, but there was an error.
+					# Do not try any further handlers, but do continue to the next option.
 					print STDERR $$stderr;
 					last;
 				}
@@ -863,9 +931,9 @@ sub prepare_dns_approval {
 		}
 	}
 	if ($verbose) {
-		print STDERR $$_ for @methods_stderr;
+		print STDERR $$_ for @handlers_stderr;
 	}
-	die "No DNS approval method available for " . english_join('or', @tried_names) . "." . (not($verbose) && @methods_stderr ? " Specify the --verbose option for details." : "") . "\n";
+	die "No DNS approval handler available for " . english_join('or', @tried_names) . "." . (not($verbose) && @handlers_stderr ? " Specify the --verbose option for details." : "") . "\n";
 }
 
 sub compare_approval_option {
@@ -1442,8 +1510,129 @@ sub do_wait_for_cert {
 	return 1;
 }
 
-sub do_buy {
-	my ($cn, $csr, $cert_type, $years, $force, $timeout, $accept_dummy, $auto_renew, $approval_method, $approver_email, $key_type, %opts) = @_;
+sub command_buy {
+	local @ARGV = @_;
+
+	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
+		print "Usage: sslmate buy [OPTIONS] HOSTNAME\n\n";
+		print "Example: sslmate buy www.example.com\n";
+		print "         sslmate buy '*.example.com'\n";
+		print "\n";
+		print "Common options:\n";
+		print " --auto-renew         automatically renew this certificate before it expires\n";
+		print " --no-auto-renew      don't automatically renew this certificate\n";
+		print " --ev                 purchase an extended validation (EV) certificate\n";
+		print " --coupon=CODE        use the given coupon code for a discount\n";
+		print " --invoice-note=NOTE  include the given note with the invoice\n";
+		print " --email-invoice-to=ADDRESS\n";
+		print "                      email an invoice to the given address\n";
+		print "\n";
+		print "Batch options:\n";
+		print " --approval=METHOD    use the given approval method (email or dns)\n";
+		print " --email=ADDRESS      use the given approver email address\n";
+		print " --timeout=SECONDS    wait at most SECONDS seconds for cert to be issued\n";
+		print " --no-wait            return immediately; don't wait for cert to be issued\n";
+		print " --temp               return immediately with a temporary certificate\n";
+		print "\n";
+		print "Advanced options:\n";
+		print " -f, --force          replace existing files, certificates\n";
+		print " --key-type=TYPE      type of key to generate ('rsa' or 'ecdsa')\n";
+		return 0;
+	}
+
+	my %opts;
+	my $auto_renew = undef;
+	my $force = 0;
+	my $cert_type = undef;
+	my $ev = 0;
+	my $approval_method = 'email';
+	my $approver_email = undef;
+	my $timeout = undef;
+	my $no_wait = 0;
+	my $accept_dummy = 0;
+	my $key_type = undef;
+	my $csr_path = undef;
+
+	my $getopt = Getopt::Long::Parser->new;
+	$getopt->configure(qw(no_ignore_case permute bundling));
+	$getopt->getoptions('auto-renew!', \$auto_renew,
+			    'force|f', \$force,
+			    'batch', \$batch, # compat with pre-1.0
+			    'type=s', \$cert_type,
+			    'ev', \$ev,
+			    'approval=s', \$approval_method,
+			    'email=s', \$approver_email,
+			    'timeout=i', \$timeout,
+			    'no-wait', \$no_wait,
+			    'temp', \$accept_dummy,
+			    'key-type=s', \$key_type,
+			    'csr=s', \$csr_path,
+			    'coupon=s', \$opts{coupon_code},
+			    'email-invoice-to=s', \$opts{email_invoice_to},
+			    'invoice-note=s', \$opts{invoice_note}) or return 2;
+
+	if (@ARGV != 1) {
+		print STDERR "Error: you must specify the hostname for the certificate.\n";
+		print STDERR "Example: sslmate buy www.example.com\n";
+		print STDERR "     or: sslmate buy '*.example.com'\n";
+		print STDERR "See 'sslmate help buy' for help.\n";
+		return 2;
+	}
+	if ($no_wait && $accept_dummy) {
+		print STDERR "Error: --no-wait and --temp are mutually exclusive.\n";
+		return 2;
+	}
+	if (defined($timeout) && $accept_dummy) {
+		print STDERR "Error: --timeout and --temp are mutually exclusive.\n";
+		return 2;
+	}
+	if (defined($timeout) && $no_wait) {
+		print STDERR "Error: --timeout and --no-wait are mutually exclusive.\n";
+		return 2;
+	}
+	$timeout = 0 if $no_wait;
+	if ($ev && !defined($timeout) && !$accept_dummy) {
+		# --ev implies --temp, unless --timeout or --temp were already specified
+		$accept_dummy = 1;
+	}
+	$timeout //= $DEFAULT_CERT_TIMEOUT;
+	if (defined($approver_email) && $approval_method ne 'email') {
+		print STDERR "Error: --email is only valid with --approval=email.\n";
+		return 2;
+	}
+	if ($batch && $approval_method eq 'email' && not defined($approver_email)) {
+		print STDERR "Error: in batch mode, you must specify the approver email with --email.\n";
+		print STDERR "See 'sslmate help buy' for help.\n";
+		return 2;
+	}
+
+	my $csr = undef;
+	if (defined $csr_path) {
+		my $csr_fh;
+		if (!open($csr_fh, '<', $csr_path)) {
+			print STDERR "Error: $csr_path: $!\n";
+			return 1;
+		}
+		$csr = do { local $/; <$csr_fh> };
+		close($csr_fh);
+	}
+
+	my $cn = lc $ARGV[0];
+	my $years = undef;
+	$cert_type //= $ev ? 'ev' : 'dv';
+	validate_cn($cn) or return 1;
+
+	load_config;
+	if (!is_linked) {
+		if ($batch || not(-t STDIN)) {
+			print STDERR "Error: you have not yet linked this system with your SSLMate account.\n";
+			print STDERR "Please run 'sslmate link'.\n";
+			return 1;
+		}
+		do_link or return 1;
+	}
+
+	init_default_paths;
 
 	# Future TODO: support reusing key file if one already exists
 
@@ -1451,16 +1640,16 @@ sub do_buy {
 	# 0. Retrieve the current cert object from the server
 	#
 	my ($status, $cert);
-	($status, $cert) = authed_api_call('GET', '/certs/' . qs_escape($cn), { expand => ['current','pending','csr'] }) or exit 1;
+	($status, $cert) = authed_api_call('GET', '/certs/' . qs_escape($cn), { expand => ['current','pending','csr'] }) or return 1;
 	if ($status != 200) {
 		print STDERR "Error: " . $cert->{message} . "\n";
-		exit 1;
+		return 1;
 	}
 	$cn = $cert->{cn}; # So that we use the canonical CN
 
 	if (!$cert->{dn}) {
 		print STDERR "Error: your account has no contact details set. Please visit https://sslmate.com/account to update your account.\n";
-		exit 1;
+		return 1;
 	}
 	#
 	# 1. Make sure files/certs don't already exist
@@ -1482,7 +1671,7 @@ sub do_buy {
 		}
 		if ($errors) {
 			print STDERR "Tip: use --force to override the above error" . ($errors == 1 ? "" : "s") . ".\n";
-			exit 1;
+			return 1;
 		}
 	}
 
@@ -1494,15 +1683,15 @@ sub do_buy {
 		# Get product/pricing info from the server, ask user for confirmation
 		#
 
-		my $product_info = get_product_info($cert_type // $cert->{type}, $cn, years => $years, coupon_code => $opts{coupon_code}) or exit 1;
+		my $product_info = get_product_info($cert_type // $cert->{type}, $cn, years => $years, coupon_code => $opts{coupon_code}) or return 1;
 
-		exit 1 unless order_can_be_paid($product_info);
+		return 1 unless order_can_be_paid($product_info);
 
 		if ($approval_method eq 'email') {
 			if (defined $approver_email) {
 				if (!grep { $_ eq $approver_email } @{$product_info->{approver_emails}}) {
 					print STDERR "Error: $approver_email: not an acceptable approver email for $cn\n";
-					exit 1;
+					return 1;
 				}
 			} else {
 				print "To prove that you are authorized to obtain a certificate for $cn,\n";
@@ -1511,14 +1700,14 @@ sub do_buy {
 				print "\n";
 				print "How would you like to prove authorization?\n";
 				print "\n";
-				($approval_method, $approver_email) = prompt_for_approval($product_info) or exit 1;
+				($approval_method, $approver_email) = prompt_for_approval($product_info) or return 1;
 			}
 		}
 
 		prompt_for_order_confirmation($product_info,
 					      approver_email => $approver_email,
 					      approval_method => $approval_method,
-					      auto_renew => $auto_renew // $cert->{auto_renew}) or exit 1;
+					      auto_renew => $auto_renew // $cert->{auto_renew}) or return 1;
 
 		$authorized_charge_currency = $product_info->{price}->{currency};
 		$authorized_charge = $product_info->{price}->{amount_due};
@@ -1601,130 +1790,6 @@ sub do_buy {
 		return 12 unless $timeout == 0;
 	}
 	return 0;
-}
-
-sub command_buy {
-	local @ARGV = @_;
-
-	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
-		print "Usage: sslmate buy [OPTIONS] HOSTNAME\n\n";
-		print "Example: sslmate buy www.example.com\n";
-		print "         sslmate buy '*.example.com'\n";
-		print "\n";
-		print "Common options:\n";
-		print " --auto-renew         automatically renew this certificate before it expires\n";
-		print " --no-auto-renew      don't automatically renew this certificate\n";
-		print " --ev                 purchase an extended validation (EV) certificate\n";
-		print " --coupon=CODE        use the given coupon code for a discount\n";
-		print " --invoice-note=NOTE  include the given note with the invoice\n";
-		print " --email-invoice-to=ADDRESS\n";
-		print "                      email an invoice to the given address\n";
-		print "\n";
-		print "Batch options:\n";
-		print " --approval=METHOD    use the given approval method (email or dns)\n";
-		print " --email=ADDRESS      use the given approver email address\n";
-		print " --timeout=SECONDS    wait at most SECONDS seconds for cert to be issued\n";
-		print " --no-wait            return immediately; don't wait for cert to be issued\n";
-		print " --temp               return immediately with a temporary certificate\n";
-		print "\n";
-		print "Advanced options:\n";
-		print " -f, --force          replace existing files, certificates\n";
-		print " --key-type=TYPE      type of key to generate ('rsa' or 'ecdsa')\n";
-		return 0;
-	}
-
-	my %opts;
-	my $auto_renew = undef;
-	my $force = 0;
-	my $ev = 0;
-	my $approval_method = 'email';
-	my $approver_email = undef;
-	my $timeout = undef;
-	my $no_wait = 0;
-	my $accept_dummy = 0;
-	my $key_type = undef;
-	my $csr_path = undef;
-
-	my $getopt = Getopt::Long::Parser->new;
-	$getopt->configure(qw(no_ignore_case permute bundling));
-	$getopt->getoptions('auto-renew!', \$auto_renew,
-			    'force|f', \$force,
-			    'batch', \$batch, # compat with pre-1.0
-			    'ev', \$ev,
-			    'approval=s', \$approval_method,
-			    'email=s', \$approver_email,
-			    'timeout=i', \$timeout,
-			    'no-wait', \$no_wait,
-			    'temp', \$accept_dummy,
-			    'key-type=s', \$key_type,
-			    'csr=s', \$csr_path,
-			    'coupon=s', \$opts{coupon_code},
-			    'email-invoice-to=s', \$opts{email_invoice_to},
-			    'invoice-note=s', \$opts{invoice_note}) or return 2;
-
-	if (@ARGV != 1) {
-		print STDERR "Error: you must specify the hostname for the certificate.\n";
-		print STDERR "Example: sslmate buy www.example.com\n";
-		print STDERR "     or: sslmate buy '*.example.com'\n";
-		print STDERR "See 'sslmate help buy' for help.\n";
-		return 2;
-	}
-	if ($no_wait && $accept_dummy) {
-		print STDERR "Error: --no-wait and --temp are mutually exclusive.\n";
-		return 2;
-	}
-	if (defined($timeout) && $accept_dummy) {
-		print STDERR "Error: --timeout and --temp are mutually exclusive.\n";
-		return 2;
-	}
-	if (defined($timeout) && $no_wait) {
-		print STDERR "Error: --timeout and --no-wait are mutually exclusive.\n";
-		return 2;
-	}
-	$timeout = 0 if $no_wait;
-	if ($ev && !defined($timeout) && !$accept_dummy) {
-		# --ev implies --temp, unless --timeout or --temp were already specified
-		$accept_dummy = 1;
-	}
-	$timeout //= $DEFAULT_CERT_TIMEOUT;
-	if (defined($approver_email) && $approval_method ne 'email') {
-		print STDERR "Error: --email is only valid with --approval=email.\n";
-		return 2;
-	}
-	if ($batch && $approval_method eq 'email' && not defined($approver_email)) {
-		print STDERR "Error: in batch mode, you must specify the approver email with --email.\n";
-		print STDERR "See 'sslmate help buy' for help.\n";
-		return 2;
-	}
-
-	my $csr = undef;
-	if (defined $csr_path) {
-		my $csr_fh;
-		if (!open($csr_fh, '<', $csr_path)) {
-			print STDERR "Error: $csr_path: $!\n";
-			return 1;
-		}
-		$csr = do { local $/; <$csr_fh> };
-		close($csr_fh);
-	}
-
-	my $cn = lc $ARGV[0];
-	my $years = undef;
-	my $cert_type = $ev ? 'ev' : 'dv';
-	validate_cn($cn) or return 1;
-
-	load_config;
-	if (!is_linked) {
-		if ($batch || not(-t STDIN)) {
-			print STDERR "Error: you have not yet linked this system with your SSLMate account.\n";
-			print STDERR "Please run 'sslmate link'.\n";
-			return 1;
-		}
-		do_link or return 1;
-	}
-
-	init_default_paths;
-	return do_buy($cn, $csr, $cert_type, $years, $force, $timeout, $accept_dummy, $auto_renew, $approval_method, $approver_email, $key_type, %opts);
 }
 
 sub command_reissue {
@@ -3218,6 +3283,8 @@ sub interpolate_config_template {
 				$out .= $paths->{key};
 			} elsif ($varname eq 'CHAIN_PATH') {
 				$out .= $paths->{chain};
+			} elsif ($varname eq 'DHPARAMS_PATH') {
+				$out .= "$SHARE_DIR/dhparams/dh2048-group14.pem";
 			} elsif ($varname =~ /^(.*)_PATH$/ && exists $file_types{lc $1}) {
 				my $file_type = lc $1;
 				if (not exists $paths->{$file_type}) {
@@ -3305,12 +3372,16 @@ sub command_help {
 	local @ARGV = @_;
 
 	my $print_libexec_dir = 0;
+	my $print_share_dir = 0;
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
-	$getopt->getoptions('libexec-dir', \$print_libexec_dir) or return 2;
+	$getopt->getoptions('libexec-dir', \$print_libexec_dir,
+			    'share-dir', \$print_share_dir) or return 2;
 
 	if ($print_libexec_dir) {
 		print "$LIBEXEC_DIR\n";
+	} elsif ($print_share_dir) {
+		print "$SHARE_DIR\n";
 	} elsif (@ARGV == 0 || $ARGV[0] eq 'help') {
 		print_usage(*STDOUT);
 	} else {

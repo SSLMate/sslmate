@@ -11,7 +11,7 @@ To use the `sslmate` command, you must create a free account at https://sslmate.
 SSLMate officially supports:
 
  * Debian 6, 7, and 8
- * Ubuntu 10.04, 12.04, 13.10, and 14.04
+ * Ubuntu 12.04, 14.04, 14.10, and 15.04
  * RHEL/CentOS 6 and 7
  * Mac OS X 10.9 and above
 
@@ -28,13 +28,13 @@ SSLMate can run on other Unix-based operating systems provided the following sof
    URI                 liburi-perl                  perl-URI
    Term::ReadKey       libterm-readkey-perl         perl-TermReadKey
    JSON::PP [1]        libjson-perl                 perl-JSON
-   WWW::Curl [2]       libwww-curl-perl             perl-WWW-Curl
+   LWP (>= 6) [2]      libwww-perl                  perl-libwww-perl
    ```
 
   Notes:
 
    1. `JSON::PP` is included with Perl 5.14 and later.
-   2. `WWW::Curl` is optional; if not available SSLMate will fall back to executing the `curl` command directly.
+   2. `libwww-perl` is optional; if not available SSLMate will fall back to executing the `curl` command directly.
 
 
 ## Optional Dependencies
@@ -43,9 +43,7 @@ To use automatic DNS approval with Route 53, the following additional software m
 
  * Python 2.6, Python 2.7, Python 3, or newer.
  * Boto (Python module) 2.2 or newer.
-   * Debian 6 package:      `python-boto` (requires [squeeze-backports](http://backports.debian.org/Instructions/))
-   * Debian 7+ package:     `python-boto`
-   * Ubuntu 12.04+ package: `python-boto`
+   * Debian/Ubuntu package: `python-boto` (on Debian 6, requires [backports](http://backports.debian.org/Instructions/))
    * RHEL/CentOS package:   `python-boto` (requires [EPEL repository](https://fedoraproject.org/wiki/EPEL))
 
 
