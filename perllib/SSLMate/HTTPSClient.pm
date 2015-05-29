@@ -124,6 +124,9 @@ sub request_via_lwp {
 		# This is how LWP::UserAgent reports timeouts
 		die "$msg\n";
 	}
+	if (($response->header('Client-Warning')//'') eq 'Internal response') {
+		die $response->content . "\n";
+	}
 
 	return ($response->code, $response->content_type, \$response->content);
 }
@@ -247,10 +250,10 @@ sub request {
 	my $self = shift;
 	my ($method, $uri, $headers, $creds, $post_data) = @_;
 
-	if ($self->{has_lwp}) {
-		return $self->request_via_lwp($method, $uri, $headers, $creds, $post_data);
-	} elsif ($self->{has_curl_command}) {
+	if ($self->{has_curl_command}) {
 		return $self->request_via_curl_command($method, $uri, $headers, $creds, $post_data);
+	} elsif ($self->{has_lwp}) {
+		return $self->request_via_lwp($method, $uri, $headers, $creds, $post_data);
 	} elsif ($self->{has_curl_module}) {
 		return $self->request_via_curl_module($method, $uri, $headers, $creds, $post_data);
 	} else {
@@ -263,7 +266,7 @@ sub new {
 	my $self = {
 		has_curl_command => has_curl_command,
 		has_curl_module => eval { require WWW::Curl::Easy; 1 } // 0,
-		has_lwp => eval { require LWP::UserAgent; $LWP::UserAgent::VERSION >= 6 } // 0, # LWP5 does not properly validate certs!
+		has_lwp => eval { require LWP::UserAgent; require LWP::Protocol::https; $LWP::UserAgent::VERSION >= 6 && $LWP::Protocol::https::VERSION >= 6 } // 0, # LWP5 does not properly validate certs!
 	};
 #	print STDERR "has_curl_command=" . $self->{has_curl_command} . "\n";
 #	print STDERR "has_curl_module=" . $self->{has_curl_module} . "\n";

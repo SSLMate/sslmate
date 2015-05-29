@@ -36,19 +36,20 @@ following software is installed:
  * The following Perl modules, which can be installed by running
    `cpan MODULENAME` or by installing the corresponding distro package.
 
-   Module Name         Debian/Ubuntu Package        RHEL/CentOS Package
-   -------------------------------------------------------------------------
-   URI                 liburi-perl                  perl-URI
-   Term::ReadKey       libterm-readkey-perl         perl-TermReadKey
-   JSON::PP [1]        libjson-perl                 perl-JSON
-   LWP (>= 6) [2]      libwww-perl                  perl-libwww-perl
+   Module Name               Debian/Ubuntu Package       RHEL/CentOS Package
+   -----------------------------------------------------------------------------
+   URI                       liburi-perl                 perl-URI
+   Term::ReadKey             libterm-readkey-perl        perl-TermReadKey
+   JSON::PP [1]              libjson-perl                perl-JSON
+   LWP (>= 6) [2]            libwww-perl                 perl-libwww-perl
+   LWP::Protocol::https [2]  liblwp-protocol-https-perl  perl-LWP-Protocol-https
 
 
    Notes:
      [1] JSON::PP is included with Perl 5.14 and later.
 
-     [2] libwww-perl is optional; if not available SSLMate will fall back
-         to executing the `curl` command directly.
+     [2] LWP is optional; if not available SSLMate will fall back to
+         executing the `curl` command directly.
 
 
 OPTIONAL DEPENDENCIES
