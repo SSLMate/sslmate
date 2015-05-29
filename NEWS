@@ -1,3 +1,9 @@
+v1.2.2 (2015-05-29)
+ * Bugfix release.
+ * Don't try to use LWP for HTTPS if LWP::Protocol::https not installed.
+ * Document that LWP::Protocol::https is required in addition to LWP.
+ * Properly report errors from LWP.
+
 v1.2.1 (2015-05-26)
  * Fix certificate errors on OS X by preferring curl over LWP Perl module.
 
