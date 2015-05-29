@@ -124,6 +124,9 @@ sub request_via_lwp {
 		# This is how LWP::UserAgent reports timeouts
 		die "$msg\n";
 	}
+	if (($response->header('Client-Warning')//'') eq 'Internal response') {
+		die $response->content . "\n";
+	}
 
 	return ($response->code, $response->content_type, \$response->content);
 }
