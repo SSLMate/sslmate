@@ -1864,7 +1864,7 @@ sub command_buy {
 	my $key_file;
 	my $exit_with_error = sub {
 		unlink($paths->{key}) if defined($key_file);
-		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/type approval_method approver_email max_sans sans csr/), 'application/json') if defined($cert);
+		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/type approval_method approver_email max_sans sans csr/), 'application/json') if defined($cert) && $cert->{exists};
 		exit 1;
 	};
 	unless (defined $csr) {
@@ -3442,7 +3442,7 @@ sub do_import {
 
 	my $exit_with_error = sub {
 		unlink($paths->{key}) if $install_locally && !$key_already_installed;
-		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert_obj, qw/type approval_method approver_email csr/)) if defined($cert_obj);
+		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert_obj, qw/type approval_method approver_email csr/)) if defined($cert_obj) && $cert_obj->{exists};
 		exit 1;
 	};
 
