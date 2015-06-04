@@ -1425,15 +1425,24 @@ sub order_can_be_paid {
 sub prompt_for_order_confirmation {
 	my ($product_info, %other_info) = @_;
 
+	my $cn = $product_info->{cn};
+
 	print "\n";
 	print "============ Order summary ============\n";
-	my @sans = grep { $_ ne $product_info->{cn} } @{$product_info->{default_sans}};
+	my @sans;
+	if (defined $other_info{sans}) {
+		for my $san (@{$other_info{sans}}) {
+			push @sans, $san->{value} if $san->{type} eq 'dns';
+		}
+	} else {
+		push @sans, grep { $_ ne $cn } @{$product_info->{default_sans}};
+	}
 	if (@sans) {
 		print "      Hostnames: ";
 	} else {
 		print "       Hostname: ";
 	}
-	print $product_info->{cn} . "\n";
+	print $cn . "\n";
 	for my $san (@sans) {
 		print "                 " . $san . "\n";
 	}
@@ -1448,10 +1457,31 @@ sub prompt_for_order_confirmation {
 	if (defined $other_info{auto_renew}) {
 		print "     Auto-Renew: " . ($other_info{auto_renew} ? "Yes" : "No") . "\n";
 	}
-	if (defined $other_info{approver_email}) {
-		print " Approver Email: " . $other_info{approver_email} . "\n";
-	} elsif (defined $other_info{approval_method}) {
-		print "Approval Method: " . format_approval_method($other_info{approval_method}) . "\n";
+	if (defined $other_info{approval_methods}) {
+		if (defined $other_info{sans}) {
+			my $first = 1;
+			for my $hostname ($cn, @sans) {
+				if ($first) {
+					print "Approval Method: ";
+					$first = 0;
+				} else {
+					print "                 ";
+				}
+				my $approval_method = $other_info{approval_methods}->{$hostname};
+				if ($approval_method eq 'email') {
+					print "Email to " . $other_info{approver_emails}->{$hostname} . " (for $hostname)\n";
+				} else {
+					print format_approval_method($approval_method) . " (for $hostname)\n";
+				}
+			}
+		} else {
+			my $approval_method = $other_info{approval_methods}->{$cn};
+			if ($approval_method eq 'email') {
+				print " Approver Email: " . $other_info{approver_emails}->{$cn} . "\n";
+			} else {
+				print "Approval Method: " . format_approval_method($approval_method) . "\n";
+			}
+		}
 	}
 	print "\n";
 	print "=========== Payment details ===========\n";
@@ -1850,10 +1880,10 @@ sub command_buy {
 	# Ask user for confirmation, if not in batch mode
 	#
 	unless ($batch) {
-		# TODO TODO: pass SANs to the confirmation prompt
 		prompt_for_order_confirmation($product_info,
-					      approver_email => $approver_emails{$cn},
-					      approval_method => $approval_methods{$cn},
+					      sans => $max_sans ? \@san_objs : undef,
+					      approver_emails => \%approver_emails,
+					      approval_methods => \%approval_methods,
 					      auto_renew => $auto_renew // $cert->{auto_renew}) or return 1;
 
 	}
@@ -2283,9 +2313,10 @@ sub command_renew {
 
 		exit 1 unless order_can_be_paid($product_info);
 
+		# TODO TODO: pass SAN info to prompt_for_order_confirmation
 		prompt_for_order_confirmation($product_info,
-					      approver_email => $cert->{approver_email},
-					      approval_method => $cert->{approval_method},
+					      approver_emails => { $cn => $cert->{approver_email} },
+					      approval_methods => { $cn => $cert->{approval_method} },
 					      auto_renew => $cert->{auto_renew}) or exit 1;
 
 		$authorized_charge_currency = $product_info->{price}->{currency};
@@ -3248,7 +3279,7 @@ sub command_test {
 	return 0;
 }
 
-sub command_import {
+sub command_import { # TODO TODO: support for importing SAN certs
 	local @ARGV = @_;
 
 	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
