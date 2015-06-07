@@ -427,6 +427,7 @@ EOF
 our %file_types = (
 	crt => 'Certificate',
 	chain => 'Certificate chain',
+	root => 'Root certificate',
 	chained => 'Certificate with chain',
 	combined => 'Combined PEM file',
 	p12 => 'PKCS#12 file',
@@ -435,6 +436,7 @@ our %file_types = (
 our %file_extensions = (
 	crt => '.crt',
 	chain => '.chain.crt',
+	root => '.root.crt',
 	chained => '.chained.crt',
 	combined => '.combined.pem',
 	p12 => '.p12',
@@ -460,6 +462,7 @@ sub get_cert_paths {
 	$paths->{key} = $key_directory . $cn . ".key";
 	$paths->{crt} = $cert_directory . $cn . ".crt";
 	$paths->{chain} = $cert_directory . $cn . ".chain.crt";
+	$paths->{root} = $cert_directory . $cn . ".root.crt";
 	for my $type (split /,\s*|\s+/, get_config("cert_formats", "chained")) {
 		die "Unknown file type in config: $type\n" unless exists $file_types{$type};
 		$paths->{$type} = $cert_directory . $cn . $file_extensions{$type};
@@ -483,6 +486,8 @@ sub print_cert_paths {
 		push @rows, ["Private key", $paths->{key}];
 	}
 
+	# Don't include root cert in output, b/c the root is generally not needed for configuration,
+	# and we want to keep output here short and simple.
 	for my $type (qw/crt chain chained combined p12 jks/) {
 		next unless defined $paths->{$type};
 
@@ -609,13 +614,16 @@ sub write_jks_file {
 }
 
 sub write_cert_file {
-	my ($type, $file, $key, $crt, $chain) = @_;
+	my ($type, $file, $key, $crt, $chain, $root) = @_;
 
 	if ($type eq 'crt') {
 		print $file $crt;
 		return 1;
 	} elsif ($type eq 'chain') {
 		print $file $chain;
+		return 1;
+	} elsif ($type eq 'root') {
+		print $file $root;
 		return 1;
 	} elsif ($type eq 'chained') {
 		print $file $crt;
@@ -635,7 +643,7 @@ sub write_cert_file {
 }
 
 sub write_cert_files {
-	my ($paths, $new_key_filename, $crt, $chain) = @_;
+	my ($paths, $new_key_filename, $crt, $chain, $root) = @_;
 
 	my $key = read_file($new_key_filename // $paths->{key});
 	my %files;
@@ -658,7 +666,7 @@ sub write_cert_files {
 			chmod($default_mode & ~umask, $tempfile);
 		}
 
-		write_cert_file($type, $tempfile, $key, $crt, $chain) or next; # TODO: if this fails, should we delete the current file of this type?  Should we hide it from the cert path output?
+		write_cert_file($type, $tempfile, $key, $crt, $chain, $root) or next; # TODO: if this fails, should we delete the current file of this type?  Should we hide it from the cert path output?
 
 		$files{$type} = $tempfile;
 	}
@@ -1251,11 +1259,11 @@ sub wait_for_cert {
 			$poll = 180 if $poll > 180; # upper bound of 180 seconds
 		}
 
-		my ($status, $response) = authed_api_call('GET', '/certs/' . qs_escape($cn) . '/instances/' . $cert_instance_id, { poll => $poll, expand => ['crt','chain'] });
+		my ($status, $response) = authed_api_call('GET', '/certs/' . qs_escape($cn) . '/instances/' . $cert_instance_id, { poll => $poll, expand => ['crt','chain','root'] });
 		exit 1 unless defined $response; # TODO: repeat ? b/c this could be a timeout situation
 
 		if ($status == 200) {
-			return ($response->{crt}, format_chain($response->{chain}), $response->{state} eq 'active' ? 0 : 1);
+			return ($response->{crt}, format_chain($response->{chain}), $response->{root}, $response->{state} eq 'active' ? 0 : 1);
 		} elsif ($response->{reason} eq 'not_ready') {
 			my $now = time;
 			my $retry_after = $response->{retry_after} // 5;
@@ -1483,10 +1491,10 @@ sub do_wait_for_cert {
 
 	print "Waiting for ownership confirmation...\n" unless $accept_dummy;
 
-	my ($crt, $chain_crt, $is_dummy) = wait_for_cert($cn, $cert_instance->{id}, $timeout, $accept_dummy) or return 0;
+	my ($crt, $chain_crt, $root_crt, $is_dummy) = wait_for_cert($cn, $cert_instance->{id}, $timeout, $accept_dummy) or return 0;
 	$chain_crt //= '';
 
-	write_cert_files($paths, $new_key_filename, $crt, $chain_crt);
+	write_cert_files($paths, $new_key_filename, $crt, $chain_crt, $root_crt);
 
 	print "\n";
 
@@ -2348,7 +2356,7 @@ sub command_download {
 	for my $cn (@ARGV) {
 		$cn = lc $cn;
 		validate_cn($cn) or return 1;
-		my ($status, $cert) = authed_api_call('GET', '/certs/' . qs_escape($cn), { expand => ['current.crt', 'current.chain', 'pending.crt', 'pending.chain'] }) or return 1;
+		my ($status, $cert) = authed_api_call('GET', '/certs/' . qs_escape($cn), { expand => ['current.crt', 'current.chain', 'current.root', 'pending.crt', 'pending.chain', 'pending.root'] }) or return 1;
 		if ($status != 200) {
 			print STDERR "Error: " . $cert->{message} . "\n";
 			return 1;
@@ -2368,7 +2376,7 @@ sub command_download {
 			$new_pubkey_hash = sha256_hex(extract_pubkey_from_key($paths->{key} . ".new"));
 		}
 
-		my ($crt, $chain);
+		my ($crt, $chain, $root);
 		my $is_dummy = 0;
 		my $install_new_key = 0;
 		my $key_is_out_of_date = 0;
@@ -2376,16 +2384,19 @@ sub command_download {
 		if ($cert->{current} && defined($new_pubkey_hash) && $cert->{current}->{pubkey_hash} eq $new_pubkey_hash) {
 			$crt = $cert->{current}->{crt};
 			$chain = format_chain($cert->{current}->{chain});
+			$root = $cert->{current}->{root};
 			$install_new_key = 1;
 		} elsif ($cert->{current} && (!defined($pubkey_hash) || $cert->{current}->{pubkey_hash} eq $pubkey_hash)) {
 			$crt = $cert->{current}->{crt};
 			$chain = format_chain($cert->{current}->{chain});
+			$root = $cert->{current}->{root};
 		} elsif (!$cert->{current} && $cert->{pending} && (!defined($pubkey_hash) || $cert->{pending}->{pubkey_hash} eq $pubkey_hash)) {
 			$crt = $cert->{pending}->{crt};
 			$chain = format_chain($cert->{pending}->{chain});
+			$root = $cert->{pending}->{root};
 			$is_dummy = 1;
 		} elsif (defined($pubkey_hash)) {
-			my ($status, $response) = authed_api_call('GET', '/certs/'.qs_escape($cn).'/instances/pubkey_hash:'.qs_escape($pubkey_hash), { expand => ['crt', 'chain'] }) or return 1;
+			my ($status, $response) = authed_api_call('GET', '/certs/'.qs_escape($cn).'/instances/pubkey_hash:'.qs_escape($pubkey_hash), { expand => ['crt', 'chain', 'root'] }) or return 1;
 			if ($status != 200) {
 				if ($response->{reason} eq 'no_such_pubkey_hash') {
 					print STDERR "Error: $cn: There is no certificate in your account that matches the private key " . $paths->{key} . "\n";
@@ -2403,6 +2414,7 @@ sub command_download {
 			}
 			$crt = $response->{crt};
 			$chain = format_chain($response->{chain});
+			$root = $response->{root};
 			$is_dummy = 1 if $response->{state} ne 'active';
 			$key_is_out_of_date = 1;
 		} else {
@@ -2424,7 +2436,8 @@ sub command_download {
 		if (not($missing_files) &&
 				not($install_new_key) &&
 				file_contents_are($paths->{crt}, $crt) &&
-				file_contents_are($paths->{chain}, $chain)) {
+				file_contents_are($paths->{chain}, $chain) &&
+				file_contents_are($paths->{root}, $root)) {
 			# Files did not change
 			next;
 		}
@@ -2439,6 +2452,7 @@ sub command_download {
 			       paths => $paths,
 			       crt => $crt,
 			       chain => $chain,
+			       root => $root,
 			       is_dummy => $is_dummy,
 			       install_new_key => $install_new_key,
 			       key_is_out_of_date => $key_is_out_of_date,
@@ -2457,7 +2471,8 @@ sub command_download {
 		write_cert_files($paths,
 		                 $cert->{install_new_key} ? $paths->{key} . ".new" : undef,
 		                 $cert->{crt},
-		                 $cert->{chain});
+		                 $cert->{chain},
+				 $cert->{root});
 
 		my ($key_status, $cert_status);
 		if (! -f $paths->{key}) {
@@ -3233,7 +3248,7 @@ sub do_import {
 	print "Importing certificate for $cn...\n";
 	my $cert_instance;
 	($status, $cert_instance) = authed_api_call('POST', '/certs/' . qs_escape($cn) . '/instances',
-							{ expand => ['chain'] },
+							{ expand => ['chain','root'] },
 							{ crt => \$crt }) or $exit_with_error->();
 	if ($status != 200) {
 		print STDERR "Error: " . $cert_instance->{message} . "\n";
@@ -3249,7 +3264,7 @@ sub do_import {
 			close $key_file;
 		}
 
-		write_cert_files($paths, undef, $crt, format_chain($cert_instance->{chain}));
+		write_cert_files($paths, undef, $crt, format_chain($cert_instance->{chain}), $cert_instance->{root});
 	}
 
 	print "\n";
