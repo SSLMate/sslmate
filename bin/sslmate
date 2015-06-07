@@ -430,6 +430,7 @@ our %file_types = (
 	root => 'Root certificate',
 	chained => 'Certificate with chain',
 	combined => 'Combined PEM file',
+	'chain+root' => 'Certificate chain with root',
 	p12 => 'PKCS#12 file',
 	jks => 'Java keystore',
 );
@@ -439,6 +440,7 @@ our %file_extensions = (
 	root => '.root.crt',
 	chained => '.chained.crt',
 	combined => '.combined.pem',
+	'chain+root' => '.chain+root.crt',
 	p12 => '.p12',
 	jks => '.jks',
 );
@@ -633,6 +635,10 @@ sub write_cert_file {
 		print $file $key;
 		print $file $crt;
 		print $file $chain;
+		return 1;
+	} elsif ($type eq 'chain+root') {
+		print $file $chain;
+		print $file $root;
 		return 1;
 	} elsif ($type eq 'p12') {
 		return write_pkcs12_file($file, $key, $crt, $chain);
