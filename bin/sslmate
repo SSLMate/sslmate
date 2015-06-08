@@ -1692,7 +1692,6 @@ sub command_buy {
 	my %approval_methods;
 	my $default_approver_email = undef;
 	my %approver_emails;
-	my $max_sans = undef;
 	my @sans;
 	my $timeout = undef;
 	my $no_wait = 0;
@@ -1709,7 +1708,6 @@ sub command_buy {
 			    'ev', \$ev,
 			    'approval=s', parse_approval_arg(\$default_approval_method, \%approval_methods),
 			    'email=s', parse_approval_arg(\$default_approver_email, \%approver_emails),
-			    'max-sans=i', \$max_sans,
 			    'san=s', \@sans,
 			    'timeout=i', \$timeout,
 			    'no-wait', \$no_wait,
@@ -1725,11 +1723,6 @@ sub command_buy {
 		print STDERR "Example: sslmate buy www.example.com\n";
 		print STDERR "     or: sslmate buy '*.example.com'\n";
 		print STDERR "See 'sslmate help buy' for help.\n";
-		return 2;
-	}
-	$max_sans //= scalar @sans;
-	if (@sans > $max_sans) {
-		print STDERR "Error: the number of SANs (" . scalar(@sans) . ") exceeds the value of --max-sans ($max_sans).\n";
 		return 2;
 	}
 	if ($no_wait && $accept_dummy) {
@@ -1834,7 +1827,7 @@ sub command_buy {
 		$product_info = get_product_info($cert_type // $cert->{type}, $cn,
 						 years => $years,
 						 coupon_code => $opts{coupon_code},
-						 sans => $max_sans) or return 1;
+						 sans => int(@sans)) or return 1;
 
 		return 1 unless order_can_be_paid($product_info);
 
@@ -1881,7 +1874,7 @@ sub command_buy {
 	#
 	unless ($batch) {
 		prompt_for_order_confirmation($product_info,
-					      sans => $max_sans ? \@san_objs : undef,
+					      sans => int(@san_objs) ? \@san_objs : undef,
 					      approver_emails => \%approver_emails,
 					      approval_methods => \%approval_methods,
 					      auto_renew => $auto_renew // $cert->{auto_renew}) or return 1;
@@ -1894,7 +1887,7 @@ sub command_buy {
 	my $key_file;
 	my $exit_with_error = sub {
 		unlink($paths->{key}) if defined($key_file);
-		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/type approval_method approver_email max_sans sans csr/), 'application/json') if defined($cert) && $cert->{exists};
+		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/type approval_method approver_email sans csr/), 'application/json') if defined($cert) && $cert->{exists};
 		exit 1;
 	};
 	unless (defined $csr) {
@@ -1918,8 +1911,7 @@ sub command_buy {
 			type		=> $cert_type,
 			approval_method	=> $approval_methods{$cn},
 			approver_email	=> $approver_emails{$cn},
-			max_sans	=> $max_sans,
-			sans		=> \@san_objs,
+			sans		=> int(@san_objs) ? \@san_objs : undef,
 			csr		=> $csr };
 
 	($status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['dns_approval.status','http_approval.status'] }, $request, 'application/json') or $exit_with_error->();
@@ -2945,7 +2937,6 @@ sub command_edit {
 	my %approval_methods;
 	my $default_approver_email;
 	my %approver_emails;
-	my $max_sans;
 	my @add_sans;
 	my @rm_sans;
 	my $type;
@@ -2955,7 +2946,6 @@ sub command_edit {
 	$getopt->getoptions('auto-renew!', \$auto_renew,
 			    'approval=s', parse_approval_arg(\$default_approval_method, \%approval_methods),
 			    'email=s', parse_approval_arg(\$default_approver_email, \%approver_emails),
-			    'max-sans=i', \$max_sans,
 			    'add-san=s', \@add_sans,
 			    'rm-san=s', \@rm_sans,
 			    'type=s', \$type) or return 2;
@@ -3065,7 +3055,7 @@ sub command_edit {
 
 	if ($new_cert->{approval_method} eq 'email' && not(defined $new_cert->{approver_email})) {
 		print STDERR "Error: $cn: no approver email defined for this hostname.\n";
-		if ($cert->{max_sans}) {
+		if ($cert->{sans}) {
 			print STDERR "Tip: use '--email $cn=ADDRESS' to specify the approver email for this hostname.\n";
 		} else {
 			print STDERR "Tip: use '--email ADDRESS' to specify the approver email.\n";
@@ -3076,15 +3066,8 @@ sub command_edit {
 	$modified_approval ||= !compare_approval_method($cert, $new_cert);
 
 	$new_cert->{auto_renew} = to_json_bool($auto_renew) if defined $auto_renew;
-	$new_cert->{max_sans} = $max_sans if defined $max_sans;
 	$new_cert->{type} = $type if defined $type;
 	$new_cert->{sans} = \@new_san_objs if $modified_sans;
-
-	if (@add_sans && @new_san_objs > ($new_cert->{max_sans} // $cert->{max_sans})) {
-		print STDERR "Error: number of SANs exceeds the maximum number.\n";
-		print STDERR "Tip: set this certificate's max-sans property to at least " . int(@new_san_objs) . " before adding more SANs.\n";
-		exit 1;
-	}
 
 	($cert_status, $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['pending','dns_approval.status','http_approval.status'] }, $new_cert, 'application/json') or return 1;
 	if ($cert_status != 200) {
@@ -3094,7 +3077,7 @@ sub command_edit {
 
 	if ($modified_approval) {
 		if (!prepare_approval($cert, $new_cert)) {
-			authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/approval_method approver_email auto_renew max_sans type sans/), 'application/json');
+			authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/approval_method approver_email auto_renew type sans/), 'application/json');
 			return 1;
 		}
 	}
@@ -3103,7 +3086,7 @@ sub command_edit {
 	# If this cert is pending, and we just changed the approval method, redo approval
 	#
 	if (defined($new_cert->{pending}) && $modified_approval) {
-		if (not($new_cert->{max_sans}) && $new_cert->{approval_method} eq 'email') {
+		if (not($new_cert->{sans}) && $new_cert->{approval_method} eq 'email') {
 			print "Resending approval email to " . $new_cert->{approver_email} . "... ";
 		} else {
 			print "Re-initiating certificate approval... ";
