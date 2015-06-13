@@ -3413,7 +3413,7 @@ sub do_import {
 			if ($san->{type} ne 'dns') {
 				$has_nondns_sans = 1;
 			} elsif (!grep { $_ eq $san->{value} } @{$product_info->{default_sans}}) {
-				push @missing_sans, $san;
+				push @missing_sans, $san->{value};
 			}
 		}
 		if ($has_nondns_sans) {

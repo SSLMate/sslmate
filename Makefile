@@ -34,7 +34,7 @@ bin/sslmate.bin: bin/sslmate
 		-e "s|DEFAULT_LIBEXEC_DIR = undef|DEFAULT_LIBEXEC_DIR = '$(LIBEXECDIR)'|" \
 		-e "s|DEFAULT_SHARE_DIR = undef|DEFAULT_SHARE_DIR = '$(SHAREDIR)'|" \
 		-e "s|^use lib.*|use lib '$(PERLLIBDIR)';|" \
-		< $< > $@
+		< bin/sslmate > bin/sslmate.bin
 
 #
 # Clean
