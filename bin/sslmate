@@ -425,7 +425,7 @@ EOF
 }
 
 our %file_types = (
-	crt => 'Certificate',
+	crt => 'Bare certificate',
 	chain => 'Certificate chain',
 	root => 'Root certificate',
 	chained => 'Certificate with chain',
