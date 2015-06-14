@@ -487,9 +487,7 @@ sub print_cert_paths {
 		push @rows, ["Private key", $paths->{key}];
 	}
 
-	# Don't include root cert in output, b/c the root is generally not needed for configuration,
-	# and we want to keep output here short and simple.
-	for my $type (qw/crt chain chained combined p12 jks/) {
+	for my $type (qw/crt chain chained combined root chain+root p12 jks/) {
 		next unless defined $paths->{$type};
 
 		if ($file_type_contains_private_key{$type} && $key_status eq 'missing') {
