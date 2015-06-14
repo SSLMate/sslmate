@@ -464,7 +464,6 @@ sub get_cert_paths {
 	$paths->{key} = $key_directory . $cn . ".key";
 	$paths->{crt} = $cert_directory . $cn . ".crt";
 	$paths->{chain} = $cert_directory . $cn . ".chain.crt";
-	$paths->{root} = $cert_directory . $cn . ".root.crt";
 	for my $type (split /,\s*|\s+/, get_config("cert_formats", "chained")) {
 		die "Unknown file type in config: $type\n" unless exists $file_types{$type};
 		$paths->{$type} = $cert_directory . $cn . $file_extensions{$type};
@@ -2443,7 +2442,8 @@ sub command_download {
 				not($install_new_key) &&
 				file_contents_are($paths->{crt}, $crt) &&
 				file_contents_are($paths->{chain}, $chain) &&
-				file_contents_are($paths->{root}, $root)) {
+				(not(defined $paths->{root}) || file_contents_are($paths->{root}, $root)) &&
+				(not(defined $paths->{'chain+root'}) || file_contents_are($paths->{'chain+root'}, join('', $chain, $root)))) {
 			# Files did not change
 			next;
 		}
