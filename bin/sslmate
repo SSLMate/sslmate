@@ -371,6 +371,19 @@ sub save_config {
 sub is_linked {
 	return config_has('api_key');
 }
+sub parse_bool {
+	my ($str) = @_;
+	return undef unless defined($str);
+	$str = lc $str;
+	if ($str eq 'yes' || $str eq 'true' || $str eq 'on' || $str eq 'enabled' || $str eq '1') {
+		return 1;
+	} elsif ($str eq 'no' || $str eq 'false' || $str eq 'off' || $str eq 'disabled' || $str eq '0') {
+		return 0;
+	} else {
+		print STDERR "Warning: ignoring unknown boolean value '$str' (expected 'yes' or 'no')\n";
+		return undef;
+	}
+}
 
 sub init_default_paths {
 	my ($do_mkdir) = @_;
@@ -450,6 +463,38 @@ our %file_type_contains_private_key = (
 	jks => 1,
 );
 
+sub get_enabled_cert_types {
+	my %enabled;
+
+	if (config_has('cert_formats')) {
+		# (For backwards compat. Although this option was never publicized, some people may be depending on it.)
+		for my $type (split /,\s*|\s+/, get_config("cert_formats")) {
+			die "Unknown file type in cert_formats config option: $type\n" unless exists $file_types{$type};
+			$enabled{$type} = 1;
+		}
+	} else {
+		# Types enabled by default:
+		$enabled{chained} = 1;
+	}
+
+	# Types enabled/disabled by cert_format.$type config options:
+	for my $type (keys %file_types) {
+		if (defined(my $enabled = parse_bool(get_config("cert_format.$type")))) {
+			if ($enabled) {
+				$enabled{$type} = 1;
+			} else {
+				delete $enabled{$type};
+			}
+		}
+	}
+
+	# Types that are always enabled and can't be disabled by config:
+	$enabled{crt} = 1;
+	$enabled{chain} = 1;
+
+	return keys %enabled;
+}
+
 sub get_cert_paths {
 	my ($cn) = @_;
 
@@ -462,10 +507,7 @@ sub get_cert_paths {
 
 	my $paths = {};
 	$paths->{key} = $key_directory . $cn . ".key";
-	$paths->{crt} = $cert_directory . $cn . ".crt";
-	$paths->{chain} = $cert_directory . $cn . ".chain.crt";
-	for my $type (split /,\s*|\s+/, get_config("cert_formats", "chained")) {
-		die "Unknown file type in config: $type\n" unless exists $file_types{$type};
+	for my $type (get_enabled_cert_types) {
 		$paths->{$type} = $cert_directory . $cn . $file_extensions{$type};
 	}
 	return $paths;
