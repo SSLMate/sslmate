@@ -3076,6 +3076,9 @@ sub command_test {
 		}
 	}
 
+	if ($cn =~ /^\*\./ && not(@hostname)) {
+		print STDERR "Tip: use the --host option to test a particular hostname.\n";
+	}
 	if ($num_chain_errors > 0) {
 		print STDERR "Tip: make sure you have configured your server with either the .chained.crt file\n     OR with BOTH the .crt file and the .chain.crt file.\n";
 	}
