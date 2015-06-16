@@ -3369,7 +3369,7 @@ sub interpolate_config_template {
 			} elsif ($varname =~ /^(.*)_PATH$/ && exists $file_types{lc $1}) {
 				my $file_type = lc $1;
 				if (not exists $paths->{$file_type}) {
-					die "Error: This software requires a " . lc($file_types{$file_type}) . " file, but SSLMate is not configured to create this type of file. Please add '$file_type' to the cert_formats option, and then run 'sslmate download' to create this file.\n";
+					die "Error: This software requires a " . lc($file_types{$file_type}) . " file, but SSLMate is not configured to create this type of file. Please set 'cert_format.$file_type yes' in your SSLMate configuration file, and then run 'sslmate download' to create this file.\n";
 				}
 				$out .= $paths->{$file_type};
 			} else {
