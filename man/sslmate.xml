@@ -1139,14 +1139,19 @@
 				<term><option>wildcard_filename <replaceable>PREFIX</replaceable></option></term>
 				<listitem><para>When creating files for wildcard certificates, use <replaceable>PREFIX</replaceable> in the filename instead of a * character.</para></listitem>
 			</varlistentry>
-			<!-- TODO: document cert_formats
 			<varlistentry>
-				<term><option>cert_formats <replaceable>FORMATS</replaceable></option></term>
+				<term><option>cert_format.<replaceable>FORMAT</replaceable> yes|no</option></term>
 				<listitem>
-					<para>Hello world.</para>
+					<para>
+						Enable or disable the given certificate format.  When a format is enabled,
+						<command>sslmate</command> will create a file of that format in your certificate
+						directory when buying, reissuing, renewing, and downloading.  After enabling
+						a format that was previously disabled, you can create the missing files by running
+						<command>sslmate download --all</command>.  The formats are documented below in
+						the CERTIFICATE FILES section.  All formats are disabled by default except for "chained".
+					</para>
 				</listitem>
 			</varlistentry>
-			-->
 			<varlistentry>
 				<term><option>key_type rsa|ecdsa</option></term>
 				<listitem><para>The key type to use by default when buying or reissuing a certificate.  Can be overridden by the <option>--key-type</option> command line flag.  See the documentation for <command>sslmate buy</command> for details.</para></listitem>
@@ -1159,7 +1164,7 @@
 	</refsect1>
 
 	<refsect1>
-		<title>Files</title>
+		<title>Configuration files</title>
 		<variablelist>
 			<varlistentry>
 				<term><filename>~/.sslmate</filename></term>
@@ -1174,32 +1179,75 @@
 				<listitem><para>The default directory for storing keys and certificates when run as root.  Can be overridden by the <parameter>key_directory</parameter> and <parameter>cert_directory</parameter> configuration options.</para></listitem>
 			</varlistentry>
 		</variablelist>
-		<para>SSLMate creates four files for every certificate:</para>
+	</refsect1>
+
+	<refsect1>
+		<title>Certificate files</title>
+		<para>
+			SSLMate creates the following files for every certificate.  The key file is placed in the
+			configured <parameter>key_directory</parameter>, and the other files are placed in the configured
+			<parameter>cert_directory</parameter>.	(Both directories are <filename>/etc/sslmate</filename> by default when
+			running as root and <filename>$PWD</filename> by default when running as non-root.)
+		</para>
 		<variablelist>
 			<varlistentry>
 				<term><filename><replaceable>hostname</replaceable>.key</filename></term>
-				<listitem><para>The private key file for <replaceable>hostname</replaceable>.  Stored in the configured <parameter>key_directory</parameter> (<filename>/etc/sslmate</filename> by default if run as root; <filename>$PWD</filename> by default if run as non-root).</para></listitem>
+				<listitem><para>The private key file for <replaceable>hostname</replaceable>, in PEM-encoded PKCS#1 format. This is the default format used by OpenSSL and is accepted by typical applications on Linux.</para></listitem>
 			</varlistentry>
 			<varlistentry>
 				<term><filename><replaceable>hostname</replaceable>.crt</filename></term>
-				<listitem><para>The public certificate file for <replaceable>hostname</replaceable>.  Stored in the configured <parameter>cert_directory</parameter> (<filename>/etc/sslmate</filename> by default if run as root; <filename>$PWD</filename> by default if run as non-root).</para></listitem>
+				<listitem><para>The public certificate file for <replaceable>hostname</replaceable>, in PEM-encoded X.509 format. This is the default format used by OpenSSL and is accepted by typical applications on Linux. <emphasis>Warning:</emphasis> This file does not work on its own since it does not contain the certificate chain.  You must also configure the chain certificate(s) using one of the other formats.</para></listitem>
 			</varlistentry>
 			<varlistentry>
 				<term><filename><replaceable>hostname</replaceable>.chain.crt</filename></term>
-				<listitem><para>The certificate chain file (aka intermediate certificate) file for <replaceable>hostname</replaceable>.  Stored in the configured <parameter>cert_directory</parameter> (<filename>/etc/sslmate</filename> by default if run as root; <filename>$PWD</filename> by default if run as non-root).</para></listitem>
+				<listitem><para>The certificate chain (aka intermediate certificate) file for <replaceable>hostname</replaceable>.  This file contains the concatenation of each intermediate certificate in PEM-encoded X.509 format.  The first certificate is the issuer of the end-entity certificate, and the last certificate is signed by the root certificate.  The root certificate is not included.</para></listitem>
+			</varlistentry>
+		</variablelist>
+		<para>SSLMate optionally creates the following files for every certificate (in the <parameter>cert_directory</parameter>) if the indicated configuration option is set to yes.</para>
+		<variablelist>
+			<varlistentry>
+				<term><filename><replaceable>hostname</replaceable>.chained.crt</filename> (cert_format.chained)</term>
+				<listitem><para>A concatenation of the certificate and chain files for <replaceable>hostname</replaceable>.  This format is enabled by default.  This is the file you should use with most applications on Linux, which require the certificate and chain to be specified in the same file.</para></listitem>
 			</varlistentry>
 			<varlistentry>
-				<term><filename><replaceable>hostname</replaceable>.chained.crt</filename></term>
-				<listitem><para>A concatenation of the certificate and the chain for <replaceable>hostname</replaceable>.  Stored in the configured <parameter>cert_directory</parameter> (<filename>/etc/sslmate</filename> by default if run as root; <filename>$PWD</filename> by default if run as non-root).</para></listitem>
+				<term><filename><replaceable>hostname</replaceable>.combined.pem</filename> (cert_format.combined)</term>
+				<listitem><para>A concatenation of the private key, certificate, and chain files for <replaceable>hostname</replaceable>.  Some applications on Linux require the key and certificates to be specified in this format.</para></listitem>
+			</varlistentry>
+			<varlistentry>
+				<term><filename><replaceable>hostname</replaceable>.p12</filename> (cert_format.p12)</term>
+				<listitem><para>A PKCS#12 file (also known as a P12 or PFX file) containing the private key, certificate, and chain for <replaceable>hostname</replaceable>.  The PKCS#12 file's password is "sslmate". PKCS#12 files are primarily used by Windows applications.</para></listitem>
+			</varlistentry>
+			<varlistentry>
+				<term><filename><replaceable>hostname</replaceable>.jks</filename> (cert_format.jks)</term>
+				<listitem><para>A Java keystore file containing the private key, certificate, and chain for <replaceable>hostname</replaceable>.  The keystore's password is "sslmate".  The <command>keytool(1)</command> command, from the Java runtime environment, must be installed to use this format.  JKS files are generally used only by Java applications, such as Tomcat.</para></listitem>
+			</varlistentry>
+			<varlistentry>
+				<term><filename><replaceable>hostname</replaceable>.root.crt</filename> (cert_format.root)</term>
+				<listitem><para>The root certificate for <replaceable>hostname</replaceable>, in PEM-encoded X.509 format.  You do <emphasis>not</emphasis> generally need the root certificate, so you should leave this format disabled unless you have a special requirement.</para></listitem>
+			</varlistentry>
+			<varlistentry>
+				<term><filename><replaceable>hostname</replaceable>.chain+root.crt</filename> (cert_format.chain+root)</term>
+				<listitem><para>A concatenation of the chain and root certificate files for <replaceable>hostname</replaceable>.  This format is required for verifying OCSP responses and configuring OCSP stapling.  You do not need it in a basic configuration.</para></listitem>
 			</varlistentry>
 		</variablelist>
 		<para>
-			 You need to configure your server software (e.g. Apache, nginx) with the private key file (.key) and some combination of the .crt files. Some software (e.g. Apache) requires you to specify the certificate (.crt) and the chain (.chain.crt) in separate files, while other software (e.g. nginx) requires you to specify both in a single file (.chained.crt). 
+			You need to configure your server software (e.g. Apache, nginx) with the private key
+			file (.key) and some combination of the .crt files. Some software (e.g. Apache) requires you
+			to specify the certificate (.crt) and the chain (.chain.crt) in separate files, while other
+			software (e.g. nginx) requires you to specify both in a single file (.chained.crt).
 		</para>
 		<para>
-			You are encouraged to store keys and certificates in the SSLMate-managed
+			Files which contain the private key are created with restrictive filesystem permissions (0600),
+			and other files are created with world-readable permissions (0644).  When updating
+			a file, <command>sslmate</command> preserves the existing owner and permissions, including
+			(on Linux only) ACLs.  This lets you use filesystem permissions to grant access to
+			applications that run as a non-root user, and not have to worry about the permissions being
+			disrupted when downloading an updated certificate.
+		</para>
+		<para>
+			You are encouraged to run <command>sslmate</command> as root, store keys and certificates in the SSLMate-managed
 			<parameter>key_directory</parameter> and <parameter>cert_directory</parameter>
-			(<filename>/etc/sslmate</filename> by default) and to configure your server software to refer
+			(<filename>/etc/sslmate</filename> by default), and to configure your server software to refer
 			to keys and certificates in this directory.  This makes automated renewals more seamless by
 			ensuring that your server software always refers to the latest version
 			of a certificate downloaded by <command>sslmate download</command>.
