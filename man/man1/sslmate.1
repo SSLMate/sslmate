@@ -2,12 +2,12 @@
 .\"     Title: sslmate
 .\"    Author: SSLMate <sslmate@sslmate.com>
 .\" Generator: DocBook XSL Stylesheets v1.76.1 <http://docbook.sf.net/>
-.\"      Date: 2015-05-29
+.\"      Date: 2015-06-13
 .\"    Manual: SSLMate
-.\"    Source: SSLMate 1.2.2
+.\"    Source: SSLMate 1.2.3
 .\"  Language: English
 .\"
-.TH "SSLMATE" "1" "2015\-05\-29" "SSLMate 1.2.2" "SSLMate"
+.TH "SSLMATE" "1" "2015\-06\-13" "SSLMate 1.2.3" "SSLMate"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -747,6 +747,14 @@ When creating files for wildcard certificates, use
 in the filename instead of a * character\&.
 .RE
 .PP
+\fBcert_format\&.\fR\fB\fIFORMAT\fR\fR\fB yes|no\fR
+.RS 4
+Enable or disable the given certificate format\&. When a format is enabled,
+\fBsslmate\fR
+will create a file of that format in your certificate directory when buying, reissuing, renewing, and downloading\&. After enabling a format that was previously disabled, you can create the missing files by running
+\fBsslmate download \-\-all\fR\&. The formats are documented below in the CERTIFICATE FILES section\&. All formats are disabled by default except for "chained"\&.
+.RE
+.PP
 \fBkey_type rsa|ecdsa\fR
 .RS 4
 The key type to use by default when buying or reissuing a certificate\&. Can be overridden by the
@@ -760,7 +768,7 @@ for details\&.
 .RS 4
 The URI to the SSLMate API endpoint\&. This option does not need to be configured under normal circumstances\&.
 .RE
-.SH "FILES"
+.SH "CONFIGURATION FILES"
 .PP
 ~/\&.sslmate
 .RS 4
@@ -780,61 +788,93 @@ and
 \fIcert_directory\fR
 configuration options\&.
 .RE
+.SH "CERTIFICATE FILES"
 .PP
-SSLMate creates four files for every certificate:
+SSLMate creates the following files for every certificate\&. The key file is placed in the configured
+\fIkey_directory\fR, and the other files are placed in the configured
+\fIcert_directory\fR\&. (Both directories are
+/etc/sslmate
+by default when running as root and
+$PWD
+by default when running as non\-root\&.)
 .PP
 \fIhostname\fR\&.key
 .RS 4
 The private key file for
-\fIhostname\fR\&. Stored in the configured
-\fIkey_directory\fR
-(/etc/sslmate
-by default if run as root;
-$PWD
-by default if run as non\-root)\&.
+\fIhostname\fR, in PEM encoding (specifically, the PEM encoding of the ASN\&.1 DER encoding of a PKCS#1 RSAPrivateKey (for RSA) or a RFC 3279 EcpkParameters (for ECDSA))\&. This is the default format used by OpenSSL and is accepted by typical applications on Linux\&.
 .RE
 .PP
 \fIhostname\fR\&.crt
 .RS 4
 The public certificate file for
-\fIhostname\fR\&. Stored in the configured
-\fIcert_directory\fR
-(/etc/sslmate
-by default if run as root;
-$PWD
-by default if run as non\-root)\&.
+\fIhostname\fR, in PEM encoding (specifically, the PEM encoding of the ASN\&.1 DER encoding of the X\&.509 certificate)\&. This is the default format used by OpenSSL and is accepted by typical applications on Linux\&.
+\fIWarning:\fR
+This file does not work on its own since it does not contain the certificate chain\&. You must also configure the chain certificate(s) using one of the other formats\&.
 .RE
 .PP
 \fIhostname\fR\&.chain\&.crt
 .RS 4
-The certificate chain file (aka intermediate certificate) file for
-\fIhostname\fR\&. Stored in the configured
-\fIcert_directory\fR
-(/etc/sslmate
-by default if run as root;
-$PWD
-by default if run as non\-root)\&.
+The certificate chain (aka intermediate certificate) file for
+\fIhostname\fR\&. This file contains the concatenation of each intermediate certificate, in PEM encoding\&. The first certificate is the issuer of the end\-entity certificate, and the last certificate is signed by the root certificate\&. The root certificate is not included\&.
 .RE
 .PP
-\fIhostname\fR\&.chained\&.crt
+SSLMate optionally creates the following files for every certificate (in the
+\fIcert_directory\fR) if the indicated configuration option is set to yes\&.
+.PP
+\fIhostname\fR\&.chained\&.crt (cert_format\&.chained)
 .RS 4
-A concatenation of the certificate and the chain for
-\fIhostname\fR\&. Stored in the configured
-\fIcert_directory\fR
-(/etc/sslmate
-by default if run as root;
-$PWD
-by default if run as non\-root)\&.
+A concatenation of the certificate and chain files for
+\fIhostname\fR, in PEM encoding\&. This format is enabled by default\&. This is the file you should use with most applications on Linux, which require the certificate and chain to be specified in the same file\&.
+.RE
+.PP
+\fIhostname\fR\&.combined\&.pem (cert_format\&.combined)
+.RS 4
+A concatenation of the private key, certificate, and chain files for
+\fIhostname\fR, in PEM encoding\&. This format is intended for Linux applications which require the key and certificates to be specified in the same file\&.
+.RE
+.PP
+\fIhostname\fR\&.p12 (cert_format\&.p12)
+.RS 4
+A PKCS#12 file (also known as a P12 or PFX file) containing the private key, certificate, and chain for
+\fIhostname\fR\&. The PKCS#12 file\*(Aqs password is "sslmate"\&. PKCS#12 files are primarily used by Windows applications\&.
+.RE
+.PP
+\fIhostname\fR\&.jks (cert_format\&.jks)
+.RS 4
+A Java keystore file containing the private key, certificate, and chain for
+\fIhostname\fR\&. The keystore\*(Aqs password is "sslmate"\&. The
+\fBkeytool(1)\fR
+command, from the Java runtime environment, must be installed to use this format\&. JKS files are generally used only by Java applications, such as Tomcat\&.
+.RE
+.PP
+\fIhostname\fR\&.root\&.crt (cert_format\&.root)
+.RS 4
+The root certificate for
+\fIhostname\fR, in PEM encoding\&. You do
+\fInot\fR
+generally need the root certificate, so you should leave this format disabled unless you have a special requirement\&.
+.RE
+.PP
+\fIhostname\fR\&.chain+root\&.crt (cert_format\&.chain+root)
+.RS 4
+A concatenation of the chain and root certificate files for
+\fIhostname\fR\&. This format is required for verifying OCSP responses and configuring OCSP stapling\&. You do not need it in a basic configuration\&.
 .RE
 .PP
 You need to configure your server software (e\&.g\&. Apache, nginx) with the private key file (\&.key) and some combination of the \&.crt files\&. Some software (e\&.g\&. Apache) requires you to specify the certificate (\&.crt) and the chain (\&.chain\&.crt) in separate files, while other software (e\&.g\&. nginx) requires you to specify both in a single file (\&.chained\&.crt)\&.
 .PP
-You are encouraged to store keys and certificates in the SSLMate\-managed
+Files which contain the private key are created with restrictive filesystem permissions (0600), and other files are created with world\-readable permissions (0644)\&. When updating a file,
+\fBsslmate\fR
+preserves the existing owner and permissions, including (on Linux only) ACLs\&. This lets you use filesystem permissions to grant access to applications that run as a non\-root user, and not have to worry about the permissions being disrupted when downloading an updated certificate\&.
+.PP
+You are encouraged to run
+\fBsslmate\fR
+as root, store keys and certificates in the SSLMate\-managed
 \fIkey_directory\fR
 and
 \fIcert_directory\fR
 (/etc/sslmate
-by default) and to configure your server software to refer to keys and certificates in this directory\&. This makes automated renewals more seamless by ensuring that your server software always refers to the latest version of a certificate downloaded by
+by default), and to configure your server software to refer to keys and certificates in this directory\&. This makes automated renewals more seamless by ensuring that your server software always refers to the latest version of a certificate downloaded by
 \fBsslmate download\fR\&.
 .SH "ENVIRONMENT VARIABLES"
 .PP
