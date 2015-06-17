@@ -1192,26 +1192,26 @@
 		<variablelist>
 			<varlistentry>
 				<term><filename><replaceable>hostname</replaceable>.key</filename></term>
-				<listitem><para>The private key file for <replaceable>hostname</replaceable>, in PEM-encoded PKCS#1 format. This is the default format used by OpenSSL and is accepted by typical applications on Linux.</para></listitem>
+				<listitem><para>The private key file for <replaceable>hostname</replaceable>, in PEM encoding (specifically, the PEM encoding of the ASN1 DER encoding of a PKCS#1 RSAPrivateKey (for RSA) or a RFC 3279 EcpkParameters (for ECDSA)).  This is the default format used by OpenSSL and is accepted by typical applications on Linux.</para></listitem>
 			</varlistentry>
 			<varlistentry>
 				<term><filename><replaceable>hostname</replaceable>.crt</filename></term>
-				<listitem><para>The public certificate file for <replaceable>hostname</replaceable>, in PEM-encoded X.509 format. This is the default format used by OpenSSL and is accepted by typical applications on Linux. <emphasis>Warning:</emphasis> This file does not work on its own since it does not contain the certificate chain.  You must also configure the chain certificate(s) using one of the other formats.</para></listitem>
+				<listitem><para>The public certificate file for <replaceable>hostname</replaceable>, in PEM encoding (specifically, the PEM encoding of the ASN1 DER encoding of the X.509 certificate). This is the default format used by OpenSSL and is accepted by typical applications on Linux. <emphasis>Warning:</emphasis> This file does not work on its own since it does not contain the certificate chain.  You must also configure the chain certificate(s) using one of the other formats.</para></listitem>
 			</varlistentry>
 			<varlistentry>
 				<term><filename><replaceable>hostname</replaceable>.chain.crt</filename></term>
-				<listitem><para>The certificate chain (aka intermediate certificate) file for <replaceable>hostname</replaceable>.  This file contains the concatenation of each intermediate certificate in PEM-encoded X.509 format.  The first certificate is the issuer of the end-entity certificate, and the last certificate is signed by the root certificate.  The root certificate is not included.</para></listitem>
+				<listitem><para>The certificate chain (aka intermediate certificate) file for <replaceable>hostname</replaceable>.  This file contains the concatenation of each intermediate certificate, in PEM encoding.  The first certificate is the issuer of the end-entity certificate, and the last certificate is signed by the root certificate.  The root certificate is not included.</para></listitem>
 			</varlistentry>
 		</variablelist>
 		<para>SSLMate optionally creates the following files for every certificate (in the <parameter>cert_directory</parameter>) if the indicated configuration option is set to yes.</para>
 		<variablelist>
 			<varlistentry>
 				<term><filename><replaceable>hostname</replaceable>.chained.crt</filename> (cert_format.chained)</term>
-				<listitem><para>A concatenation of the certificate and chain files for <replaceable>hostname</replaceable>.  This format is enabled by default.  This is the file you should use with most applications on Linux, which require the certificate and chain to be specified in the same file.</para></listitem>
+				<listitem><para>A concatenation of the certificate and chain files for <replaceable>hostname</replaceable>, in PEM encoding.  This format is enabled by default.  This is the file you should use with most applications on Linux, which require the certificate and chain to be specified in the same file.</para></listitem>
 			</varlistentry>
 			<varlistentry>
 				<term><filename><replaceable>hostname</replaceable>.combined.pem</filename> (cert_format.combined)</term>
-				<listitem><para>A concatenation of the private key, certificate, and chain files for <replaceable>hostname</replaceable>.  Some applications on Linux require the key and certificates to be specified in this format.</para></listitem>
+				<listitem><para>A concatenation of the private key, certificate, and chain files for <replaceable>hostname</replaceable>, in PEM encoding.  This format is intended for Linux applications which require the key and certificates to be specified in the same file.</para></listitem>
 			</varlistentry>
 			<varlistentry>
 				<term><filename><replaceable>hostname</replaceable>.p12</filename> (cert_format.p12)</term>
@@ -1223,7 +1223,7 @@
 			</varlistentry>
 			<varlistentry>
 				<term><filename><replaceable>hostname</replaceable>.root.crt</filename> (cert_format.root)</term>
-				<listitem><para>The root certificate for <replaceable>hostname</replaceable>, in PEM-encoded X.509 format.  You do <emphasis>not</emphasis> generally need the root certificate, so you should leave this format disabled unless you have a special requirement.</para></listitem>
+				<listitem><para>The root certificate for <replaceable>hostname</replaceable>, in PEM encoding.  You do <emphasis>not</emphasis> generally need the root certificate, so you should leave this format disabled unless you have a special requirement.</para></listitem>
 			</varlistentry>
 			<varlistentry>
 				<term><filename><replaceable>hostname</replaceable>.chain+root.crt</filename> (cert_format.chain+root)</term>
