@@ -90,6 +90,7 @@ sub print_usage {
 	print $out "Commands:\n";
 	print $out " sslmate buy HOSTNAME             Buy a certificate for the given hostname\n";
 	print $out " sslmate renew HOSTNAME           Renew the certificate for the given hostname\n";
+	print $out " sslmate rekey HOSTNAME           Rekey the certificate for given hostname\n";
 	print $out " sslmate reissue HOSTNAME         Reissue the certificate for given hostname\n";
 	print $out " sslmate revoke [-a] HOSTNAME     Revoke the certificate for given hostname\n";
 	print $out " sslmate download HOSTNAME        Download the certificate for given hostname\n";
@@ -1866,7 +1867,7 @@ sub command_buy {
 		}
 		if (defined($cert->{current}) && !$cert->{current}->{expiring}) {
 			print STDERR "Error: your account already has an active certificate for $cn.\n";
-			print STDERR "Tip: to reissue an existing certificate, use 'sslmate reissue'.\n";
+			print STDERR "Tip: to rekey this certificate, run 'sslmate rekey $cn'.\n";
 			$errors++;
 		}
 		if ($errors) {
@@ -2023,42 +2024,72 @@ sub command_buy {
 	return 0;
 }
 
-sub command_reissue {
+sub command_reissue_rekey {
+	my $command = shift;
 	local @ARGV = @_;
 
 	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
-		print "Usage: sslmate reissue [OPTIONS] HOSTNAME\n\n";
-		print "Example: sslmate reissue www.example.com\n";
+		print "Usage: sslmate $command [OPTIONS] HOSTNAME\n\n";
+		print "Example: sslmate $command www.example.com\n";
+		if ($command eq 'reissue') {
+			print "\n";
+			print "Options:\n";
+			print " --same-key         reissue with the same key instead of generating a new key\n";
+		}
 		print "\n";
 		print "Batch options:\n";
 		print " --timeout=SECONDS  wait at most SECONDS seconds for new cert to be issued\n";
 		print " --no-wait          return immediately; don't wait for new cert to be issued\n";
-		print "\n";
-		print "Advanced options:\n";
-		print " -f, --force        overwrite existing files\n";
-		print " --key-type=TYPE    type of key to generate ('rsa' or 'ecdsa')\n";
+		if ($command eq 'rekey') {
+			print "\n";
+			print "Advanced options:\n";
+			print " -f, --force        overwrite existing files\n";
+			print " --key-type=TYPE    type of key to generate ('rsa' or 'ecdsa')\n";
+		}
 		return 0;
 	}
 
 	my $force = 0;
+	my $same_key = 0;
 	my $timeout = undef;
 	my $no_wait = 0;
 	my $key_type = undef;
 	my $csr_path = undef;
 
+	my @optspec = ('timeout=i', \$timeout,
+		       'no-wait', \$no_wait);
+	#if ($command eq 'rekey') { Uncomment with SSLMate 2.0
+		push @optspec, ('force|f', \$force,
+				'csr=s', \$csr_path,
+				'key-type=s', \$key_type);
+	#}
+	if ($command eq 'reissue') {
+		push @optspec, ('same-key', \$same_key);
+	}
+
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
-	$getopt->getoptions('force|f', \$force,
-			    'timeout=i', \$timeout,
-			    'no-wait', \$no_wait,
-			    'csr=s', \$csr_path,
-			    'key-type=s', \$key_type) or return 2;
+	$getopt->getoptions(@optspec) or return 2;
 
 	if (@ARGV != 1) {
-		print STDERR "Error: you must specify the hostname of the certificate to reissue.\n";
-		print STDERR "Example: sslmate reissue www.example.com\n";
+		print STDERR "Error: you must specify the hostname of the certificate to $command.\n";
+		print STDERR "Example: sslmate $command www.example.com\n";
 		return 2;
 	}
+	my $rekey = 0;
+	if ($command eq 'rekey') {
+		$rekey = 1;
+	} elsif ($command eq 'reissue') {
+		unless ($same_key) {
+			$rekey = 1;
+			print STDERR "Warning: 'sslmate reissue' without the --same-key option is deprecated.\n";
+			print STDERR "Starting with SSLMate 2.0, --same-key will be implied.  To reissue\n";
+			print STDERR "a certificate with a new key, use 'sslmate rekey' instead.\n";
+			sleep(3) unless $batch;
+			print STDERR "\n";
+		}
+	}
+
 	if (defined($timeout) && $no_wait) {
 		print STDERR "Error: --timeout and --no-wait are mutually exclusive.\n";
 		return 2;
@@ -2121,39 +2152,43 @@ sub command_reissue {
 	my $paths = get_cert_paths($cn);
 	my $new_key_filename = undef;
 
-	my $exit_with_error = sub {
-		unlink($new_key_filename) if defined($new_key_filename);
-		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/csr/)) if defined($cert);
-		exit 1;
-	};
+	my $exit_with_error = sub { exit 1; };
 
-	unless (defined $csr) {
-		$new_key_filename = $paths->{key} . ".new";
-		unless ($force) {
-			exit 1 if has_existing_files($new_key_filename);
+	if ($rekey) {
+		$exit_with_error = sub {
+			unlink($new_key_filename) if defined($new_key_filename);
+			authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/csr/)) if defined($cert);
+			exit 1;
+		};
+
+		unless (defined $csr) {
+			$new_key_filename = $paths->{key} . ".new";
+			unless ($force) {
+				exit 1 if has_existing_files($new_key_filename);
+			}
+			my $key_file = open_key_file($new_key_filename, $force);
+
+			# 3. Generate new key and CSR
+			print "Generating private key... "; STDOUT->flush;
+			truncate($key_file, 0);
+			genkey($key_file, $key_type) or $exit_with_error->();
+			close($key_file);
+			print "Done.\n";
+
+			print "Generating CSR... "; STDOUT->flush;
+			$csr = openssl_req($new_key_filename, $cert->{dn});
+			print "Done.\n";
 		}
-		my $key_file = open_key_file($new_key_filename, $force);
 
-		# 3. Generate new key and CSR
-		print "Generating private key... "; STDOUT->flush;
-		truncate($key_file, 0);
-		genkey($key_file, $key_type) or $exit_with_error->();
-		close($key_file);
-		print "Done.\n";
-
-		print "Generating CSR... "; STDOUT->flush;
-		$csr = openssl_req($new_key_filename, $cert->{dn});
-		print "Done.\n";
+		# 4. Update the CSR server-side
+		($cert_status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['dns_approval.status','http_approval.status'] }, { csr => $csr }) or $exit_with_error->();
+		if ($cert_status != 200) {
+			print STDERR "Error: " . $new_cert->{message} . "\n";
+			$cert = undef;
+			$exit_with_error->();
+		}
+		prepare_approval($cert, $new_cert) or $exit_with_error->();
 	}
-
-	# 4. Update the CSR server-side
-	($cert_status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['dns_approval.status','http_approval.status'] }, { csr => $csr }) or $exit_with_error->();
-	if ($cert_status != 200) {
-		print STDERR "Error: " . $new_cert->{message} . "\n";
-		$cert = undef;
-		$exit_with_error->();
-	}
-	prepare_approval($cert, $new_cert) or $exit_with_error->();
 
 	# 5. Reissue the certificate
 	print "Reissuing cert...\n";
@@ -2171,7 +2206,7 @@ sub command_reissue {
 		if (config_has('key_directory') && config_has('cert_directory')) {
 			print "Note: the new private key has been temporarily saved in $new_key_filename and will be installed automatically when 'sslmate download' downloads the new certificate.\n" if defined $new_key_filename;
 		} else {
-			print_cert_paths({ %$paths, key => $new_key_filename }, undef, 'pending');
+			print_cert_paths({ %$paths, (defined $new_key_filename ? (key => $new_key_filename) : ()) }, undef, 'pending');
 		}
 		return 12 unless $timeout == 0;
 	}
@@ -2191,7 +2226,7 @@ sub command_revoke {
 		print "Note: By default, 'sslmate revoke' revokes all but the most recent certificate.\n";
 		print "      To revoke even the most recent certificate, use the --all option.\n";
 		print "\n";
-		print "Tip: To replace a compromised key, first reissue the cert with 'sslmate reissue'\n";
+		print "Tip: To replace a compromised key, first rekey the cert with 'sslmate rekey'\n";
 		print "     and then revoke the old cert(s) with 'sslmate revoke' WITHOUT --all.\n";
 		return 0;
 	}
@@ -2253,7 +2288,7 @@ sub command_revoke {
 		return 1;
 	} elsif ($response->{num_revoked} == 0) {
 		print STDERR "Error: the certificate for '$cn' is still in use.\n";
-		print STDERR "Before revoking this certificate, please reissue it by running 'sslmate reissue $cn'.  Alternatively, if you want to revoke this certificate even though it's still in use, pass the -a option to 'sslmate revoke'.\n";
+		print STDERR "Before revoking this certificate, please rekey it by running 'sslmate rekey $cn'.  Alternatively, if you want to revoke this certificate even though it's still in use, pass the -a option to 'sslmate revoke'.\n";
 		return 1;
 	} else {
 		print "Successfully revoked the certificate for $cn.\n";
@@ -2364,7 +2399,7 @@ sub command_renew {
 		}
 		if (defined($cert->{current}) && !$cert->{current}->{expiring}) {
 			print STDERR "Error: the certificate for $cn is not about to expire.\n";
-			print STDERR "Tip: to reissue an existing certificate, use 'sslmate reissue'.\n";
+			print STDERR "Tip: to reissue this certificate, run 'sslmate reissue $cn'.\n";
 			$errors++;
 		}
 		if ($errors) {
@@ -3787,8 +3822,8 @@ sub main {
 
 	if ($command eq 'buy') {
 		return command_buy @ARGV;
-	} elsif ($command eq 'reissue') {
-		return command_reissue @ARGV;
+	} elsif ($command eq 'reissue' || $command eq 'rekey') {
+		return command_reissue_rekey $command, @ARGV;
 	} elsif ($command eq 'revoke') {
 		return command_revoke @ARGV;
 	} elsif ($command eq 'renew') {
