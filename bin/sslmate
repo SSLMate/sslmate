@@ -521,12 +521,14 @@ sub print_cert_paths {
 
 	my @rows;
 
-	if ($key_status eq 'missing') {
-		push @rows, ["Private key", "(not found - should be " . $paths->{key} . ")"];
-	} elsif ($key_status eq 'old') {
-		push @rows, ["Private key", $paths->{key} . " (out-of-date)"];
-	} else {
-		push @rows, ["Private key", $paths->{key}];
+	if (defined $paths->{key}) {
+		if ($key_status eq 'missing') {
+			push @rows, ["Private key", "(not found - should be " . $paths->{key} . ")"];
+		} elsif ($key_status eq 'old') {
+			push @rows, ["Private key", $paths->{key} . " (out-of-date)"];
+		} else {
+			push @rows, ["Private key", $paths->{key}];
+		}
 	}
 
 	for my $type (qw/crt chain chained combined root chain+root p12 jks/) {
@@ -1948,13 +1950,8 @@ sub command_reissue {
 
 	# 2. Open the files
 	my $paths = get_cert_paths($cn);
-	my $new_key_filename = $paths->{key} . ".new";
+	my $new_key_filename = undef;
 
-	unless ($force) {
-		exit 1 if has_existing_files($new_key_filename);
-	}
-
-	my $key_file;
 	my $exit_with_error = sub {
 		unlink($new_key_filename) if defined($new_key_filename);
 		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/csr/)) if defined($cert);
@@ -1962,7 +1959,11 @@ sub command_reissue {
 	};
 
 	unless (defined $csr) {
-		$key_file = open_key_file($new_key_filename, $force);
+		$new_key_filename = $paths->{key} . ".new";
+		unless ($force) {
+			exit 1 if has_existing_files($new_key_filename);
+		}
+		my $key_file = open_key_file($new_key_filename, $force);
 
 		# 3. Generate new key and CSR
 		print "Generating private key... "; STDOUT->flush;
@@ -1999,7 +2000,7 @@ sub command_reissue {
 	if (!do_wait_for_cert($cn, $cert_instance, $timeout, 0, $paths, $new_key_filename)) {
 		print "\n";
 		if (config_has('key_directory') && config_has('cert_directory')) {
-			print "Note: the new private key has been temporarily saved in $new_key_filename and will be installed automatically when 'sslmate download' downloads the new certificate.\n";
+			print "Note: the new private key has been temporarily saved in $new_key_filename and will be installed automatically when 'sslmate download' downloads the new certificate.\n" if defined $new_key_filename;
 		} else {
 			print_cert_paths({ %$paths, key => $new_key_filename }, undef, 'pending');
 		}
