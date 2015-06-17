@@ -696,19 +696,26 @@ sub write_cert_files {
 	for my $type (keys %file_types) {
 		next unless defined $paths->{$type};
 
-		my $default_mode;
 		if ($file_type_contains_private_key{$type}) {
 			next unless defined $key;
-			$default_mode = 0600;
-		} else {
-			$default_mode = 0666;
 		}
 
 		my $tempfile = File::Temp->new(DIR => dirname($paths->{$type}), TEMPLATE => '.sslmate.XXXXXX');
 		if (-e $paths->{$type}) {
+			# Preserve existing permissions if this file already exists
 			restore_file_permissions($tempfile, $paths->{$type});
+		} elsif ($file_type_contains_private_key{$type}) {
+			# By default, files which contain the private key should have the same
+			# permissions as the private key itself.
+			if (-e $paths->{key}) {
+				restore_file_permissions($tempfile, $paths->{key});
+			} else {
+				# And if the private key doesn't exist, use restrictive permissions
+				chmod(0600 & ~umask, $tempfile);
+			}
 		} else {
-			chmod($default_mode & ~umask, $tempfile);
+			# Files which don't contain a private key are world-readable by default
+			chmod(0666 & ~umask, $tempfile);
 		}
 
 		write_cert_file($type, $tempfile, $key, $crt, $chain, $root) or next; # TODO: if this fails, should we delete the current file of this type?  Should we hide it from the cert path output?
