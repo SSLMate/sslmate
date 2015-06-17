@@ -801,13 +801,13 @@ by default when running as non\-root\&.)
 \fIhostname\fR\&.key
 .RS 4
 The private key file for
-\fIhostname\fR, in PEM encoding (specifically, the PEM encoding of the ASN1 DER encoding of a PKCS#1 RSAPrivateKey (for RSA) or a RFC 3279 EcpkParameters (for ECDSA))\&. This is the default format used by OpenSSL and is accepted by typical applications on Linux\&.
+\fIhostname\fR, in PEM encoding (specifically, the PEM encoding of the ASN\&.1 DER encoding of a PKCS#1 RSAPrivateKey (for RSA) or a RFC 3279 EcpkParameters (for ECDSA))\&. This is the default format used by OpenSSL and is accepted by typical applications on Linux\&.
 .RE
 .PP
 \fIhostname\fR\&.crt
 .RS 4
 The public certificate file for
-\fIhostname\fR, in PEM encoding (specifically, the PEM encoding of the ASN1 DER encoding of the X\&.509 certificate)\&. This is the default format used by OpenSSL and is accepted by typical applications on Linux\&.
+\fIhostname\fR, in PEM encoding (specifically, the PEM encoding of the ASN\&.1 DER encoding of the X\&.509 certificate)\&. This is the default format used by OpenSSL and is accepted by typical applications on Linux\&.
 \fIWarning:\fR
 This file does not work on its own since it does not contain the certificate chain\&. You must also configure the chain certificate(s) using one of the other formats\&.
 .RE

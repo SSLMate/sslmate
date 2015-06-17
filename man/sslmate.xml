@@ -1192,11 +1192,11 @@
 		<variablelist>
 			<varlistentry>
 				<term><filename><replaceable>hostname</replaceable>.key</filename></term>
-				<listitem><para>The private key file for <replaceable>hostname</replaceable>, in PEM encoding (specifically, the PEM encoding of the ASN1 DER encoding of a PKCS#1 RSAPrivateKey (for RSA) or a RFC 3279 EcpkParameters (for ECDSA)).  This is the default format used by OpenSSL and is accepted by typical applications on Linux.</para></listitem>
+				<listitem><para>The private key file for <replaceable>hostname</replaceable>, in PEM encoding (specifically, the PEM encoding of the ASN.1 DER encoding of a PKCS#1 RSAPrivateKey (for RSA) or a RFC 3279 EcpkParameters (for ECDSA)).  This is the default format used by OpenSSL and is accepted by typical applications on Linux.</para></listitem>
 			</varlistentry>
 			<varlistentry>
 				<term><filename><replaceable>hostname</replaceable>.crt</filename></term>
-				<listitem><para>The public certificate file for <replaceable>hostname</replaceable>, in PEM encoding (specifically, the PEM encoding of the ASN1 DER encoding of the X.509 certificate). This is the default format used by OpenSSL and is accepted by typical applications on Linux. <emphasis>Warning:</emphasis> This file does not work on its own since it does not contain the certificate chain.  You must also configure the chain certificate(s) using one of the other formats.</para></listitem>
+				<listitem><para>The public certificate file for <replaceable>hostname</replaceable>, in PEM encoding (specifically, the PEM encoding of the ASN.1 DER encoding of the X.509 certificate). This is the default format used by OpenSSL and is accepted by typical applications on Linux. <emphasis>Warning:</emphasis> This file does not work on its own since it does not contain the certificate chain.  You must also configure the chain certificate(s) using one of the other formats.</para></listitem>
 			</varlistentry>
 			<varlistentry>
 				<term><filename><replaceable>hostname</replaceable>.chain.crt</filename></term>
