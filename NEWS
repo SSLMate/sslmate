@@ -1,3 +1,16 @@
+v1.3.0 (2015-06-18)
+ * Add support for creating certificate files in alternative
+   formats.  To enable a format, put "cert_formats.FORMAT yes"
+   in your config file, where FORMAT is one of:
+   - chained (Certificate by chain) (enabled by default)
+   - combined (Key, cert, and chain concatenated together)
+   - p12 (PKCS#12 file)
+   - jks (Java Keystore file)
+   - root (Root certificate)
+   - chain+root (Chain and root concatenated together)
+ * Preserve existing filesystem permissions of key and certificate files.
+ * Minor bug fixes/enhancements.
+
 v1.2.3 (2015-06-13)
  * Bugfix release.
  * Correctly display unhandled subjectAltNames when importing.
