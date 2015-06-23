@@ -1761,6 +1761,7 @@ sub command_buy {
 	my $accept_dummy = 0;
 	my $key_type = undef;
 	my $csr_path = undef;
+	my $days = undef;
 
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
@@ -1772,6 +1773,7 @@ sub command_buy {
 			    'approval=s', parse_approval_arg(\$default_approval_method, \%approval_methods),
 			    'email=s', parse_approval_arg(\$default_approver_email, \%approver_emails),
 			    'san=s', \@sans,
+			    'days=i', \$days,
 			    'timeout=i', \$timeout,
 			    'no-wait', \$no_wait,
 			    'temp', \$accept_dummy,
@@ -1819,7 +1821,6 @@ sub command_buy {
 	}
 
 	my $cn = lc $ARGV[0];
-	my $years = undef;
 	$cert_type //= $ev ? 'ev' : 'dv';
 	validate_cn($cn) or return 1;
 
@@ -1888,7 +1889,7 @@ sub command_buy {
 
 	unless ($batch) {
 		$product_info = get_product_info($cert_type // $cert->{type}, $cn,
-						 years => $years,
+						 days => $days,
 						 coupon_code => $opts{coupon_code},
 						 sans => int(@sans)) or return 1;
 
@@ -1990,7 +1991,7 @@ sub command_buy {
 	# Buy the certificate from SSLMate
 	#
 	print "Placing order...\n";
-	$request = { years			=> $years,
+	$request = { days			=> $days,
 		     authorized_charge		=> $authorized_charge,
 		     authorized_charge_currency	=> $authorized_charge_currency,
 		     %opts };
@@ -2323,12 +2324,14 @@ sub command_renew {
 	my %opts;
 	my $force = 0;
 	my $timeout = undef;
+	my $days = undef;
 	my $no_wait = 0;
 
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
 	$getopt->getoptions('force|f', \$force,
 			    'batch', \$batch, # compat with pre-1.0
+			    'days=i', \$days,
 			    'timeout=i', \$timeout,
 			    'no-wait', \$no_wait,
 			    'coupon=s', \$opts{coupon_code},
@@ -2350,7 +2353,6 @@ sub command_renew {
 	$timeout = 0 if $no_wait;
 
 	my $cn = $ARGV[0];
-	my $years = undef;
 	validate_cn($cn) or return 1;
 
 	load_config;
@@ -2414,7 +2416,7 @@ sub command_renew {
 	unless ($batch) {
 		# Get product/pricing info from the server, ask user for confirmation
 
-		my $product_info = get_product_info($cert->{type}, $cn, years => $years, coupon_code => $opts{coupon_code}) or exit 1;
+		my $product_info = get_product_info($cert->{type}, $cn, days => $days, coupon_code => $opts{coupon_code}) or exit 1;
 
 		exit 1 unless order_can_be_paid($product_info);
 
@@ -2456,7 +2458,7 @@ sub command_renew {
 
 	# Renew the certificate
 	print "Placing order...\n";
-	my $request = { years				=> $years,
+	my $request = { days				=> $days,
 			authorized_charge		=> $authorized_charge,
 			authorized_charge_currency	=> $authorized_charge_currency,
 			%opts };
