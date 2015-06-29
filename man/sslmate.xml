@@ -769,6 +769,10 @@
 										<listitem><para>The certificate's type ("DV" or "EV").</para></listitem>
 									</varlistentry>
 									<varlistentry>
+										<term>approval_method</term>
+										<listitem><para>The approval method.</para></listitem>
+									</varlistentry>
+									<varlistentry>
 										<term>approver_email</term>
 										<listitem><para>The approver email address.</para></listitem>
 									</varlistentry>
