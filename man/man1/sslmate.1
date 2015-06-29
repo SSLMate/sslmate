@@ -33,8 +33,8 @@ sslmate \- buy and manage SSL certificates
 .HP \w'\fBsslmate\ \fR\fB[\fIOPTIONS\fR]\fR\fB\ \fR\fB\fICOMMAND\fR\fR\fB\ \fR\fB[\fIARGS\fR...]\fR\ 'u
 \fBsslmate \fR\fB[\fIOPTIONS\fR]\fR\fB \fR\fB\fICOMMAND\fR\fR\fB \fR\fB[\fIARGS\fR...]\fR
 .SH "COMMON COMMANDS"
-.HP \w'\fBsslmate\ buy\ \fR\fB\fIHOSTNAME\fR\fR\ 'u
-\fBsslmate buy \fR\fB\fIHOSTNAME\fR\fR
+.HP \w'\fBsslmate\ buy\ \fR\fB\fIHOSTNAME\fR...\fR\ 'u
+\fBsslmate buy \fR\fB\fIHOSTNAME\fR...\fR
 .HP \w'\fBsslmate\ renew\ \fR\fB\fIHOSTNAME\fR\fR\ 'u
 \fBsslmate renew \fR\fB\fIHOSTNAME\fR\fR
 .HP \w'\fBsslmate\ reissue\ \fR\fB\fIHOSTNAME\fR\fR\ 'u
@@ -81,9 +81,16 @@ is logically divided into several sub\-commands which perform distinct tasks\&. 
 \fIafter\fR
 the name of the sub\-command\&.
 .PP
-\fBbuy \fR\fB[\fIOPTIONS\fR]\fR\fB \fR\fB\fIHOSTNAME\fR\fR
+\fBbuy \fR\fB[\fIOPTIONS\fR]\fR\fB \fR\fB\fIHOSTNAME\fR...\fR
 .RS 4
-Generate a private key and purchase a certificate for the given hostname/common name/CN\&.
+Generate a private key and purchase a certificate for the given hostname(s)\&.
+.sp
+If only one hostname is specified, a standard single\-domain certificate is issued\&. The hostname is placed in the certificate\*(Aqs common name (CN) field as well as a subjectAltName field\&. If the hostname starts with "www\&." or "*\&.", then a subjectAltName is also added, free of charge, for the remaining part of the the hostname, ensuring that the certificate is valid for both hostnames (e\&.g\&. if the hostname is "www\&.example\&.com", a subjectAltName is added for "example\&.com")\&. If the hostname does not start with "www\&." or "*\&.", then a subjectAltName is added, free of charge, for the hostname prefixed with "www\&." (e\&.g\&. if the hostname is "example\&.com", a subjectAltName is added for "www\&.example\&.com")\&.
+.sp
+If more than one hostname is specified, a multi\-domain certificate is issued\&. The first hostname is the primary name of the certificate and is placed in the certificate\*(Aqs common name field, as well as a subjectAltName field\&. The remaining hostnames are placed in subjectAltNames\&. The certificate is referred to by its primary name when downloading, renewing, reissuing, etc\&. The primary name cannot be changed without purchasing a new certificate, but alternative names can be added and removed after the certificate is issued by running
+\fBsslmate edit\fR\&.
+.sp
+If the hostname starts with "*\&.", then a wildcard certificate is issued, and the certificate is valid for all hostnames directly below the wildcard domain, but not for hostnames two or more levels below the wildcard domain (e\&.g\&. "*\&.example\&.com" matches "subdomain\&.example\&.com" but not "www\&.subdomain\&.example\&.com")\&. Multi\-domain certificates cannot contain wildcards\&.
 .sp
 The following options are understood:
 .PP
@@ -104,13 +111,19 @@ When "email" is used (the default), you must respond to an email sent to one of 
 option\&.
 .sp
 When "dns" is used, you must add a specific DNS record under your domain\&. If you use Route 53 and have appropriate AWS credentials configured, the DNS record will be automatically added\&. Otherwise, the DNS record will be displayed and you will need to add it manually\&.
+.sp
+When purchasing a multi\-domain certificate, each hostname must be approved separately\&. The approval method specified by this option applies to every hostname\&. To use a different method for a hostname, specify an option of the form
+\fB\-\-approval=\fR\fB\fIHOSTNAME\fR\fR\fB=\fR\fB\fIMETHOD\fR\fR\&.
 .RE
 .PP
 \fB\-\-email=\fR\fB\fIADDRESS\fR\fR
 .RS 4
-Send the domain ownership email to the given email address\&. This address must be one of the addresses that is listed when you run
+Send the approval email to the given email address\&. This address must be one of the addresses that is listed when you run
 \fBsslmate buy\fR
 interactively\&. Only applicable if email approval is used\&.
+.sp
+When purchasing a multi\-domain certificate, this email address is used for every hostname\&. To use a different email address for a hostname, specify an option of the form
+\fB\-\-email=\fR\fB\fIHOSTNAME\fR\fR\fB=\fR\fB\fIADDRESS\fR\fR\&.
 .RE
 .PP
 \fB\-\-timeout=\fR\fB\fISECONDS\fR\fR
@@ -483,6 +496,9 @@ Change the approval method for this certificate\&. The new method will be used f
 .sp
 For more information about approval methods, see the documentation for
 \fBsslmate buy\fR\&.
+.sp
+If this is a multi\-domain certificate, the approval method specified by this option applies to every hostname\&. To edit the approval method for a single hostname only, pass an option of the form
+\fB\-\-approval=\fR\fB\fIHOSTNAME\fR\fR\fB=\fR\fB\fIMETHOD\fR\fR\&.
 .RE
 .PP
 \fB\-\-email=\fR\fB\fIADDRESS\fR\fR
@@ -492,11 +508,25 @@ Change the approver email address of this certificate\&. The new address will be
 The new address must be one of the acceptable addresses that is listed when you run
 \fBsslmate buy\fR
 for this host name\&. This option is only applicable when email approval is used\&.
+.sp
+If this is a multi\-domain certificate, the email address specified by this option applies to every hostname\&. To edit the email address for a single hostname only, pass an option of the form
+\fB\-\-email=\fR\fB\fIHOSTNAME\fR\fR\fB=\fR\fB\fIMETHOD\fR\fR\&.
 .RE
 .PP
 \fB\-\-auto\-renew\fR, \fB\-\-no\-auto\-renew\fR
 .RS 4
 Enable or disable auto\-renew for this certificate\&.
+.RE
+.PP
+\fB\-\-add\-name=\fR\fB\fIHOSTNAME\fR\fR, \fB\-\-rm\-name=\fR\fB\fIHOSTNAME\fR\fR
+.RS 4
+Add or remove the given hostname to or from this certificate\&. This certificate must be a multi\-domain certificate, and only alternative names (not the common name) can be removed\&.
+.sp
+The name is not added or removed immediately\&. Instead, the changes take effect on the next call to
+\fBsslmate reissue\fR\&. Any names that were added since the last issuance will need to be approved\&. Existing names do not need to be re\-approved as long as you preserve the existing private key by passing the
+\fB\-\-same\-key\fR
+option to
+\fBsslmate reissue\fR\&. If there has been a net increase in hostnames since the last issuance, your account will be charged for the new names\&.
 .RE
 .PP
 \fB\-\-type=dv|ev\fR

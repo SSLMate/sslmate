@@ -1720,9 +1720,10 @@ sub command_buy {
 	local @ARGV = @_;
 
 	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
-		print "Usage: sslmate buy [OPTIONS] HOSTNAME\n\n";
+		print "Usage: sslmate buy [OPTIONS] HOSTNAME ...\n\n";
 		print "Example: sslmate buy www.example.com\n";
 		print "         sslmate buy '*.example.com'\n";
+		print "         sslmate buy www.example.com dev.example.com www.example.org\n";
 		print "\n";
 		print "Common options:\n";
 		print " --auto-renew         automatically renew this certificate before it expires\n";
@@ -1735,7 +1736,11 @@ sub command_buy {
 		print "\n";
 		print "Batch options:\n";
 		print " --approval=METHOD    use the given approval method (email or dns)\n";
+		print " --approval=HOSTNAME=METHOD\n";
+		print "                      use the given approval method for given hostname\n";
 		print " --email=ADDRESS      use the given approver email address\n";
+		print " --email=HOSTNAME=ADDRESS\n";
+		print "                      use the given approver email address for given hostname\n";
 		print " --timeout=SECONDS    wait at most SECONDS seconds for cert to be issued\n";
 		print " --no-wait            return immediately; don't wait for cert to be issued\n";
 		print " --temp               return immediately with a temporary certificate\n";
@@ -3042,11 +3047,17 @@ sub command_edit {
 		print $out "Usage: sslmate edit OPTIONS... HOSTNAME\n";
 		print $out "\n";
 		print $out "Valid options:\n";
-		print $out " --approval=METHOD   use the given approval method (email or dns)\n";
-		print $out " --email=ADDRESS     change the approver email of this cert\n";
-		print $out " --auto-renew        enable auto-renew for this cert\n";
-		print $out " --no-auto-renew     disable auto-renew for this cert\n";
-		print $out " --type=dv|ev        change the type of cert (takes effect when renewing)\n";
+		print $out " --approval=METHOD    use the given approval method (email or dns)\n";
+		print $out " --approval=HOSTNAME=METHOD\n";
+		print $out "                      use the given approval method for given hostname\n";
+		print $out " --email=ADDRESS      change the approver email of this cert\n";
+		print $out " --email=HOSTNAME=ADDRESS\n";
+		print $out "                      change the approver email for given hostname\n";
+		print $out " --auto-renew         enable auto-renew for this cert\n";
+		print $out " --no-auto-renew      disable auto-renew for this cert\n";
+		print $out " --add-name=HOSTNAME  add the given hostname (takes effect when reissuing)\n";
+		print $out " --rm-name=HOSTNAME   remove the given hostname (takes effect when reissuing)\n";
+		print $out " --type=dv|ev         change the type of cert (takes effect when renewing)\n";
 	};
 
 	local @ARGV = @_;

@@ -58,7 +58,7 @@
 	<refsynopsisdiv>
 		<title>Common commands</title>
 		<cmdsynopsis>
-			<command>sslmate buy <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
+			<command>sslmate buy <arg choice="plain" rep="repeat"><replaceable>HOSTNAME</replaceable></arg></command>
 		</cmdsynopsis>
 		<cmdsynopsis>
 			<command>sslmate renew <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
@@ -138,10 +138,35 @@
 
 		<variablelist>
 			<varlistentry>
-				<term><option>buy <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></option></term>
+				<term><option>buy <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain" rep="repeat"><replaceable>HOSTNAME</replaceable></arg></option></term>
 				<listitem>
 					<para>
-						Generate a private key and purchase a certificate for the given hostname/common name/CN.
+						Generate a private key and purchase a certificate for the given hostname(s).
+					</para>
+					<para>
+						If only one hostname is specified, a standard single-domain certificate is issued.
+						The hostname is placed in the certificate's common name (CN) field as well as a
+						subjectAltName field.  If the hostname starts with "www." or "*.", then a subjectAltName
+						is also added, free of charge, for the remaining part of the the hostname, ensuring that
+						the certificate is valid for both hostnames (e.g. if the hostname is "www.example.com", a
+						subjectAltName is added for "example.com").  If the hostname does not start with "www." or
+						"*.", then a subjectAltName is added, free of charge, for the hostname prefixed with
+						"www." (e.g. if the hostname is "example.com", a subjectAltName is added for "www.example.com").
+					</para>
+					<para>
+						If more than one hostname is specified, a multi-domain certificate is issued.  The first
+						hostname is the primary name of the certificate and is placed in the certificate's
+						common name field, as well as a subjectAltName field.  The remaining hostnames are
+						placed in subjectAltNames.  The certificate is referred to by its primary name
+						when downloading, renewing, reissuing, etc.  The primary name cannot be changed without
+						purchasing a new certificate, but alternative names can be added and removed after the certificate
+						is issued by running <command>sslmate edit</command>.
+					</para>
+					<para>
+						If the hostname starts with "*.", then a wildcard certificate is issued, and the certificate
+						is valid for all hostnames directly below the wildcard domain, but not for hostnames two or more
+						levels below the wildcard domain (e.g. "*.example.com" matches "subdomain.example.com" but not
+						"www.subdomain.example.com").  Multi-domain certificates cannot contain wildcards.
 					</para>
 
 					<para>
@@ -184,6 +209,12 @@
 									DNS record will be automatically added.  Otherwise, the DNS record will
 									be displayed and you will need to add it manually.
 								</para>
+								<para>
+									When purchasing a multi-domain certificate, each hostname must be approved
+									separately.  The approval method specified by this option applies to every
+									hostname.  To use a different method for a hostname, specify an option of the form
+									<option>--approval=<replaceable>HOSTNAME</replaceable>=<replaceable>METHOD</replaceable></option>.
+								</para>
 							</listitem>
 						</varlistentry>
 						<varlistentry>
@@ -191,9 +222,15 @@
 
 							<listitem>
 								<para>
-									Send the domain ownership email to the given email address.
+									Send the approval email to the given email address.
 									This address must be one of the addresses that is listed when you run
 									<command>sslmate buy</command> interactively.  Only applicable if email approval is used.
+								</para>
+								<para>
+									When purchasing a multi-domain certificate, this email address is used for
+									every hostname.  To use a different email address for a hostname, specify
+									an option of the form
+									<option>--email=<replaceable>HOSTNAME</replaceable>=<replaceable>ADDRESS</replaceable></option>.
 								</para>
 							</listitem>
 						</varlistentry>
@@ -735,6 +772,12 @@
 									For more information about approval methods, see the documentation
 									for <command>sslmate buy</command>.
 								</para>
+								<para>
+									If this is a multi-domain certificate, the approval method specified by this option
+									applies to every hostname.  To edit the approval method for a single hostname only,
+									pass an option of the form
+									<option>--approval=<replaceable>HOSTNAME</replaceable>=<replaceable>METHOD</replaceable></option>.
+								</para>
 							</listitem>
 						</varlistentry>
 						<varlistentry>
@@ -752,6 +795,12 @@
 									run <command>sslmate buy</command> for this host name.  This option is only
 									applicable when email approval is used.
 								</para>
+								<para>
+									If this is a multi-domain certificate, the email address specified by this option
+									applies to every hostname.  To edit the email address for a single hostname only,
+									pass an option of the form
+									<option>--email=<replaceable>HOSTNAME</replaceable>=<replaceable>METHOD</replaceable></option>.
+								</para>
 							</listitem>
 						</varlistentry>
 						<varlistentry>
@@ -761,6 +810,27 @@
 							<listitem>
 								<para>
 									Enable or disable auto-renew for this certificate.
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
+							<term><option>--add-name=<replaceable>HOSTNAME</replaceable></option></term>
+							<term><option>--rm-name=<replaceable>HOSTNAME</replaceable></option></term>
+
+							<listitem>
+								<para>
+									Add or remove the given hostname to or from this certificate.
+									This certificate must be a multi-domain certificate, and only
+									alternative names (not the common name) can be removed.
+								</para>
+								<para>
+									The name is not added or removed immediately.  Instead,
+									the changes take effect on the next call to <command>sslmate reissue</command>.
+									Any names that were added since the last issuance will need to be approved.
+									Existing names do not need to be re-approved as long as you preserve the
+									existing private key by passing the <option>--same-key</option> option to
+									<command>sslmate reissue</command>.  If there has been a net increase in hostnames
+									since the last issuance, your account will be charged for the new names.
 								</para>
 							</listitem>
 						</varlistentry>
