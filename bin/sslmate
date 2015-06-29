@@ -1783,7 +1783,7 @@ sub command_buy {
 			    'email-invoice-to=s', \$opts{email_invoice_to},
 			    'invoice-note=s', \$opts{invoice_note}) or return 2;
 
-	if (@ARGV != 1) {
+	if (@ARGV < 1) {
 		print STDERR "Error: you must specify the hostname for the certificate.\n";
 		print STDERR "Example: sslmate buy www.example.com\n";
 		print STDERR "     or: sslmate buy '*.example.com'\n";
@@ -1820,7 +1820,8 @@ sub command_buy {
 		close($csr_fh);
 	}
 
-	my $cn = lc $ARGV[0];
+	my $cn = lc shift @ARGV;
+	push @sans, @ARGV;
 	$cert_type //= $ev ? 'ev' : 'dv';
 	validate_cn($cn) or return 1;
 
@@ -3069,8 +3070,8 @@ sub command_edit {
 	$getopt->getoptions('auto-renew!', \$auto_renew,
 			    'approval=s', parse_approval_arg(\$default_approval_method, \%approval_methods),
 			    'email=s', parse_approval_arg(\$default_approver_email, \%approver_emails),
-			    'add-san=s', \@add_sans,
-			    'rm-san=s', \@rm_sans,
+			    'add-name=s', \@add_sans,
+			    'rm-name=s', \@rm_sans,
 			    'type=s', \$type) or return 2;
 	if (@ARGV == 0) {
 		print STDERR "Error: you must specify the name of the certificate to edit.\n";
