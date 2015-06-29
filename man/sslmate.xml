@@ -82,6 +82,9 @@
 			<command>sslmate list</command>
 		</cmdsynopsis>
 		<cmdsynopsis>
+			<command>sslmate show <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
+		</cmdsynopsis>
+		<cmdsynopsis>
 			<command>sslmate edit <arg choice="plain" rep="repeat"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
 		</cmdsynopsis>
 		<cmdsynopsis>
@@ -818,6 +821,115 @@
 								<para>
 									The output of <option>-z</option> is guaranteed not to change format, making it suitable
 									for use in scripts.
+								</para>
+							</listitem>
+						</varlistentry>
+					</variablelist>
+				</listitem>
+			</varlistentry>
+
+			<varlistentry>
+				<term><option>show <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></option></term>
+				<listitem>
+					<para>
+						Show information about the given certificate.
+					</para>
+					<para>
+						The following options are understood:
+					</para>
+					<variablelist>
+						<varlistentry>
+							<term><option>-f <replaceable>FIELDS</replaceable></option></term>
+							<term><option>--fields=<replaceable>FIELDS</replaceable></option></term>
+
+							<listitem>
+								<para>
+									Include the given fields in the output, where <replaceable>FIELDS</replaceable> is
+									a comma-separated list of the following column names:
+								</para>
+								<variablelist>
+									<varlistentry>
+										<term>name</term>
+										<listitem><para>The certificate's common name.</para></listitem>
+									</varlistentry>
+									<varlistentry>
+										<term>alt_names</term>
+										<listitem><para>The certificate's subject alternative names (for multi-domain certs only).</para></listitem>
+									</varlistentry>
+									<varlistentry>
+										<term>status</term>
+										<listitem><para>The certificate's status.</para></listitem>
+									</varlistentry>
+									<varlistentry>
+										<term>expiration</term>
+										<listitem><para>The certificate's expiration date, in YYYY-MM-DD format.</para></listitem>
+									</varlistentry>
+									<varlistentry>
+										<term>local_status</term>
+										<listitem><para>The status of the locally-installed copy of the certificate ("Installed", "Temporary", "Mismatched key", "No key file", "Out-of-date", or "None").</para></listitem>
+									</varlistentry>
+									<varlistentry>
+										<term>fingerprint</term>
+										<listitem><para>The certificate's SHA-1 fingerprint, in uppercase hex with octets separated by colons.</para></listitem>
+									</varlistentry>
+									<varlistentry>
+										<term>sha256_fingerprint</term>
+										<listitem><para>The certificate's SHA-256 fingerprint, in uppercase hex with octets separated by colons.</para></listitem>
+									</varlistentry>
+									<varlistentry>
+										<term>auto_renew</term>
+										<listitem><para>The certificate's auto-renew setting.</para></listitem>
+									</varlistentry>
+									<varlistentry>
+										<term>type</term>
+										<listitem><para>The certificate's type ("DV" or "EV").</para></listitem>
+									</varlistentry>
+									<varlistentry>
+										<term>approval_method</term>
+										<listitem><para>The approval method.</para></listitem>
+									</varlistentry>
+									<varlistentry>
+										<term>approver_email</term>
+										<listitem><para>The approver email address.</para></listitem>
+									</varlistentry>
+									<!--
+									<varlistentry>
+										<term>approval_email_from</term>
+										<listitem><para>The email address from which the approval email is sent.</para></listitem>
+									</varlistentry>
+									-->
+								</variablelist>
+							</listitem>
+						</varlistentry>
+						<!--
+						<varlistentry>
+							<term><option>-z</option></term>
+
+							<listitem>
+								<para>
+									Generate machine-parseable output.  By default, columns and lines are separated by a
+									NUL character, but this can be customized by setting the <varname>OFS</varname>
+									(output field separator) and <varname>ORS</varname> (output record separator) environment
+									variables.
+								</para>
+								<para>
+									When using <option>-z</option>, you must explicitly enumerate the fields you
+									want with the <option>- -fields</option> option.
+								</para>
+								<para>
+									The output of <option>-z</option> is guaranteed not to change format, making it suitable
+									for use in scripts.
+								</para>
+							</listitem>
+						</varlistentry>
+						-->
+						<varlistentry>
+							<term><option>--json</option></term>
+
+							<listitem>
+								<para>
+									Generate JSON output.  The output format is guaranteed not to change, apart from
+									backwards-compatible changes such as adding new fields to the JSON object.
 								</para>
 							</listitem>
 						</varlistentry>

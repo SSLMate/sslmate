@@ -49,6 +49,8 @@ sslmate \- buy and manage SSL certificates
 \fBsslmate download \fR\fB\-\-all\fR
 .HP \w'\fBsslmate\ list\fR\ 'u
 \fBsslmate list\fR
+.HP \w'\fBsslmate\ show\ \fR\fB\fIHOSTNAME\fR\fR\ 'u
+\fBsslmate show \fR\fB\fIHOSTNAME\fR\fR
 .HP \w'\fBsslmate\ edit\ \fR\fB\fIOPTIONS\fR...\fR\fB\ \fR\fB\fIHOSTNAME\fR\fR\ 'u
 \fBsslmate edit \fR\fB\fIOPTIONS\fR...\fR\fB \fR\fB\fIHOSTNAME\fR\fR
 .HP \w'\fBsslmate\ test\ \fR\fB\fIHOSTNAME\fR\fR\ 'u
@@ -545,6 +547,80 @@ option\&.
 The output of
 \fB\-z\fR
 is guaranteed not to change format, making it suitable for use in scripts\&.
+.RE
+.RE
+.PP
+\fBshow \fR\fB[\fIOPTIONS\fR]\fR\fB \fR\fB\fIHOSTNAME\fR\fR
+.RS 4
+Show information about the given certificate\&.
+.sp
+The following options are understood:
+.PP
+\fB\-f \fR\fB\fIFIELDS\fR\fR, \fB\-\-fields=\fR\fB\fIFIELDS\fR\fR
+.RS 4
+Include the given fields in the output, where
+\fIFIELDS\fR
+is a comma\-separated list of the following column names:
+.PP
+name
+.RS 4
+The certificate\*(Aqs common name\&.
+.RE
+.PP
+alt_names
+.RS 4
+The certificate\*(Aqs subject alternative names (for multi\-domain certs only)\&.
+.RE
+.PP
+status
+.RS 4
+The certificate\*(Aqs status\&.
+.RE
+.PP
+expiration
+.RS 4
+The certificate\*(Aqs expiration date, in YYYY\-MM\-DD format\&.
+.RE
+.PP
+local_status
+.RS 4
+The status of the locally\-installed copy of the certificate ("Installed", "Temporary", "Mismatched key", "No key file", "Out\-of\-date", or "None")\&.
+.RE
+.PP
+fingerprint
+.RS 4
+The certificate\*(Aqs SHA\-1 fingerprint, in uppercase hex with octets separated by colons\&.
+.RE
+.PP
+sha256_fingerprint
+.RS 4
+The certificate\*(Aqs SHA\-256 fingerprint, in uppercase hex with octets separated by colons\&.
+.RE
+.PP
+auto_renew
+.RS 4
+The certificate\*(Aqs auto\-renew setting\&.
+.RE
+.PP
+type
+.RS 4
+The certificate\*(Aqs type ("DV" or "EV")\&.
+.RE
+.PP
+approval_method
+.RS 4
+The approval method\&.
+.RE
+.PP
+approver_email
+.RS 4
+The approver email address\&.
+.RE
+.RE
+.PP
+\fB\-\-json\fR
+.RS 4
+Generate JSON output\&. The output format is guaranteed not to change, apart from backwards\-compatible changes such as adding new fields to the JSON object\&.
 .RE
 .RE
 .PP
