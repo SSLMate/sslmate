@@ -2850,6 +2850,7 @@ sub make_cert_info {
 		approver_email => $cert->{approver_email},
 		approval_email_from => $latest ? $latest->{approval_email_from} : undef,
 		approval_method => $cert->{approval_method},
+		alt_names => $cert->{sans} ? [ map { $_->{value} } grep { $_->{type} eq 'dns' } @{$cert->{sans}} ] : undef,
 	};
 }
 
@@ -3037,6 +3038,113 @@ sub command_list {
 		print_row(\@titles, \@widths);
 		print '-' x (sum(@widths) + 2*(@columns-1)) . "\n";
 		print_row($_, \@widths) for @rows;
+	}
+
+	return 0;
+}
+
+sub command_show {
+	local @ARGV = @_;
+
+	my %field_titles = (%cert_column_titles, alt_names => 'Alt Names');
+
+	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
+		print "Usage: sslmate show [OPTIONS] HOSTNAME\n";
+		print "\n";
+		print "Valid options:\n";
+		print " -f, --fields=FIELDS  include the given fields, where FIELDS is comma-separated\n";
+		print " --json               JSON output\n";
+#		print " -z                   machine-parseable output\n";
+		print "\n";
+		print "Valid fields:\n";
+		print " " . join(', ', sort keys %field_titles) . "\n"; # TODO: wrap this at 80 columns
+		return 0;
+	}
+
+	my $fields;
+	my $machine_output = 0;
+	my $json_output = 0;
+
+	my $getopt = Getopt::Long::Parser->new;
+	$getopt->configure(qw(no_ignore_case permute bundling));
+	$getopt->getoptions('fields|f=s', \$fields,
+			    'json', \$json_output,
+			    'z', \$machine_output) or return 2;
+
+	if ($json_output && $machine_output) {
+		print STDERR "Error: --json and -z are mutually exclusive.\n";
+		return 2;
+	}
+	if ($machine_output && !defined($fields)) {
+		print STDERR "Error: --fields option is required if -z is used.\n";
+		return 2;
+	}
+
+	if (@ARGV != 1) {
+		print STDERR "Error: you must specify certificate name on command line.\n";
+		return 2;
+	}
+	my $cn = lc $ARGV[0];
+
+	my @fields = defined($fields) ? split(/,/, $fields) : qw/name alt_names type status expiration auto_renew approval_method approver_email fingerprint local_status/;
+	for my $field (@fields) {
+		if (not exists $field_titles{$field}) {
+			print STDERR "Error: Invalid field: $field\n";
+			return 1;
+		}
+	}
+	if (not @fields) {
+		print STDERR "Error: no fields specified\n";
+		return 1;
+	}
+
+	load_config;
+	if (!is_linked) {
+		unless (-t STDIN) {
+			print STDERR "Error: you have not yet linked this system with your SSLMate account.\n";
+			print STDERR "Please run 'sslmate link'.\n";
+			return 1;
+		}
+		do_link or return 1;
+	}
+	init_default_paths(0);
+
+	my ($status, $cert_obj) = authed_api_call('GET', '/certs/' . qs_escape($cn), { expand => ['current', 'pending'] }) or return 1;
+	if ($status != 200) {
+		print STDERR "Error: " . $cert_obj->{message} . "\n";
+		return 1;
+	}
+	my $local_cert_info = get_local_cert_info(get_cert_paths($cert_obj->{cn}));
+	my $cert_info = make_cert_info($cert_obj, $local_cert_info);
+
+	if ($json_output) {
+		print encode_json($cert_info);
+	} elsif ($machine_output) { # TODO
+		print STDERR "Error: -z not yet implemented\n";
+		return 1;
+	} else {
+		my @rows;
+		for my $field (@fields) {
+			my $title = $field_titles{$field};
+			my $value = $cert_info->{$field};
+			my $formatter = exists($cert_column_formatters{$field}) ?
+					$cert_column_formatters{$field} :
+					sub { return shift; };
+
+			next unless defined $value;
+
+			if (ref $value eq 'ARRAY') {
+				push @rows, [ "$title: ", @$value ? $formatter->($value->[0]) : '' ];
+				for my $v (@{$value}[1..@$value-1]) {
+					push @rows, [ "", $formatter->($v) ];
+				}
+			} else {
+				push @rows, [ "$title: ", $formatter->($value) ];
+			}
+		}
+
+		my $max_width = max(map { length($_->[0]) } @rows);
+		printf "%*s%s\n", $max_width, $_->[0], $_->[1] for @rows;
 	}
 
 	return 0;
@@ -3850,6 +3958,8 @@ sub main {
 		return command_download @ARGV;
 	} elsif ($command eq 'list') {
 		return command_list @ARGV;
+	} elsif ($command eq 'show') {
+		return command_show @ARGV;
 	} elsif ($command eq 'edit') {
 		return command_edit @ARGV;
 	} elsif ($command eq 'resend-email') {
