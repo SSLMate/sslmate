@@ -2853,63 +2853,77 @@ sub make_cert_info {
 	};
 }
 
+my %cert_column_titles = (
+	name =>			'Name',
+	status =>		'Status',
+	expiration =>		'Expiration',
+	local_status => 	'Local Status',
+	fingerprint =>		'Fingerprint',
+	sha256_fingerprint =>	'Fingerprint (SHA-256)',
+	auto_renew =>		'Auto-renew',
+	type =>			'Type',
+	approver_email =>	'Approver Email',
+	approval_email_from =>	'Approval Email From',
+	approval_method =>	'Approval',
+);
+
+sub format_hash {
+	my ($raw_hash) = @_;
+	$raw_hash =~ s/([0-9a-zA-z][0-9a-zA-Z])/:\U$1\E/g;
+	return substr($raw_hash, 1);
+}
+sub format_expiration {
+	my ($seconds) = @_;
+	return strftime('%Y-%m-%d', localtime($seconds));
+}
+sub format_status {
+	my ($raw_status) = @_;
+	return 'Active' if $raw_status eq 'active';
+	return 'Expired' if $raw_status eq 'expired';
+	return 'Revoked' if $raw_status eq 'revoked';
+	return 'Pending' if $raw_status eq 'pending';
+	return 'Canceled' if $raw_status eq 'canceled';
+	return $raw_status;
+}
+sub format_local_status {
+	my ($raw_local_status) = @_;
+	return 'None' if $raw_local_status eq 'none';
+	return 'Out-of-date' if $raw_local_status eq 'out_of_date';
+	return 'No key file' if $raw_local_status eq 'missing_key';
+	return 'Mismatched key' if $raw_local_status eq 'mismatched_key';
+	return 'Temporary' if $raw_local_status eq 'installed_temporary';
+	return 'Installed' if $raw_local_status eq 'installed';
+	return 'No crt file' if $raw_local_status eq 'missing_crt';
+	return $raw_local_status;
+}
+sub format_type {
+	my ($raw_type) = @_;
+	return 'DV' if $raw_type eq 'dv';
+	return 'EV' if $raw_type eq 'ev';
+	return $raw_type;
+}
+sub format_yesno {
+	my ($value) = @_;
+	return $value ? 'Yes' : 'No';
+}
+my %cert_column_formatters = (
+	expiration => \&format_expiration,
+	status => \&format_status,
+	local_status => \&format_local_status,
+	fingerprint => \&format_hash,
+	sha256_fingerprint => \&format_hash,
+	auto_renew => \&format_yesno,
+	type => \&format_type,
+	approval_method => \&format_approval_method,
+);
+
 sub format_cert_row {
 	my ($cert_info, @columns) = @_;
 
-	local *format_hash = sub {
-		my ($raw_hash) = @_;
-		$raw_hash =~ s/([0-9a-zA-z][0-9a-zA-Z])/:\U$1\E/g;
-		return substr($raw_hash, 1);
-	};
-	local *format_expiration = sub {
-		my ($seconds) = @_;
-		return strftime('%Y-%m-%d', localtime($seconds));
-	};
-	local *format_status = sub {
-		my ($raw_status) = @_;
-		return 'Active' if $raw_status eq 'active';
-		return 'Expired' if $raw_status eq 'expired';
-		return 'Revoked' if $raw_status eq 'revoked';
-		return 'Pending' if $raw_status eq 'pending';
-		return 'Canceled' if $raw_status eq 'canceled';
-		return $raw_status;
-	};
-	local *format_local_status = sub {
-		my ($raw_local_status) = @_;
-		return 'None' if $raw_local_status eq 'none';
-		return 'Out-of-date' if $raw_local_status eq 'out_of_date';
-		return 'No key file' if $raw_local_status eq 'missing_key';
-		return 'Mismatched key' if $raw_local_status eq 'mismatched_key';
-		return 'Temporary' if $raw_local_status eq 'installed_temporary';
-		return 'Installed' if $raw_local_status eq 'installed';
-		return 'No crt file' if $raw_local_status eq 'missing_crt';
-		return $raw_local_status;
-	};
-	local *format_type = sub {
-		my ($raw_type) = @_;
-		return 'DV' if $raw_type eq 'dv';
-		return 'EV' if $raw_type eq 'ev';
-		return $raw_type;
-	};
-	local *format_yesno = sub {
-		my ($value) = @_;
-		return $value ? 'Yes' : 'No';
-	};
-	my %formatters = (
-		expiration => \&format_expiration,
-		status => \&format_status,
-		local_status => \&format_local_status,
-		fingerprint => \&format_hash,
-		sha256_fingerprint => \&format_hash,
-		auto_renew => \&format_yesno,
-		type => \&format_type,
-		approval_method => \&format_approval_method,
-	);
-
 	my @row;
 	for my $column (@columns) {
-		if (exists $formatters{$column}) {
-			push @row, defined($cert_info->{$column}) ? $formatters{$column}->($cert_info->{$column}) : undef;
+		if (exists $cert_column_formatters{$column}) {
+			push @row, defined($cert_info->{$column}) ? $cert_column_formatters{$column}->($cert_info->{$column}) : undef;
 		} else {
 			push @row, $cert_info->{$column};
 		}
@@ -2931,8 +2945,9 @@ sub command_list {
 		print " -z                  machine-parseable output\n";
 		print "\n";
 		print "Valid columns:\n";
-		print " name, type, status, expiration, local_status, fingerprint, sha256_fingerprint,\n";
-		print " auto_renew, approver_email\n";
+		print " " . join(', ', sort keys %cert_column_titles) . "\n"; # TODO: wrap this at 80 columns
+		#print " name, type, status, expiration, local_status, fingerprint, sha256_fingerprint,\n";
+		#print " auto_renew, approver_email\n";
 		return 0;
 	}
 
@@ -2956,21 +2971,8 @@ sub command_list {
 	}
 
 	my @columns = defined($columns) ? split(/,/, $columns) : qw/name type status expiration local_status/;
-	my %column_titles = (
-				name =>			'Name',
-			        status =>		'Status',
-			        expiration =>		'Expiration',
-			        local_status => 	'Local Status',
-			        fingerprint =>		'Fingerprint',
-			        sha256_fingerprint =>	'Fingerprint (SHA-256)',
-				auto_renew =>		'Auto-renew',
-				type =>			'Type',
-				approver_email =>	'Approver Email',
-				approval_email_from =>	'Approval Email From',
-				approval_method =>	'Approval',
-			    );
 	for my $column (@columns) {
-		if (not exists $column_titles{$column}) {
+		if (not exists $cert_column_titles{$column}) {
 			print STDERR "Error: Invalid column: $column\n";
 			return 1;
 		}
@@ -3027,7 +3029,7 @@ sub command_list {
 			push @rows, format_cert_row($record, @columns);
 		}
 
-		my @titles = @column_titles{@columns};
+		my @titles = @cert_column_titles{@columns};
 		my @widths;
 		for my $i (0..@columns-1) {
 			push @widths, max(map { length($_->[$i] // '-') } \@titles, @rows);
