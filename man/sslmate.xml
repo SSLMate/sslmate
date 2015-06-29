@@ -67,6 +67,9 @@
 			<command>sslmate reissue <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
 		</cmdsynopsis>
 		<cmdsynopsis>
+			<command>sslmate rekey <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
+		</cmdsynopsis>
+		<cmdsynopsis>
 			<command>sslmate revoke <arg choice="opt">--all</arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
 		</cmdsynopsis>
 		<cmdsynopsis>
@@ -464,7 +467,14 @@
 				<term><option>reissue <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></option></term>
 				<listitem>
 					<para>
-						Generate a new private key and reissue the certificate for the given hostname.
+						Generate a new private key (unless <option>--same-key</option> is specified) and reissue the
+						certificate for the given hostname.
+					</para>
+					<para>
+						Note: <command>sslmate reissue</command> without the
+						<option>--same-key</option> option is deprecated.  Starting with SSLMate 2.0,
+						<option>--same-key</option> will be implied.  To reissue a certificate with a
+						new key, use <option>sslmate rekey</option> instead.
 					</para>
 					<para>
 						Reissuing a certificate does <emphasis>not</emphasis> revoke it. Use the <command>sslmate revoke</command>
@@ -475,6 +485,22 @@
 						The following options are understood:
 					</para>
 					<variablelist>
+						<varlistentry>
+							<term><option>--same-key</option></term>
+
+							<listitem>
+								<para>
+									Keep the same private key when reissuing.  This is useful if you are reissuing
+									a certificate not because of a lost key, but to add or remove the alternative
+									names of a multi-domain certificate.
+								</para>
+								<para>
+									Note: Starting with SSLMate 2.0,
+									<option>--same-key</option> will be implied.  To reissue a certificate with a
+									new key, use <option>sslmate rekey</option> instead.
+								</para>
+							</listitem>
+						</varlistentry>
 						<varlistentry>
 							<term><option>--timeout=<replaceable>SECONDS</replaceable></option></term>
 
@@ -502,6 +528,52 @@
 								</para>
 							</listitem>
 						</varlistentry>
+					</variablelist>
+				</listitem>
+			</varlistentry>
+
+			<varlistentry>
+				<term><option>rekey <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></option></term>
+				<listitem>
+					<para>
+						Generate a new private key and reissue the certificate for the given hostname.
+					</para>
+					<para>
+						Reissuing a certificate does <emphasis>not</emphasis> revoke it. Use the <command>sslmate revoke</command>
+						command to revoke a certificate after you have rekeyed it.
+					</para>
+
+					<para>
+						The following options are understood:
+					</para>
+					<variablelist>
+						<varlistentry>
+							<term><option>--timeout=<replaceable>SECONDS</replaceable></option></term>
+
+							<listitem>
+								<para>
+									Wait up to <replaceable>SECONDS</replaceable> seconds for the certificate to be issued.
+									If the certificate is not issued before the timeout elapses, <command>sslmate</command>
+									exits without downloading any certificate files. Instead, the certificate must be downloaded
+									later with the <command>sslmate download</command> command.
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
+							<term><option>--no-wait</option></term>
+
+							<listitem>
+								<para>
+									Return immediately after requesting the rekey instead of waiting for the new certificate
+									to be issued. If this option is used, no certificate files are downloaded; instead
+									the new certificate must be downloaded separately with the <command>sslmate download</command>
+									command.
+								</para>
+								<para>
+									This option is equivalent to <option>--timeout 0</option>.
+								</para>
+							</listitem>
+						</varlistentry>
 						<varlistentry>
 							<term><option>-f</option></term>
 							<term><option>--force</option></term>
@@ -515,7 +587,7 @@
 
 							<listitem>
 								<para>
-									Specify the type of key to use for the reissued certificate: RSA (the default), or ECDSA
+									Specify the type of the new key: RSA (the default), or ECDSA
 									(elliptic curve). The certificate will be signed with a signature of the same type.
 								</para>
 								<para>

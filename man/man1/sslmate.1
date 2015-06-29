@@ -39,6 +39,8 @@ sslmate \- buy and manage SSL certificates
 \fBsslmate renew \fR\fB\fIHOSTNAME\fR\fR
 .HP \w'\fBsslmate\ reissue\ \fR\fB\fIHOSTNAME\fR\fR\ 'u
 \fBsslmate reissue \fR\fB\fIHOSTNAME\fR\fR
+.HP \w'\fBsslmate\ rekey\ \fR\fB\fIHOSTNAME\fR\fR\ 'u
+\fBsslmate rekey \fR\fB\fIHOSTNAME\fR\fR
 .HP \w'\fBsslmate\ revoke\ \fR\fB[\-\-all]\fR\fB\ \fR\fB\fIHOSTNAME\fR\fR\ 'u
 \fBsslmate revoke \fR\fB[\-\-all]\fR\fB \fR\fB\fIHOSTNAME\fR\fR
 .HP \w'\fBsslmate\ download\ \fR\fB\fIHOSTNAME\fR...\fR\ 'u
@@ -262,7 +264,19 @@ Renew the certificate even if it\*(Aqs not about to expire\&. Note that the rene
 .PP
 \fBreissue \fR\fB[\fIOPTIONS\fR]\fR\fB \fR\fB\fIHOSTNAME\fR\fR
 .RS 4
-Generate a new private key and reissue the certificate for the given hostname\&.
+Generate a new private key (unless
+\fB\-\-same\-key\fR
+is specified) and reissue the certificate for the given hostname\&.
+.sp
+Note:
+\fBsslmate reissue\fR
+without the
+\fB\-\-same\-key\fR
+option is deprecated\&. Starting with SSLMate 2\&.0,
+\fB\-\-same\-key\fR
+will be implied\&. To reissue a certificate with a new key, use
+\fBsslmate rekey\fR
+instead\&.
 .sp
 Reissuing a certificate does
 \fInot\fR
@@ -271,6 +285,17 @@ revoke it\&. Use the
 command to revoke a certificate after you have reissued it\&.
 .sp
 The following options are understood:
+.PP
+\fB\-\-same\-key\fR
+.RS 4
+Keep the same private key when reissuing\&. This is useful if you are reissuing a certificate not because of a lost key, but to add or remove the alternative names of a multi\-domain certificate\&.
+.sp
+Note: Starting with SSLMate 2\&.0,
+\fB\-\-same\-key\fR
+will be implied\&. To reissue a certificate with a new key, use
+\fBsslmate rekey\fR
+instead\&.
+.RE
 .PP
 \fB\-\-timeout=\fR\fB\fISECONDS\fR\fR
 .RS 4
@@ -292,6 +317,40 @@ command\&.
 This option is equivalent to
 \fB\-\-timeout 0\fR\&.
 .RE
+.RE
+.PP
+\fBrekey \fR\fB[\fIOPTIONS\fR]\fR\fB \fR\fB\fIHOSTNAME\fR\fR
+.RS 4
+Generate a new private key and reissue the certificate for the given hostname\&.
+.sp
+Reissuing a certificate does
+\fInot\fR
+revoke it\&. Use the
+\fBsslmate revoke\fR
+command to revoke a certificate after you have rekeyed it\&.
+.sp
+The following options are understood:
+.PP
+\fB\-\-timeout=\fR\fB\fISECONDS\fR\fR
+.RS 4
+Wait up to
+\fISECONDS\fR
+seconds for the certificate to be issued\&. If the certificate is not issued before the timeout elapses,
+\fBsslmate\fR
+exits without downloading any certificate files\&. Instead, the certificate must be downloaded later with the
+\fBsslmate download\fR
+command\&.
+.RE
+.PP
+\fB\-\-no\-wait\fR
+.RS 4
+Return immediately after requesting the rekey instead of waiting for the new certificate to be issued\&. If this option is used, no certificate files are downloaded; instead the new certificate must be downloaded separately with the
+\fBsslmate download\fR
+command\&.
+.sp
+This option is equivalent to
+\fB\-\-timeout 0\fR\&.
+.RE
 .PP
 \fB\-f\fR, \fB\-\-force\fR
 .RS 4
@@ -300,7 +359,7 @@ Overwrite existing files\&.
 .PP
 \fB\-\-key\-type=rsa|ecdsa\fR
 .RS 4
-Specify the type of key to use for the reissued certificate: RSA (the default), or ECDSA (elliptic curve)\&. The certificate will be signed with a signature of the same type\&.
+Specify the type of the new key: RSA (the default), or ECDSA (elliptic curve)\&. The certificate will be signed with a signature of the same type\&.
 .sp
 See the documentation for
 \fBsslmate buy\fR
