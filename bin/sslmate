@@ -205,6 +205,11 @@ sub prompt_password {
 	return decode_input($password);
 }
 
+sub is_wildcard_name {
+	my ($name) = @_;
+	return $name =~ /^\*\./;
+}
+
 sub restore_file_permissions {
 	my ($destfile, $srcfile) = @_;
 
@@ -3510,7 +3515,7 @@ sub command_test {
 	return 0;
 }
 
-sub command_import { # TODO TODO: support for importing SAN certs
+sub command_import {
 	local @ARGV = @_;
 
 	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
@@ -3524,7 +3529,11 @@ sub command_import { # TODO TODO: support for importing SAN certs
 		print " --no-auto-renew    don't automatically renew this certificate\n";
 		print " --no-install       don't copy the key/cert to the local key/cert directories\n";
 		print " --approval=METHOD  use the given approval method (email or dns)\n";
+		print " --approval=HOSTNAME=METHOD\n";
+		print "                    use the given approval method for given hostname\n";
 		print " --email=ADDRESS    use the given approver email address\n";
+		print " --email=HOSTNAME=ADDRESS\n";
+		print "                    use the given approver email address for given hostname\n";
 		return 0;
 	}
 
@@ -3532,16 +3541,18 @@ sub command_import { # TODO TODO: support for importing SAN certs
 	my $auto_renew = undef;
 	my $force = 0;
 	my $install_locally = 1;
-	my $approval_method = 'email';
-	my $approver_email = undef;
+	my $default_approval_method = 'email';
+	my %approval_methods;
+	my $default_approver_email = undef;
+	my %approver_emails;
 
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
 	$getopt->getoptions('auto-renew!', \$auto_renew,
 			    'force|f', \$force,
 			    'install!', \$install_locally,
-			    'approval=s', \$approval_method,
-			    'email=s', \$approver_email) or return 2;
+			    'approval=s', parse_approval_arg(\$default_approval_method, \%approval_methods),
+			    'email=s', parse_approval_arg(\$default_approver_email, \%approver_emails)) or return 2;
 
 	if (@ARGV != 2) {
 		print STDERR "Error: you must specify the key file and cert file paths.\n";
@@ -3549,16 +3560,6 @@ sub command_import { # TODO TODO: support for importing SAN certs
 		return 2;
 	}
 	my ($source_key_path, $source_crt_path) = @ARGV;
-
-	if (defined($approver_email) && $approval_method ne 'email') {
-		print STDERR "Error: --email is only valid with --approval=email.\n";
-		return 2;
-	}
-	if ($batch && $approval_method eq 'email' && not defined($approver_email)) {
-		print STDERR "Error: in batch mode, you must specify the approver email with --email.\n";
-		print STDERR "See 'sslmate help import' for help.\n";
-		return 2;
-	}
 
 	# 0. Load config, etc.
 	load_config;
@@ -3646,19 +3647,51 @@ sub command_import { # TODO TODO: support for importing SAN certs
 		}
 	}
 
-	# 6. Get product info from the server, ask user to choose approver email (unless we're in batch mode)
-	unless ($batch) {
-		my $product_info = get_product_info($type, $cn) or exit 1;
+	# 6. Process SANs, approval methods, etc.
+	my $product_info = get_product_info($type, $cn) or exit 1;
 
-		my $has_nondns_sans = 0;
-		my @missing_sans;
-		for my $san (@{$crt_info->{sans}}) {
-			if ($san->{type} ne 'dns') {
-				$has_nondns_sans = 1;
-			} elsif (!grep { lc($_) eq lc($san->{value}) } @{$product_info->{default_sans}}) {
-				push @missing_sans, $san->{value};
+	my $has_nondns_sans;
+	my @default_sans;
+	my @nondefault_sans;
+	for my $san (@{$crt_info->{sans}}) {
+		if ($san->{type} ne 'dns') {
+			$has_nondns_sans = 1;
+		} elsif (grep { lc($_) eq lc($san->{value}) } @{$product_info->{default_sans}}) {
+			push @default_sans, $san->{value};
+		} else {
+			push @nondefault_sans, $san->{value};
+		}
+	}
+
+	my @sans;
+	my @unsupported_sans;
+	if (@nondefault_sans) {
+		# This cert contains SANs that wouldn't be covered by the default SANs for this product.
+		# Make sure they're all supported!
+		if (is_wildcard_name($cn)) {
+			# No SANs are supported on wildcard certs
+			push @unsupported_sans, @nondefault_sans;
+		} else {
+			for my $san (@nondefault_sans) {
+				if (is_wildcard_name($san)) {
+					# Wildcard SANs not supported
+					push @unsupported_sans, $san;
+				} else {
+					push @sans, lc $san;
+				}
 			}
 		}
+	}
+	if (@sans) {
+		# If we explicitly specify SANs, no SANs are added by default, so also
+		# copy @default_sans to @sans...
+		for my $default_san (map lc, @default_sans) {
+			next if grep { $_ eq $default_san } ($cn, @sans);
+			push @sans, $default_san;
+		}
+	}
+
+	unless ($batch) {
 		if ($has_nondns_sans) {
 			print "WARNING: This certificate contains non-DNS subject alternative names.\n";
 			print "SSLMate does not support non-DNS subject alternative names.  When this\n";
@@ -3667,9 +3700,10 @@ sub command_import { # TODO TODO: support for importing SAN certs
 			exit 1 unless prompt_yesno();
 			print "\n";
 		}
-		if (@missing_sans) {
-			print "WARNING: This certificate contains the following subject alternative names:\n\n";
-			for my $san (@missing_sans) {
+		if (@unsupported_sans) {
+			print "WARNING: This certificate contains the following subject alternative names\n";
+			print "that are not supported by SSLMate:\n\n";
+			for my $san (@unsupported_sans) {
 				print "\t$san\n";
 			}
 			print "\nWhen this certificate renews, these subject alternative names will be dropped.\n";
@@ -3677,16 +3711,35 @@ sub command_import { # TODO TODO: support for importing SAN certs
 			exit 1 unless prompt_yesno();
 			print "\n";
 		}
-		if ($approval_method eq 'email') {
-			if (defined $approver_email) {
-				if (!grep { $_ eq $approver_email } @{$product_info->{approver_emails}}) {
-					print STDERR "Error: $approver_email: not an acceptable approver email for $cn\n";
-					exit 1;
-				}
-			} else {
-				($approval_method, $approver_email) = prompt_for_approval($cn, product_info_to_approval_methods($product_info)) or exit 1;
+	}
+
+	# Determine the approval method for the CN, and each SAN
+	for my $hostname ($cn, @sans) {
+		my $method = $approval_methods{$hostname} // $default_approval_method;
+		my $email = $approver_emails{$hostname} // $default_approver_email;
+
+		if ($method eq 'email' && not defined($email)) {
+			if ($batch) {
+				print STDERR "Error: no approver email address specified for $cn.\n";
+				print STDERR "Tip: in batch mode, you must specify approver email addresses with --email.\n";
+				print STDERR "See 'sslmate help import' for help.\n";
+				return 2;
 			}
+
+			($method, $email) = prompt_for_approval($hostname, product_info_to_approval_methods($product_info)) or exit 1;
 		}
+
+		$approval_methods{$hostname} = $method;
+		$approver_emails{$hostname} = $email;
+	}
+
+	# Construct a list of SAN objects
+	my @san_objs;
+	for my $san_hostname (@sans) {
+		push @san_objs, { type => 'dns',
+				  value => $san_hostname,
+				  approval_method => $approval_methods{$san_hostname},
+				  approver_email => $approver_emails{$san_hostname} };
 	}
 
 	# 7. Generate the CSR
@@ -3699,18 +3752,19 @@ sub command_import { # TODO TODO: support for importing SAN certs
 
 	my $exit_with_error = sub {
 		unlink($paths->{key}) if $install_locally && !$key_already_installed;
-		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert_obj, qw/type approval_method approver_email csr/)) if defined($cert_obj) && $cert_obj->{exists};
+		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert_obj, qw/type approval_method approver_email sans csr/), 'application/json') if defined($cert_obj) && $cert_obj->{exists};
 		exit 1;
 	};
 
 	# 8. Create/update the cert object on the server
-	my $request = {	auto_renew	=> $auto_renew,
+	my $request = {	auto_renew	=> to_json_bool($auto_renew // $cert_obj->{auto_renew}),
 			type		=> $type,
-			approval_method	=> $approval_method,
-			approver_email	=> $approver_email,
-			csr		=> \$csr };
+			approval_method	=> $approval_methods{$cn},
+			approver_email	=> $approver_emails{$cn},
+			sans		=> int(@san_objs) ? \@san_objs : undef,
+			csr		=> $csr };
 
-	($status, my $new_cert_obj) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['dns_approval.status','http_approval.status'] }, $request) or $exit_with_error->();
+	($status, my $new_cert_obj) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['dns_approval.status','http_approval.status'] }, $request, 'application/json') or $exit_with_error->();
 	if ($status != 200) {
 		print STDERR "Error: " . $new_cert_obj->{message} . "\n";
 		$cert_obj = undef;
