@@ -713,6 +713,9 @@ When renewing, use the given method to prove ownership of your domain\&.
 .sp
 For more information about approval methods, see the documentation for
 \fBsslmate buy\fR\&.
+.sp
+If this is a multi\-domain certificate, the approval method specified by this option applies to every hostname\&. To specify a different approval method for a particular hostname, pass an option of the form
+\fB\-\-approval=\fR\fB\fIHOSTNAME\fR\fR\fB=\fR\fB\fIMETHOD\fR\fR\&.
 .RE
 .PP
 \fB\-\-email=\fR\fB\fIADDRESS\fR\fR
@@ -720,6 +723,9 @@ For more information about approval methods, see the documentation for
 When renewing, send the domain ownership email to the given email address instead of prompting for one\&. This address must be one of the addresses that is listed when you run
 \fBsslmate import\fR
 interactively\&. This option is only applicable when email approval is used\&.
+.sp
+If this is a multi\-domain certificate, the email address specified by this option applies to every hostname\&. To specify a different email address for a particular hostname, pass an option of the form
+\fB\-\-approval=\fR\fB\fIHOSTNAME\fR\fR\fB=\fR\fB\fIMETHOD\fR\fR\&.
 .RE
 .PP
 \fB\-f\fR, \fB\-\-force\fR

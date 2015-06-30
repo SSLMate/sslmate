@@ -1096,6 +1096,12 @@
 									For more information about approval methods, see the documentation
 									for <command>sslmate buy</command>.
 								</para>
+								<para>
+									If this is a multi-domain certificate, the approval method specified by this option
+									applies to every hostname.  To specify a different approval method for a particular
+									hostname, pass an option of the form
+									<option>--approval=<replaceable>HOSTNAME</replaceable>=<replaceable>METHOD</replaceable></option>.
+								</para>
 							</listitem>
 						</varlistentry>
 						<varlistentry>
@@ -1107,6 +1113,12 @@
 									prompting for one.  This address must be one of the addresses that is listed when you run
 									<command>sslmate import</command> interactively.  This option is only applicable when
 									email approval is used.
+								</para>
+								<para>
+									If this is a multi-domain certificate, the email address specified by this option
+									applies to every hostname.  To specify a different email address for a particular
+									hostname, pass an option of the form
+									<option>--approval=<replaceable>HOSTNAME</replaceable>=<replaceable>METHOD</replaceable></option>.
 								</para>
 							</listitem>
 						</varlistentry>
