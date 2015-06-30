@@ -3528,9 +3528,10 @@ sub command_import { # TODO TODO: support for importing SAN certs
 		return 0;
 	}
 
+	my $cn = undef;
 	my $auto_renew = undef;
 	my $force = 0;
-	my $install = 1;
+	my $install_locally = 1;
 	my $approval_method = 'email';
 	my $approver_email = undef;
 
@@ -3538,7 +3539,7 @@ sub command_import { # TODO TODO: support for importing SAN certs
 	$getopt->configure(qw(no_ignore_case permute bundling));
 	$getopt->getoptions('auto-renew!', \$auto_renew,
 			    'force|f', \$force,
-			    'install!', \$install,
+			    'install!', \$install_locally,
 			    'approval=s', \$approval_method,
 			    'email=s', \$approver_email) or return 2;
 
@@ -3547,6 +3548,7 @@ sub command_import { # TODO TODO: support for importing SAN certs
 		print STDERR "Example: sslmate import www.example.com.key www.example.com.crt\n";
 		return 2;
 	}
+	my ($source_key_path, $source_crt_path) = @ARGV;
 
 	if (defined($approver_email) && $approval_method ne 'email') {
 		print STDERR "Error: --email is only valid with --approval=email.\n";
@@ -3570,13 +3572,6 @@ sub command_import { # TODO TODO: support for importing SAN certs
 	}
 
 	init_default_paths;
-
-	do_import($force, $auto_renew, $install, $ARGV[0], $ARGV[1], undef, $approval_method, $approver_email);
-	return 0;
-}
-
-sub do_import {
-	my ($force, $auto_renew, $install_locally, $source_key_path, $source_crt_path, $cn, $approval_method, $approver_email) = @_;
 
 	# 1. Read the key
 	open(my $source_key_file, '<', $source_key_path) or die "Error: Unable to open $source_key_path: $!\n";
@@ -3752,6 +3747,8 @@ sub do_import {
 	if ($install_locally) {
 		print_cert_paths($paths);
 	}
+
+	return 0;
 }
 
 sub interpolate_config_template {
