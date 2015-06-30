@@ -3597,7 +3597,7 @@ sub do_import {
 		print STDERR "Error: $source_crt_path: " . $crt_info->{message} . "\n";
 		return 1;
 	}
-	$cn //= $crt_info->{cn};
+	$cn //= lc $crt_info->{cn};
 	if ($crt_info->{pubkey_hash} ne $pubkey_hash) {
 		print STDERR "Error: The certificate ($source_crt_path)'s public key does not match the private key ($source_key_path)\n";
 		exit 1;
@@ -3660,7 +3660,7 @@ sub do_import {
 		for my $san (@{$crt_info->{sans}}) {
 			if ($san->{type} ne 'dns') {
 				$has_nondns_sans = 1;
-			} elsif (!grep { $_ eq $san->{value} } @{$product_info->{default_sans}}) {
+			} elsif (!grep { lc($_) eq lc($san->{value}) } @{$product_info->{default_sans}}) {
 				push @missing_sans, $san->{value};
 			}
 		}
