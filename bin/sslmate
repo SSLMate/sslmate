@@ -1782,7 +1782,6 @@ sub command_buy {
 			    'ev', \$ev,
 			    'approval=s', parse_approval_arg(\$default_approval_method, \%approval_methods),
 			    'email=s', parse_approval_arg(\$default_approver_email, \%approver_emails),
-			    'san=s', \@sans,
 			    'days=i', \$days,
 			    'timeout=i', \$timeout,
 			    'no-wait', \$no_wait,
