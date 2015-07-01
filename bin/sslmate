@@ -1901,7 +1901,7 @@ sub command_buy {
 		$product_info = get_product_info($cert_type // $cert->{type}, $cn,
 						 days => $days,
 						 coupon_code => $opts{coupon_code},
-						 sans => int(@sans)) or return 1;
+						 sans => @sans ? int(@sans) : undef) or return 1;
 
 		return 1 unless order_can_be_paid($product_info);
 
@@ -2426,6 +2426,7 @@ sub command_renew {
 	unless ($batch) {
 		# Get product/pricing info from the server, ask user for confirmation
 
+		# TODO TODO: specify # of SANs when getting product info
 		my $product_info = get_product_info($cert->{type}, $cn, days => $days, coupon_code => $opts{coupon_code}) or exit 1;
 
 		exit 1 unless order_can_be_paid($product_info);
@@ -3725,7 +3726,8 @@ sub command_import {
 				return 2;
 			}
 
-			($method, $email) = prompt_for_approval($hostname, product_info_to_approval_methods($product_info)) or exit 1;
+			my $approval_methods = get_approval_methods($type, $hostname) or return 1;
+			($method, $email) = prompt_for_approval($hostname, $approval_methods) or return 1;
 		}
 
 		$approval_methods{$hostname} = $method;
