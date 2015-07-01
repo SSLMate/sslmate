@@ -1831,7 +1831,7 @@ sub command_buy {
 	}
 
 	my $cn = lc shift @ARGV;
-	push @sans, @ARGV;
+	push @sans, map(lc, @ARGV);
 	$cert_type //= $ev ? 'ev' : 'dv';
 	validate_cn($cn) or return 1;
 
@@ -3249,7 +3249,7 @@ sub command_edit {
 			next;
 		}
 		my $hostname = $san_obj->{value};
-		if (grep { $_ eq $hostname } @rm_sans) {
+		if (grep { $_ eq $hostname } map(lc, @rm_sans)) {
 			# Delete this SAN by not copying it through to @new_san_objs.
 			$modified_sans = 1;
 			$modified_approval = 1;
@@ -3272,7 +3272,7 @@ sub command_edit {
 		$modified_approval ||= !compare_approval_method($san_obj, $new_san_obj);
 	}
 	# Add new SANs to @new_san_objs, if they aren't already there
-	for my $hostname (@add_sans) {
+	for my $hostname (map lc, @add_sans) {
 		next if grep { $_->{type} eq 'dns' && $_->{value} eq $hostname } @new_san_objs;
 
 		my $approval_method = $approval_methods{$hostname} // $default_approval_method;
