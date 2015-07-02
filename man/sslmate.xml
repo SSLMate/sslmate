@@ -28,8 +28,8 @@
 	-->
 	<refentryinfo>
 		<title>SSLMate</title>
-		<date>2015-06-18</date>
-		<productname>SSLMate 1.3.0</productname>
+		<date>2015-07-02</date>
+		<productname>SSLMate 1.4.0</productname>
 
 		<author>
 			<othername>SSLMate</othername>
@@ -58,13 +58,16 @@
 	<refsynopsisdiv>
 		<title>Common commands</title>
 		<cmdsynopsis>
-			<command>sslmate buy <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
+			<command>sslmate buy <arg choice="plain" rep="repeat"><replaceable>HOSTNAME</replaceable></arg></command>
 		</cmdsynopsis>
 		<cmdsynopsis>
 			<command>sslmate renew <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
 		</cmdsynopsis>
 		<cmdsynopsis>
 			<command>sslmate reissue <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
+		</cmdsynopsis>
+		<cmdsynopsis>
+			<command>sslmate rekey <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
 		</cmdsynopsis>
 		<cmdsynopsis>
 			<command>sslmate revoke <arg choice="opt">--all</arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
@@ -77,6 +80,9 @@
 		</cmdsynopsis>
 		<cmdsynopsis>
 			<command>sslmate list</command>
+		</cmdsynopsis>
+		<cmdsynopsis>
+			<command>sslmate show <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
 		</cmdsynopsis>
 		<cmdsynopsis>
 			<command>sslmate edit <arg choice="plain" rep="repeat"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
@@ -138,10 +144,35 @@
 
 		<variablelist>
 			<varlistentry>
-				<term><option>buy <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></option></term>
+				<term><option>buy <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain" rep="repeat"><replaceable>HOSTNAME</replaceable></arg></option></term>
 				<listitem>
 					<para>
-						Generate a private key and purchase a certificate for the given hostname/common name/CN.
+						Generate a private key and purchase a certificate for the given hostname(s).
+					</para>
+					<para>
+						If only one hostname is specified, a standard single-domain certificate is issued.
+						The hostname is placed in the certificate's common name (CN) field as well as a
+						subjectAltName field.  If the hostname starts with "www." or "*.", then a subjectAltName
+						is also added, free of charge, for the remaining part of the the hostname, ensuring that
+						the certificate is valid for both hostnames (e.g. if the hostname is "www.example.com", a
+						subjectAltName is added for "example.com").  If the hostname does not start with "www." or
+						"*.", then a subjectAltName is added, free of charge, for the hostname prefixed with
+						"www." (e.g. if the hostname is "example.com", a subjectAltName is added for "www.example.com").
+					</para>
+					<para>
+						If more than one hostname is specified, a multi-domain certificate is issued.  The first
+						hostname is the primary name of the certificate and is placed in the certificate's
+						common name field, as well as a subjectAltName field.  The remaining hostnames are
+						placed in subjectAltNames.  The certificate is referred to by its primary name
+						when downloading, renewing, reissuing, etc.  The primary name cannot be changed without
+						purchasing a new certificate, but alternative names can be added and removed after the certificate
+						is issued by running <command>sslmate edit</command>.
+					</para>
+					<para>
+						If the hostname starts with "*.", then a wildcard certificate is issued, and the certificate
+						is valid for all hostnames directly below the wildcard domain, but not for hostnames two or more
+						levels below the wildcard domain (e.g. "*.example.com" matches "subdomain.example.com" but not
+						"www.subdomain.example.com").  Multi-domain certificates cannot contain wildcards.
 					</para>
 
 					<para>
@@ -184,6 +215,12 @@
 									DNS record will be automatically added.  Otherwise, the DNS record will
 									be displayed and you will need to add it manually.
 								</para>
+								<para>
+									When purchasing a multi-domain certificate, each hostname must be approved
+									separately.  The approval method specified by this option applies to every
+									hostname.  To use a different method for a hostname, specify an option of the form
+									<option>--approval=<replaceable>HOSTNAME</replaceable>=<replaceable>METHOD</replaceable></option>.
+								</para>
 							</listitem>
 						</varlistentry>
 						<varlistentry>
@@ -191,9 +228,15 @@
 
 							<listitem>
 								<para>
-									Send the domain ownership email to the given email address.
+									Send the approval email to the given email address.
 									This address must be one of the addresses that is listed when you run
 									<command>sslmate buy</command> interactively.  Only applicable if email approval is used.
+								</para>
+								<para>
+									When purchasing a multi-domain certificate, this email address is used for
+									every hostname.  To use a different email address for a hostname, specify
+									an option of the form
+									<option>--email=<replaceable>HOSTNAME</replaceable>=<replaceable>ADDRESS</replaceable></option>.
 								</para>
 							</listitem>
 						</varlistentry>
@@ -427,7 +470,14 @@
 				<term><option>reissue <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></option></term>
 				<listitem>
 					<para>
-						Generate a new private key and reissue the certificate for the given hostname.
+						Generate a new private key (unless <option>--same-key</option> is specified) and reissue the
+						certificate for the given hostname.
+					</para>
+					<para>
+						Note: <command>sslmate reissue</command> without the
+						<option>--same-key</option> option is deprecated.  Starting with SSLMate 2.0,
+						<option>--same-key</option> will be implied.  To reissue a certificate with a
+						new key, use <option>sslmate rekey</option> instead.
 					</para>
 					<para>
 						Reissuing a certificate does <emphasis>not</emphasis> revoke it. Use the <command>sslmate revoke</command>
@@ -438,6 +488,22 @@
 						The following options are understood:
 					</para>
 					<variablelist>
+						<varlistentry>
+							<term><option>--same-key</option></term>
+
+							<listitem>
+								<para>
+									Keep the same private key when reissuing.  This is useful if you are reissuing
+									a certificate not because of a lost key, but to add or remove the alternative
+									names of a multi-domain certificate.
+								</para>
+								<para>
+									Note: Starting with SSLMate 2.0,
+									<option>--same-key</option> will be implied.  To reissue a certificate with a
+									new key, use <option>sslmate rekey</option> instead.
+								</para>
+							</listitem>
+						</varlistentry>
 						<varlistentry>
 							<term><option>--timeout=<replaceable>SECONDS</replaceable></option></term>
 
@@ -465,6 +531,52 @@
 								</para>
 							</listitem>
 						</varlistentry>
+					</variablelist>
+				</listitem>
+			</varlistentry>
+
+			<varlistentry>
+				<term><option>rekey <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></option></term>
+				<listitem>
+					<para>
+						Generate a new private key and reissue the certificate for the given hostname.
+					</para>
+					<para>
+						Reissuing a certificate does <emphasis>not</emphasis> revoke it. Use the <command>sslmate revoke</command>
+						command to revoke a certificate after you have rekeyed it.
+					</para>
+
+					<para>
+						The following options are understood:
+					</para>
+					<variablelist>
+						<varlistentry>
+							<term><option>--timeout=<replaceable>SECONDS</replaceable></option></term>
+
+							<listitem>
+								<para>
+									Wait up to <replaceable>SECONDS</replaceable> seconds for the certificate to be issued.
+									If the certificate is not issued before the timeout elapses, <command>sslmate</command>
+									exits without downloading any certificate files. Instead, the certificate must be downloaded
+									later with the <command>sslmate download</command> command.
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
+							<term><option>--no-wait</option></term>
+
+							<listitem>
+								<para>
+									Return immediately after requesting the rekey instead of waiting for the new certificate
+									to be issued. If this option is used, no certificate files are downloaded; instead
+									the new certificate must be downloaded separately with the <command>sslmate download</command>
+									command.
+								</para>
+								<para>
+									This option is equivalent to <option>--timeout 0</option>.
+								</para>
+							</listitem>
+						</varlistentry>
 						<varlistentry>
 							<term><option>-f</option></term>
 							<term><option>--force</option></term>
@@ -478,7 +590,7 @@
 
 							<listitem>
 								<para>
-									Specify the type of key to use for the reissued certificate: RSA (the default), or ECDSA
+									Specify the type of the new key: RSA (the default), or ECDSA
 									(elliptic curve). The certificate will be signed with a signature of the same type.
 								</para>
 								<para>
@@ -660,6 +772,10 @@
 										<listitem><para>The certificate's type ("DV" or "EV").</para></listitem>
 									</varlistentry>
 									<varlistentry>
+										<term>approval_method</term>
+										<listitem><para>The approval method.</para></listitem>
+									</varlistentry>
+									<varlistentry>
 										<term>approver_email</term>
 										<listitem><para>The approver email address.</para></listitem>
 									</varlistentry>
@@ -713,6 +829,115 @@
 			</varlistentry>
 
 			<varlistentry>
+				<term><option>show <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></option></term>
+				<listitem>
+					<para>
+						Show information about the given certificate.
+					</para>
+					<para>
+						The following options are understood:
+					</para>
+					<variablelist>
+						<varlistentry>
+							<term><option>-f <replaceable>FIELDS</replaceable></option></term>
+							<term><option>--fields=<replaceable>FIELDS</replaceable></option></term>
+
+							<listitem>
+								<para>
+									Include the given fields in the output, where <replaceable>FIELDS</replaceable> is
+									a comma-separated list of the following column names:
+								</para>
+								<variablelist>
+									<varlistentry>
+										<term>name</term>
+										<listitem><para>The certificate's common name.</para></listitem>
+									</varlistentry>
+									<varlistentry>
+										<term>alt_names</term>
+										<listitem><para>The certificate's subject alternative names (for multi-domain certs only).</para></listitem>
+									</varlistentry>
+									<varlistentry>
+										<term>status</term>
+										<listitem><para>The certificate's status.</para></listitem>
+									</varlistentry>
+									<varlistentry>
+										<term>expiration</term>
+										<listitem><para>The certificate's expiration date, in YYYY-MM-DD format.</para></listitem>
+									</varlistentry>
+									<varlistentry>
+										<term>local_status</term>
+										<listitem><para>The status of the locally-installed copy of the certificate ("Installed", "Temporary", "Mismatched key", "No key file", "Out-of-date", or "None").</para></listitem>
+									</varlistentry>
+									<varlistentry>
+										<term>fingerprint</term>
+										<listitem><para>The certificate's SHA-1 fingerprint, in uppercase hex with octets separated by colons.</para></listitem>
+									</varlistentry>
+									<varlistentry>
+										<term>sha256_fingerprint</term>
+										<listitem><para>The certificate's SHA-256 fingerprint, in uppercase hex with octets separated by colons.</para></listitem>
+									</varlistentry>
+									<varlistentry>
+										<term>auto_renew</term>
+										<listitem><para>The certificate's auto-renew setting.</para></listitem>
+									</varlistentry>
+									<varlistentry>
+										<term>type</term>
+										<listitem><para>The certificate's type ("DV" or "EV").</para></listitem>
+									</varlistentry>
+									<varlistentry>
+										<term>approval_method</term>
+										<listitem><para>The approval method.</para></listitem>
+									</varlistentry>
+									<varlistentry>
+										<term>approver_email</term>
+										<listitem><para>The approver email address.</para></listitem>
+									</varlistentry>
+									<!--
+									<varlistentry>
+										<term>approval_email_from</term>
+										<listitem><para>The email address from which the approval email is sent.</para></listitem>
+									</varlistentry>
+									-->
+								</variablelist>
+							</listitem>
+						</varlistentry>
+						<!--
+						<varlistentry>
+							<term><option>-z</option></term>
+
+							<listitem>
+								<para>
+									Generate machine-parseable output.  By default, columns and lines are separated by a
+									NUL character, but this can be customized by setting the <varname>OFS</varname>
+									(output field separator) and <varname>ORS</varname> (output record separator) environment
+									variables.
+								</para>
+								<para>
+									When using <option>-z</option>, you must explicitly enumerate the fields you
+									want with the <option>- -fields</option> option.
+								</para>
+								<para>
+									The output of <option>-z</option> is guaranteed not to change format, making it suitable
+									for use in scripts.
+								</para>
+							</listitem>
+						</varlistentry>
+						-->
+						<varlistentry>
+							<term><option>--json</option></term>
+
+							<listitem>
+								<para>
+									Generate JSON output.  The output format is guaranteed not to change, apart from
+									backwards-compatible changes such as adding new fields to the JSON object.
+								</para>
+							</listitem>
+						</varlistentry>
+					</variablelist>
+				</listitem>
+			</varlistentry>
+
+			<varlistentry>
 				<term><option>edit <arg choice="plain" rep="repeat"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></option></term>
 				<listitem>
 					<para>
@@ -735,6 +960,12 @@
 									For more information about approval methods, see the documentation
 									for <command>sslmate buy</command>.
 								</para>
+								<para>
+									If this is a multi-domain certificate, the approval method specified by this option
+									applies to every hostname.  To edit the approval method for a single hostname only,
+									pass an option of the form
+									<option>--approval=<replaceable>HOSTNAME</replaceable>=<replaceable>METHOD</replaceable></option>.
+								</para>
 							</listitem>
 						</varlistentry>
 						<varlistentry>
@@ -752,6 +983,12 @@
 									run <command>sslmate buy</command> for this host name.  This option is only
 									applicable when email approval is used.
 								</para>
+								<para>
+									If this is a multi-domain certificate, the email address specified by this option
+									applies to every hostname.  To edit the email address for a single hostname only,
+									pass an option of the form
+									<option>--email=<replaceable>HOSTNAME</replaceable>=<replaceable>METHOD</replaceable></option>.
+								</para>
 							</listitem>
 						</varlistentry>
 						<varlistentry>
@@ -761,6 +998,27 @@
 							<listitem>
 								<para>
 									Enable or disable auto-renew for this certificate.
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
+							<term><option>--add-name=<replaceable>HOSTNAME</replaceable></option></term>
+							<term><option>--rm-name=<replaceable>HOSTNAME</replaceable></option></term>
+
+							<listitem>
+								<para>
+									Add or remove the given hostname to or from this certificate.
+									This certificate must be a multi-domain certificate, and only
+									alternative names (not the common name) can be removed.
+								</para>
+								<para>
+									The name is not added or removed immediately.  Instead,
+									the changes take effect on the next call to <command>sslmate reissue</command>.
+									Any names that were added since the last issuance will need to be approved.
+									Existing names do not need to be re-approved as long as you preserve the
+									existing private key by passing the <option>--same-key</option> option to
+									<command>sslmate reissue</command>.  If there has been a net increase in hostnames
+									since the last issuance, your account will be charged for the new names.
 								</para>
 							</listitem>
 						</varlistentry>
@@ -838,6 +1096,12 @@
 									For more information about approval methods, see the documentation
 									for <command>sslmate buy</command>.
 								</para>
+								<para>
+									If this is a multi-domain certificate, the approval method specified by this option
+									applies to every hostname.  To specify a different approval method for a particular
+									hostname, pass an option of the form
+									<option>--approval=<replaceable>HOSTNAME</replaceable>=<replaceable>METHOD</replaceable></option>.
+								</para>
 							</listitem>
 						</varlistentry>
 						<varlistentry>
@@ -849,6 +1113,12 @@
 									prompting for one.  This address must be one of the addresses that is listed when you run
 									<command>sslmate import</command> interactively.  This option is only applicable when
 									email approval is used.
+								</para>
+								<para>
+									If this is a multi-domain certificate, the email address specified by this option
+									applies to every hostname.  To specify a different email address for a particular
+									hostname, pass an option of the form
+									<option>--approval=<replaceable>HOSTNAME</replaceable>=<replaceable>METHOD</replaceable></option>.
 								</para>
 							</listitem>
 						</varlistentry>

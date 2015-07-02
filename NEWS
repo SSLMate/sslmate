@@ -1,3 +1,19 @@
+v1.4.0 (2015-07-02)
+ * Add support for multi-domain certificates.
+   - Specify multiple hostnames on command line to 'sslmate buy'.
+   - Use 'sslmate edit' to add/remove alternative names.
+   - Use 'sslmate reissue --same-key' to reissue after adding/removing
+     names.
+ * Add 'sslmate rekey' option to generate a new key and reissue.
+ * Add '--same-key' option to 'sslmate reissue' to reissue without
+   generating a new key.  IMPORTANT: starting with SSLMate 2.0,
+   --same-key will be implied when running 'sslmate reissue'.
+   Please start using 'sslmate rekey' if you want to reissue with a
+   new key.
+ * Add 'sslmate show' command to show detailed information about a
+   certificate.
+ * Fix bug when importing certificates with upper case common names.
+
 v1.3.0 (2015-06-18)
  * Add support for creating certificate files in alternative
    formats.  To enable a format, put "cert_formats.FORMAT yes"

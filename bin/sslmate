@@ -91,6 +91,7 @@ sub print_usage {
 	print $out " sslmate buy HOSTNAME             Buy a certificate for the given hostname\n";
 	print $out " sslmate renew HOSTNAME           Renew the certificate for the given hostname\n";
 	print $out " sslmate reissue HOSTNAME         Reissue the certificate for given hostname\n";
+	print $out " sslmate rekey HOSTNAME           Rekey the certificate for given hostname\n";
 	print $out " sslmate revoke [-a] HOSTNAME     Revoke the certificate for given hostname\n";
 	print $out " sslmate download HOSTNAME        Download the certificate for given hostname\n";
 	print $out " sslmate import KEYFILE CERTFILE  Import this certificate to your account\n";
@@ -202,6 +203,11 @@ sub prompt_password {
 	ReadMode(0);
 
 	return decode_input($password);
+}
+
+sub is_wildcard_name {
+	my ($name) = @_;
+	return $name =~ /^\*\./;
 }
 
 sub restore_file_permissions {
@@ -744,26 +750,40 @@ sub qs_escape {
 	return uri_escape_utf8($str, '^A-Za-z0-9\-\._');
 }
 
+sub to_json_bool {
+	my ($x) = @_;
+	return $x ? JSON::PP::true : JSON::PP::false;
+}
+
 sub api_call {
-	my ($method, $command, $creds, $query_string, $post_data) = @_;
+	my ($method, $command, $creds, $query_string, $post_data, $post_data_type) = @_;
 
 	$https_client //= SSLMate::HTTPSClient->new;
 
 	$query_string = SSLMate::HTTPSClient::make_query_string($query_string) if ref($query_string) eq 'HASH';
-	$post_data = SSLMate::HTTPSClient::make_query_string($post_data) if ref($post_data) eq 'HASH';
+	$post_data_type //= 'application/x-www-form-urlencoded';
+	if (ref($post_data) eq 'HASH') {
+		if ($post_data_type eq 'application/x-www-form-urlencoded') {
+			$post_data = SSLMate::HTTPSClient::make_query_string($post_data);
+		} elsif ($post_data_type eq 'application/json') {
+			$post_data = encode_json($post_data);
+		}
+	}
 	$command .= "?$query_string" if defined($query_string) && length($query_string);
 
 	my $max_total_delay = 20;
 	my $next_retry_delay = 2;
 
 	my $uri = (get_config('api_endpoint') // $API_ENDPOINT) . $command;
+	my $headers = {};
+	$headers->{'Content-Type'} = $post_data_type if defined($post_data);
 	my $encoded_creds;
 	if (defined $creds) {
 		$encoded_creds = { username => $creds->{username}, password => encode('utf8', $creds->{password}) };
 	}
 	while (1) {
 		my ($http_status, $content_type, $response_data) = eval {
-			$https_client->request($method, $uri, undef, $encoded_creds, $post_data)
+			$https_client->request($method, $uri, $headers, $encoded_creds, $post_data)
 		};
 		if (not defined $http_status) {
 			print STDERR "Error: Unable to contact SSLMate server: $@";
@@ -805,13 +825,13 @@ sub default_api_credentials {
 }
 
 sub anon_api_call {
-	my ($method, $command, $query_string, $post_data) = @_;
-	return api_call($method, $command, undef, $query_string, $post_data);
+	my ($method, $command, $query_string, $post_data, $post_data_type) = @_;
+	return api_call($method, $command, undef, $query_string, $post_data, $post_data_type);
 }
 
 sub authed_api_call {
-	my ($method, $command, $query_string, $post_data) = @_;
-	return api_call($method, $command, default_api_credentials, $query_string, $post_data);
+	my ($method, $command, $query_string, $post_data, $post_data_type) = @_;
+	return api_call($method, $command, default_api_credentials, $query_string, $post_data, $post_data_type);
 }
 
 sub format_chain {
@@ -1040,62 +1060,116 @@ sub prompt_for_manual_dns_approval {
 	}
 }
 
-sub prepare_approval {
-	my ($old_cert, $new_cert) = @_;
+sub remove_approval_for {
+	my ($hostname, $old_obj, $new_obj) = @_;
 
-	if ($old_cert->{exists} && $old_cert->{approval_method} eq 'http') {
-		if ($new_cert->{approval_method} ne 'http' ||
-				!compare_approval_options($old_cert->{http_approval}->{options}, $new_cert->{http_approval}->{options})) {
+	if ($old_obj->{approval_method} eq 'http') {
+		if (!defined($new_obj) ||
+				$new_obj->{approval_method} ne 'http' ||
+				!compare_approval_options($old_obj->{http_approval}->{options},
+							  $new_obj->{http_approval}->{options})) {
 			my $successful = eval {
-				prepare_http_approval('del', $old_cert->{http_approval}->{options});
+				prepare_http_approval('del', $old_obj->{http_approval}->{options});
 				1;
 			};
 			# Question: Display a warning if not successful?
 		}
-	} elsif ($old_cert->{exists} && $old_cert->{approval_method} eq 'dns') {
-		if ($new_cert->{approval_method} ne 'dns' ||
-				!compare_approval_options($old_cert->{dns_approval}->{options}, $new_cert->{dns_approval}->{options})) {
-			print "Removing old DNS records...\n";
+	} elsif ($old_obj->{approval_method} eq 'dns') {
+		if (!defined($new_obj) ||
+				$new_obj->{approval_method} ne 'dns' ||
+				!compare_approval_options($old_obj->{dns_approval}->{options},
+							  $new_obj->{dns_approval}->{options})) {
+			print "Removing old DNS approval records for $hostname...\n";
 			my $successful = eval {
-				prepare_dns_approval('del', $old_cert->{dns_approval}->{options});
+				prepare_dns_approval('del', $old_obj->{dns_approval}->{options});
 				1;
 			};
 			# Question: Display a warning if not successful?
 		}
 	}
+}
+
+sub add_approval_for {
+	my ($hostname, $obj) = @_;
+
 	my $successful = 0;
-	if ($new_cert->{approval_method} eq 'http') {
+
+	if ($obj->{approval_method} eq 'http') {
 		$successful = eval {
-			prepare_http_approval('add', $new_cert->{http_approval}->{options});
+			prepare_http_approval('add', $obj->{http_approval}->{options});
 			1;
 		};
-		$successful = 1 if $new_cert->{http_approval}->{status}->{ready};
+		$successful = 1 if $obj->{http_approval}->{status}->{ready};
 		if (not $successful) {
 			my $why = $@;
 			chomp $why;
-			print STDERR "Error: unable to automatically configure HTTP approval for " . $new_cert->{cn} . ": $why\n";
+			print STDERR "Error: unable to automatically configure HTTP approval for $hostname: $why\n";
 		}
-	} elsif ($new_cert->{approval_method} eq 'dns') {
-		print "Adding DNS record...\n";
+	} elsif ($obj->{approval_method} eq 'dns') {
+		print "Adding DNS approval record for $hostname...\n";
 		$successful = eval {
-			prepare_dns_approval('add', $new_cert->{dns_approval}->{options});
+			prepare_dns_approval('add', $obj->{dns_approval}->{options});
 			1;
 		};
-		$successful = 1 if $new_cert->{dns_approval}->{status}->{ready};
+		$successful = 1 if $obj->{dns_approval}->{status}->{ready};
 		if (not $successful) {
 			my $why = $@;
 			chomp $why;
 			if ($batch) {
-				print STDERR "Error: unable to automatically configure DNS approval for " . $new_cert->{cn} . ": $why\n";
+				print STDERR "Error: unable to automatically configure DNS approval for $hostname: $why\n";
 			} else {
-				print "Notice: unable to automatically configure DNS approval for " . $new_cert->{cn}. ": $why\n";
-				$successful = prompt_for_manual_dns_approval($new_cert->{dns_approval}->{options});
+				print "Notice: unable to automatically configure DNS approval for $hostname: $why\n";
+				$successful = prompt_for_manual_dns_approval($obj->{dns_approval}->{options});
 			}
 		}
 	} else {
 		$successful = 1;
 	}
+
 	return $successful;
+}
+
+sub prepare_approval {
+	my ($old_cert, $new_cert) = @_;
+
+	if ($old_cert->{exists}) {
+		remove_approval_for($new_cert->{cn}, $old_cert, $new_cert);
+
+		for my $old_san_obj (@{$old_cert->{sans}}) {
+			next unless $old_san_obj->{type} eq 'dns';
+
+			my $new_san_obj = (grep { $_->{type} eq $old_san_obj->{type} &&
+						  $_->{value} eq $old_san_obj->{value} }
+					   @{$new_cert->{sans}})[0];
+			remove_approval_for($old_san_obj->{value}, $old_san_obj, $new_san_obj);
+		}
+	}
+
+	add_approval_for($new_cert->{cn}, $new_cert) or return 0;
+
+	for my $san_obj (@{$new_cert->{sans}}) {
+		next unless $san_obj->{type} eq 'dns';
+		add_approval_for($san_obj->{value}, $san_obj) or return 0;
+	}
+
+	return 1;
+}
+
+sub compare_approval_method {
+	my ($a, $b) = @_;
+
+	return 0 if $a->{approval_method} ne $b->{approval_method};
+	if ($a->{approval_method} eq 'email') {
+		return 0 if $a->{approver_email} ne $b->{approver_email};
+	}
+	return 1;
+}
+
+sub compare_san_obj {
+	my ($a, $b) = @_;
+
+	return 0 if !compare_approval_method($a, $b);
+	return 1;
 }
 
 sub openssl_genrsa {
@@ -1348,17 +1422,24 @@ sub format_money {
 }
 
 sub prompt_for_approval {
-	my ($product_info) = @_;
+	my ($hostname, $approval_methods) = @_;
+
+	print "To prove that you are authorized to obtain a certificate for $hostname,\n";
+	print "you must respond to an email sent to one of the following addresses, or add\n";
+	print "a DNS record to your domain.\n";
+	print "\n";
+	print "How would you like to prove authorization?\n";
+	print "\n";
 
 	my @choices;
-	if (grep { $_ eq 'email' } @{$product_info->{approval_methods}}) {
-		for my $email (@{$product_info->{approver_emails}}) {
+	if ($approval_methods->{email}->{available}) {
+		for my $email (@{$approval_methods->{email}->{addresses}}) {
 			my $i = int(@choices) + 1;
 			print "$i. $email\n";
 			push @choices, [ 'email', $email ];
 		}
 	}
-	if (grep { $_ eq 'dns' } @{$product_info->{approval_methods}}) {
+	if ($approval_methods->{dns}->{available}) {
 		my $i = int(@choices) + 1;
 		print "$i. Add a DNS record\n";
 		push @choices, [ 'dns' ];
@@ -1377,6 +1458,18 @@ sub prompt_for_approval {
 			print "That is not a number between 1 and $num_choices.\n";
 		}
 	}
+}
+
+sub product_info_to_approval_methods {
+	my ($product_info) = @_;
+	my $approval_methods = {};
+	for my $method (@{$product_info->{approval_methods}}) {
+		$approval_methods->{$method}->{available} = 1;
+		if ($method eq 'email') {
+			$approval_methods->{email}->{addresses} = $product_info->{approver_emails};
+		}
+	}
+	return $approval_methods;
 }
 
 sub order_can_be_paid {
@@ -1400,15 +1493,24 @@ sub order_can_be_paid {
 sub prompt_for_order_confirmation {
 	my ($product_info, %other_info) = @_;
 
+	my $cn = $product_info->{cn};
+
 	print "\n";
 	print "============ Order summary ============\n";
-	my @sans = grep { $_ ne $product_info->{cn} } @{$product_info->{default_sans}};
+	my @sans;
+	if (defined $other_info{sans}) {
+		for my $san (@{$other_info{sans}}) {
+			push @sans, $san->{value} if $san->{type} eq 'dns';
+		}
+	} else {
+		push @sans, grep { $_ ne $cn } @{$product_info->{default_sans}};
+	}
 	if (@sans) {
 		print "      Hostnames: ";
 	} else {
 		print "       Hostname: ";
 	}
-	print $product_info->{cn} . "\n";
+	print $cn . "\n";
 	for my $san (@sans) {
 		print "                 " . $san . "\n";
 	}
@@ -1423,10 +1525,31 @@ sub prompt_for_order_confirmation {
 	if (defined $other_info{auto_renew}) {
 		print "     Auto-Renew: " . ($other_info{auto_renew} ? "Yes" : "No") . "\n";
 	}
-	if (defined $other_info{approver_email}) {
-		print " Approver Email: " . $other_info{approver_email} . "\n";
-	} elsif (defined $other_info{approval_method}) {
-		print "Approval Method: " . format_approval_method($other_info{approval_method}) . "\n";
+	if (defined $other_info{approval_methods}) {
+		if (defined $other_info{sans}) {
+			my $first = 1;
+			for my $hostname ($cn, @sans) {
+				if ($first) {
+					print "Approval Method: ";
+					$first = 0;
+				} else {
+					print "                 ";
+				}
+				my $approval_method = $other_info{approval_methods}->{$hostname};
+				if ($approval_method eq 'email') {
+					print "Email to " . $other_info{approver_emails}->{$hostname} . " (for $hostname)\n";
+				} else {
+					print format_approval_method($approval_method) . " (for $hostname)\n";
+				}
+			}
+		} else {
+			my $approval_method = $other_info{approval_methods}->{$cn};
+			if ($approval_method eq 'email') {
+				print " Approver Email: " . $other_info{approver_emails}->{$cn} . "\n";
+			} else {
+				print "Approval Method: " . format_approval_method($approval_method) . "\n";
+			}
+		}
 	}
 	print "\n";
 	print "=========== Payment details ===========\n";
@@ -1462,6 +1585,19 @@ sub get_product_info {
 	my ($type, $cn, %other_info) = @_;
 
 	my ($status, $response) = authed_api_call('GET', '/products/' . qs_escape($type), { cn => $cn, %other_info });
+	return undef unless defined $response;
+
+	if ($status != 200) {
+		print STDERR "Error: " . $response->{message} . "\n";
+		return undef;
+	}
+	return $response;
+}
+
+sub get_approval_methods {
+	my ($type, $cn, %other_info) = @_;
+
+	my ($status, $response) = authed_api_call('GET', '/products/' . qs_escape($type) . '/approval', { cn => $cn, %other_info });
 	return undef unless defined $response;
 
 	if ($status != 200) {
@@ -1572,13 +1708,27 @@ sub do_wait_for_cert {
 	return 1;
 }
 
+sub parse_approval_arg {
+	my ($default_ref, $map_ref) = @_;
+
+	return sub {
+		my (undef, $opt_value) = @_;
+		if ($opt_value =~ /^([^=]*)=(.*)$/) {
+			$map_ref->{$1} = $2;
+		} else {
+			$$default_ref = $opt_value;
+		}
+	};
+}
+
 sub command_buy {
 	local @ARGV = @_;
 
 	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
-		print "Usage: sslmate buy [OPTIONS] HOSTNAME\n\n";
+		print "Usage: sslmate buy [OPTIONS] HOSTNAME ...\n\n";
 		print "Example: sslmate buy www.example.com\n";
 		print "         sslmate buy '*.example.com'\n";
+		print "         sslmate buy www.example.com dev.example.com www.example.org\n";
 		print "\n";
 		print "Common options:\n";
 		print " --auto-renew         automatically renew this certificate before it expires\n";
@@ -1591,7 +1741,11 @@ sub command_buy {
 		print "\n";
 		print "Batch options:\n";
 		print " --approval=METHOD    use the given approval method (email or dns)\n";
+		print " --approval=HOSTNAME=METHOD\n";
+		print "                      use the given approval method for given hostname\n";
 		print " --email=ADDRESS      use the given approver email address\n";
+		print " --email=HOSTNAME=ADDRESS\n";
+		print "                      use the given approver email address for given hostname\n";
 		print " --timeout=SECONDS    wait at most SECONDS seconds for cert to be issued\n";
 		print " --no-wait            return immediately; don't wait for cert to be issued\n";
 		print " --temp               return immediately with a temporary certificate\n";
@@ -1607,13 +1761,17 @@ sub command_buy {
 	my $force = 0;
 	my $cert_type = undef;
 	my $ev = 0;
-	my $approval_method = 'email';
-	my $approver_email = undef;
+	my $default_approval_method = 'email';
+	my %approval_methods;
+	my $default_approver_email = undef;
+	my %approver_emails;
+	my @sans;
 	my $timeout = undef;
 	my $no_wait = 0;
 	my $accept_dummy = 0;
 	my $key_type = undef;
 	my $csr_path = undef;
+	my $days = undef;
 
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
@@ -1622,8 +1780,9 @@ sub command_buy {
 			    'batch', \$batch, # compat with pre-1.0
 			    'type=s', \$cert_type,
 			    'ev', \$ev,
-			    'approval=s', \$approval_method,
-			    'email=s', \$approver_email,
+			    'approval=s', parse_approval_arg(\$default_approval_method, \%approval_methods),
+			    'email=s', parse_approval_arg(\$default_approver_email, \%approver_emails),
+			    'days=i', \$days,
 			    'timeout=i', \$timeout,
 			    'no-wait', \$no_wait,
 			    'temp', \$accept_dummy,
@@ -1633,7 +1792,7 @@ sub command_buy {
 			    'email-invoice-to=s', \$opts{email_invoice_to},
 			    'invoice-note=s', \$opts{invoice_note}) or return 2;
 
-	if (@ARGV != 1) {
+	if (@ARGV < 1) {
 		print STDERR "Error: you must specify the hostname for the certificate.\n";
 		print STDERR "Example: sslmate buy www.example.com\n";
 		print STDERR "     or: sslmate buy '*.example.com'\n";
@@ -1658,15 +1817,6 @@ sub command_buy {
 		$accept_dummy = 1;
 	}
 	$timeout //= $DEFAULT_CERT_TIMEOUT;
-	if (defined($approver_email) && $approval_method ne 'email') {
-		print STDERR "Error: --email is only valid with --approval=email.\n";
-		return 2;
-	}
-	if ($batch && $approval_method eq 'email' && not defined($approver_email)) {
-		print STDERR "Error: in batch mode, you must specify the approver email with --email.\n";
-		print STDERR "See 'sslmate help buy' for help.\n";
-		return 2;
-	}
 
 	my $csr = undef;
 	if (defined $csr_path) {
@@ -1679,8 +1829,8 @@ sub command_buy {
 		close($csr_fh);
 	}
 
-	my $cn = lc $ARGV[0];
-	my $years = undef;
+	my $cn = lc shift @ARGV;
+	push @sans, map(lc, @ARGV);
 	$cert_type //= $ev ? 'ev' : 'dv';
 	validate_cn($cn) or return 1;
 
@@ -1714,7 +1864,7 @@ sub command_buy {
 		return 1;
 	}
 	#
-	# 1. Make sure files/certs don't already exist
+	# Make sure files/certs don't already exist
 	#
 	my $paths = get_cert_paths($cn);
 	unless ($force) {
@@ -1728,7 +1878,7 @@ sub command_buy {
 		}
 		if (defined($cert->{current}) && !$cert->{current}->{expiring}) {
 			print STDERR "Error: your account already has an active certificate for $cn.\n";
-			print STDERR "Tip: to reissue an existing certificate, use 'sslmate reissue'.\n";
+			print STDERR "Tip: to rekey this certificate, run 'sslmate rekey $cn'.\n";
 			$errors++;
 		}
 		if ($errors) {
@@ -1737,51 +1887,81 @@ sub command_buy {
 		}
 	}
 
+	#
+	# Get product/pricing info from server
+	#
+	# This is done mainly to prompt the user for confirmation and provide early
+	# error detection, so elide it when in batch mode to reduce roundtrips to server.
+	#
+	my $product_info;
 	my $authorized_charge;
 	my $authorized_charge_currency;
 
 	unless ($batch) {
-		#
-		# Get product/pricing info from the server, ask user for confirmation
-		#
-
-		my $product_info = get_product_info($cert_type // $cert->{type}, $cn, years => $years, coupon_code => $opts{coupon_code}) or return 1;
+		$product_info = get_product_info($cert_type // $cert->{type}, $cn,
+						 days => $days,
+						 coupon_code => $opts{coupon_code},
+						 sans => @sans ? int(@sans) : undef) or return 1;
 
 		return 1 unless order_can_be_paid($product_info);
 
-		if ($approval_method eq 'email') {
-			if (defined $approver_email) {
-				if (!grep { $_ eq $approver_email } @{$product_info->{approver_emails}}) {
-					print STDERR "Error: $approver_email: not an acceptable approver email for $cn\n";
-					return 1;
-				}
-			} else {
-				print "To prove that you are authorized to obtain a certificate for $cn,\n";
-				print "you must respond to an email sent to one of the following addresses, or add\n";
-				print "a DNS record to your domain.\n";
-				print "\n";
-				print "How would you like to prove authorization?\n";
-				print "\n";
-				($approval_method, $approver_email) = prompt_for_approval($product_info) or return 1;
-			}
-		}
-
-		prompt_for_order_confirmation($product_info,
-					      approver_email => $approver_email,
-					      approval_method => $approval_method,
-					      auto_renew => $auto_renew // $cert->{auto_renew}) or return 1;
-
-		$authorized_charge_currency = $product_info->{price}->{currency};
 		$authorized_charge = $product_info->{price}->{amount_due};
+		$authorized_charge_currency = $product_info->{price}->{currency};
 	}
 
 	#
-	# 2. Generate key/CSR
+	# Determine the approval method for the CN, and each SAN
+	#
+	for my $hostname ($cn, @sans) {
+		my $method = $approval_methods{$hostname} // $default_approval_method;
+		my $email = $approver_emails{$hostname} // $default_approver_email;
+
+		if ($method eq 'email' && not defined($email)) {
+			if ($batch) {
+				print STDERR "Error: no approver email address specified for $cn.\n";
+				print STDERR "Tip: in batch mode, you must specify approver email addresses with --email.\n";
+				print STDERR "See 'sslmate help buy' for help.\n";
+				return 2;
+			}
+
+			my $approval_methods = get_approval_methods($cert_type // $cert->{type}, $hostname) or return 1;
+			($method, $email) = prompt_for_approval($hostname, $approval_methods) or return 1;
+		}
+
+		$approval_methods{$hostname} = $method;
+		$approver_emails{$hostname} = $email;
+	}
+
+	#
+	# Construct a list of SAN objects
+	#
+	my @san_objs;
+	for my $san_hostname (@sans) {
+		push @san_objs, { type => 'dns',
+				  value => $san_hostname,
+				  approval_method => $approval_methods{$san_hostname},
+				  approver_email => $approver_emails{$san_hostname} };
+	}
+
+	#
+	# Ask user for confirmation, if not in batch mode
+	#
+	unless ($batch) {
+		prompt_for_order_confirmation($product_info,
+					      sans => int(@san_objs) ? \@san_objs : undef,
+					      approver_emails => \%approver_emails,
+					      approval_methods => \%approval_methods,
+					      auto_renew => $auto_renew // $cert->{auto_renew}) or return 1;
+
+	}
+
+	#
+	# Generate key/CSR
 	#
 	my $key_file;
 	my $exit_with_error = sub {
 		unlink($paths->{key}) if defined($key_file);
-		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/type approval_method approver_email csr/)) if defined($cert);
+		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/type approval_method approver_email sans csr/), 'application/json') if defined($cert) && $cert->{exists};
 		exit 1;
 	};
 	unless (defined $csr) {
@@ -1799,15 +1979,16 @@ sub command_buy {
 	}
 
 	#
-	# 3. Create/update the cert object on the server
+	# Create/update the cert object on the server
 	#
-	my $request = {	auto_renew	=> $auto_renew,
+	my $request = {	auto_renew	=> to_json_bool($auto_renew // $cert->{auto_renew}),
 			type		=> $cert_type,
-			approval_method	=> $approval_method,
-			approver_email	=> $approver_email,
+			approval_method	=> $approval_methods{$cn},
+			approver_email	=> $approver_emails{$cn},
+			sans		=> int(@san_objs) ? \@san_objs : undef,
 			csr		=> $csr };
 
-	($status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['dns_approval.status','http_approval.status'] }, $request) or $exit_with_error->();
+	($status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['dns_approval.status','http_approval.status'] }, $request, 'application/json') or $exit_with_error->();
 	if ($status != 200) {
 		print STDERR "Error: " . $new_cert->{message} . "\n";
 		$cert = undef;
@@ -1817,10 +1998,10 @@ sub command_buy {
 	prepare_approval($cert, $new_cert) or $exit_with_error->();
 
 	#
-	# 4. Buy the certificate from SSLMate
+	# Buy the certificate from SSLMate
 	#
 	print "Placing order...\n";
-	$request = { years			=> $years,
+	$request = { days			=> $days,
 		     authorized_charge		=> $authorized_charge,
 		     authorized_charge_currency	=> $authorized_charge_currency,
 		     %opts };
@@ -1854,42 +2035,72 @@ sub command_buy {
 	return 0;
 }
 
-sub command_reissue {
+sub command_reissue_rekey {
+	my $command = shift;
 	local @ARGV = @_;
 
 	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
-		print "Usage: sslmate reissue [OPTIONS] HOSTNAME\n\n";
-		print "Example: sslmate reissue www.example.com\n";
+		print "Usage: sslmate $command [OPTIONS] HOSTNAME\n\n";
+		print "Example: sslmate $command www.example.com\n";
+		if ($command eq 'reissue') {
+			print "\n";
+			print "Options:\n";
+			print " --same-key         reissue with the same key instead of generating a new key\n";
+		}
 		print "\n";
 		print "Batch options:\n";
 		print " --timeout=SECONDS  wait at most SECONDS seconds for new cert to be issued\n";
 		print " --no-wait          return immediately; don't wait for new cert to be issued\n";
-		print "\n";
-		print "Advanced options:\n";
-		print " -f, --force        overwrite existing files\n";
-		print " --key-type=TYPE    type of key to generate ('rsa' or 'ecdsa')\n";
+		if ($command eq 'rekey') {
+			print "\n";
+			print "Advanced options:\n";
+			print " -f, --force        overwrite existing files\n";
+			print " --key-type=TYPE    type of key to generate ('rsa' or 'ecdsa')\n";
+		}
 		return 0;
 	}
 
 	my $force = 0;
+	my $same_key = 0;
 	my $timeout = undef;
 	my $no_wait = 0;
 	my $key_type = undef;
 	my $csr_path = undef;
 
+	my @optspec = ('timeout=i', \$timeout,
+		       'no-wait', \$no_wait);
+	#if ($command eq 'rekey') { Uncomment with SSLMate 2.0
+		push @optspec, ('force|f', \$force,
+				'csr=s', \$csr_path,
+				'key-type=s', \$key_type);
+	#}
+	if ($command eq 'reissue') {
+		push @optspec, ('same-key', \$same_key);
+	}
+
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
-	$getopt->getoptions('force|f', \$force,
-			    'timeout=i', \$timeout,
-			    'no-wait', \$no_wait,
-			    'csr=s', \$csr_path,
-			    'key-type=s', \$key_type) or return 2;
+	$getopt->getoptions(@optspec) or return 2;
 
 	if (@ARGV != 1) {
-		print STDERR "Error: you must specify the hostname of the certificate to reissue.\n";
-		print STDERR "Example: sslmate reissue www.example.com\n";
+		print STDERR "Error: you must specify the hostname of the certificate to $command.\n";
+		print STDERR "Example: sslmate $command www.example.com\n";
 		return 2;
 	}
+	my $rekey = 0;
+	if ($command eq 'rekey') {
+		$rekey = 1;
+	} elsif ($command eq 'reissue') {
+		unless ($same_key) {
+			$rekey = 1;
+			print STDERR "Warning: 'sslmate reissue' without the --same-key option is deprecated.\n";
+			print STDERR "Starting with SSLMate 2.0, --same-key will be implied.  To reissue\n";
+			print STDERR "a certificate with a new key, use 'sslmate rekey' instead.\n";
+			sleep(3) unless $batch;
+			print STDERR "\n";
+		}
+	}
+
 	if (defined($timeout) && $no_wait) {
 		print STDERR "Error: --timeout and --no-wait are mutually exclusive.\n";
 		return 2;
@@ -1952,39 +2163,43 @@ sub command_reissue {
 	my $paths = get_cert_paths($cn);
 	my $new_key_filename = undef;
 
-	my $exit_with_error = sub {
-		unlink($new_key_filename) if defined($new_key_filename);
-		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/csr/)) if defined($cert);
-		exit 1;
-	};
+	my $exit_with_error = sub { exit 1; };
 
-	unless (defined $csr) {
-		$new_key_filename = $paths->{key} . ".new";
-		unless ($force) {
-			exit 1 if has_existing_files($new_key_filename);
+	if ($rekey) {
+		$exit_with_error = sub {
+			unlink($new_key_filename) if defined($new_key_filename);
+			authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/csr/)) if defined($cert);
+			exit 1;
+		};
+
+		unless (defined $csr) {
+			$new_key_filename = $paths->{key} . ".new";
+			unless ($force) {
+				exit 1 if has_existing_files($new_key_filename);
+			}
+			my $key_file = open_key_file($new_key_filename, $force);
+
+			# 3. Generate new key and CSR
+			print "Generating private key... "; STDOUT->flush;
+			truncate($key_file, 0);
+			genkey($key_file, $key_type) or $exit_with_error->();
+			close($key_file);
+			print "Done.\n";
+
+			print "Generating CSR... "; STDOUT->flush;
+			$csr = openssl_req($new_key_filename, $cert->{dn});
+			print "Done.\n";
 		}
-		my $key_file = open_key_file($new_key_filename, $force);
 
-		# 3. Generate new key and CSR
-		print "Generating private key... "; STDOUT->flush;
-		truncate($key_file, 0);
-		genkey($key_file, $key_type) or $exit_with_error->();
-		close($key_file);
-		print "Done.\n";
-
-		print "Generating CSR... "; STDOUT->flush;
-		$csr = openssl_req($new_key_filename, $cert->{dn});
-		print "Done.\n";
+		# 4. Update the CSR server-side
+		($cert_status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['dns_approval.status','http_approval.status'] }, { csr => $csr }) or $exit_with_error->();
+		if ($cert_status != 200) {
+			print STDERR "Error: " . $new_cert->{message} . "\n";
+			$cert = undef;
+			$exit_with_error->();
+		}
+		prepare_approval($cert, $new_cert) or $exit_with_error->();
 	}
-
-	# 4. Update the CSR server-side
-	($cert_status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['dns_approval.status','http_approval.status'] }, { csr => $csr }) or $exit_with_error->();
-	if ($cert_status != 200) {
-		print STDERR "Error: " . $new_cert->{message} . "\n";
-		$cert = undef;
-		$exit_with_error->();
-	}
-	prepare_approval($cert, $new_cert) or $exit_with_error->();
 
 	# 5. Reissue the certificate
 	print "Reissuing cert...\n";
@@ -2002,7 +2217,7 @@ sub command_reissue {
 		if (config_has('key_directory') && config_has('cert_directory')) {
 			print "Note: the new private key has been temporarily saved in $new_key_filename and will be installed automatically when 'sslmate download' downloads the new certificate.\n" if defined $new_key_filename;
 		} else {
-			print_cert_paths({ %$paths, key => $new_key_filename }, undef, 'pending');
+			print_cert_paths({ %$paths, (defined $new_key_filename ? (key => $new_key_filename) : ()) }, undef, 'pending');
 		}
 		return 12 unless $timeout == 0;
 	}
@@ -2022,7 +2237,7 @@ sub command_revoke {
 		print "Note: By default, 'sslmate revoke' revokes all but the most recent certificate.\n";
 		print "      To revoke even the most recent certificate, use the --all option.\n";
 		print "\n";
-		print "Tip: To replace a compromised key, first reissue the cert with 'sslmate reissue'\n";
+		print "Tip: To replace a compromised key, first rekey the cert with 'sslmate rekey'\n";
 		print "     and then revoke the old cert(s) with 'sslmate revoke' WITHOUT --all.\n";
 		return 0;
 	}
@@ -2084,7 +2299,7 @@ sub command_revoke {
 		return 1;
 	} elsif ($response->{num_revoked} == 0) {
 		print STDERR "Error: the certificate for '$cn' is still in use.\n";
-		print STDERR "Before revoking this certificate, please reissue it by running 'sslmate reissue $cn'.  Alternatively, if you want to revoke this certificate even though it's still in use, pass the -a option to 'sslmate revoke'.\n";
+		print STDERR "Before revoking this certificate, please rekey it by running 'sslmate rekey $cn'.  Alternatively, if you want to revoke this certificate even though it's still in use, pass the -a option to 'sslmate revoke'.\n";
 		return 1;
 	} else {
 		print "Successfully revoked the certificate for $cn.\n";
@@ -2119,12 +2334,14 @@ sub command_renew {
 	my %opts;
 	my $force = 0;
 	my $timeout = undef;
+	my $days = undef;
 	my $no_wait = 0;
 
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
 	$getopt->getoptions('force|f', \$force,
 			    'batch', \$batch, # compat with pre-1.0
+			    'days=i', \$days,
 			    'timeout=i', \$timeout,
 			    'no-wait', \$no_wait,
 			    'coupon=s', \$opts{coupon_code},
@@ -2146,7 +2363,6 @@ sub command_renew {
 	$timeout = 0 if $no_wait;
 
 	my $cn = $ARGV[0];
-	my $years = undef;
 	validate_cn($cn) or return 1;
 
 	load_config;
@@ -2195,7 +2411,7 @@ sub command_renew {
 		}
 		if (defined($cert->{current}) && !$cert->{current}->{expiring}) {
 			print STDERR "Error: the certificate for $cn is not about to expire.\n";
-			print STDERR "Tip: to reissue an existing certificate, use 'sslmate reissue'.\n";
+			print STDERR "Tip: to reissue this certificate, run 'sslmate reissue $cn'.\n";
 			$errors++;
 		}
 		if ($errors) {
@@ -2210,13 +2426,15 @@ sub command_renew {
 	unless ($batch) {
 		# Get product/pricing info from the server, ask user for confirmation
 
-		my $product_info = get_product_info($cert->{type}, $cn, years => $years, coupon_code => $opts{coupon_code}) or exit 1;
+		# TODO TODO: specify # of SANs when getting product info
+		my $product_info = get_product_info($cert->{type}, $cn, days => $days, coupon_code => $opts{coupon_code}) or exit 1;
 
 		exit 1 unless order_can_be_paid($product_info);
 
+		# TODO TODO: pass SAN info to prompt_for_order_confirmation
 		prompt_for_order_confirmation($product_info,
-					      approver_email => $cert->{approver_email},
-					      approval_method => $cert->{approval_method},
+					      approver_emails => { $cn => $cert->{approver_email} },
+					      approval_methods => { $cn => $cert->{approval_method} },
 					      auto_renew => $cert->{auto_renew}) or exit 1;
 
 		$authorized_charge_currency = $product_info->{price}->{currency};
@@ -2251,7 +2469,7 @@ sub command_renew {
 
 	# Renew the certificate
 	print "Placing order...\n";
-	my $request = { years				=> $years,
+	my $request = { days				=> $days,
 			authorized_charge		=> $authorized_charge,
 			authorized_charge_currency	=> $authorized_charge_currency,
 			%opts };
@@ -2637,66 +2855,81 @@ sub make_cert_info {
 		approver_email => $cert->{approver_email},
 		approval_email_from => $latest ? $latest->{approval_email_from} : undef,
 		approval_method => $cert->{approval_method},
+		alt_names => $cert->{sans} ? [ map { $_->{value} } grep { $_->{type} eq 'dns' } @{$cert->{sans}} ] : undef,
 	};
 }
+
+my %cert_column_titles = (
+	name =>			'Name',
+	status =>		'Status',
+	expiration =>		'Expiration',
+	local_status => 	'Local Status',
+	fingerprint =>		'Fingerprint',
+	sha256_fingerprint =>	'Fingerprint (SHA-256)',
+	auto_renew =>		'Auto-renew',
+	type =>			'Type',
+	approver_email =>	'Approver Email',
+	approval_email_from =>	'Approval Email From',
+	approval_method =>	'Approval',
+);
+
+sub format_hash {
+	my ($raw_hash) = @_;
+	$raw_hash =~ s/([0-9a-zA-z][0-9a-zA-Z])/:\U$1\E/g;
+	return substr($raw_hash, 1);
+}
+sub format_expiration {
+	my ($seconds) = @_;
+	return strftime('%Y-%m-%d', localtime($seconds));
+}
+sub format_status {
+	my ($raw_status) = @_;
+	return 'Active' if $raw_status eq 'active';
+	return 'Expired' if $raw_status eq 'expired';
+	return 'Revoked' if $raw_status eq 'revoked';
+	return 'Pending' if $raw_status eq 'pending';
+	return 'Canceled' if $raw_status eq 'canceled';
+	return $raw_status;
+}
+sub format_local_status {
+	my ($raw_local_status) = @_;
+	return 'None' if $raw_local_status eq 'none';
+	return 'Out-of-date' if $raw_local_status eq 'out_of_date';
+	return 'No key file' if $raw_local_status eq 'missing_key';
+	return 'Mismatched key' if $raw_local_status eq 'mismatched_key';
+	return 'Temporary' if $raw_local_status eq 'installed_temporary';
+	return 'Installed' if $raw_local_status eq 'installed';
+	return 'No crt file' if $raw_local_status eq 'missing_crt';
+	return $raw_local_status;
+}
+sub format_type {
+	my ($raw_type) = @_;
+	return 'DV' if $raw_type eq 'dv';
+	return 'EV' if $raw_type eq 'ev';
+	return $raw_type;
+}
+sub format_yesno {
+	my ($value) = @_;
+	return $value ? 'Yes' : 'No';
+}
+my %cert_column_formatters = (
+	expiration => \&format_expiration,
+	status => \&format_status,
+	local_status => \&format_local_status,
+	fingerprint => \&format_hash,
+	sha256_fingerprint => \&format_hash,
+	auto_renew => \&format_yesno,
+	type => \&format_type,
+	approval_method => \&format_approval_method,
+);
 
 sub format_cert_row {
 	my ($cert_info, @columns) = @_;
 
-	local *format_hash = sub {
-		my ($raw_hash) = @_;
-		$raw_hash =~ s/([0-9a-zA-z][0-9a-zA-Z])/:\U$1\E/g;
-		return substr($raw_hash, 1);
-	};
-	local *format_expiration = sub {
-		my ($seconds) = @_;
-		return strftime('%Y-%m-%d', localtime($seconds));
-	};
-	local *format_status = sub {
-		my ($raw_status) = @_;
-		return 'Active' if $raw_status eq 'active';
-		return 'Expired' if $raw_status eq 'expired';
-		return 'Revoked' if $raw_status eq 'revoked';
-		return 'Pending' if $raw_status eq 'pending';
-		return 'Canceled' if $raw_status eq 'canceled';
-		return $raw_status;
-	};
-	local *format_local_status = sub {
-		my ($raw_local_status) = @_;
-		return 'None' if $raw_local_status eq 'none';
-		return 'Out-of-date' if $raw_local_status eq 'out_of_date';
-		return 'No key file' if $raw_local_status eq 'missing_key';
-		return 'Mismatched key' if $raw_local_status eq 'mismatched_key';
-		return 'Temporary' if $raw_local_status eq 'installed_temporary';
-		return 'Installed' if $raw_local_status eq 'installed';
-		return 'No crt file' if $raw_local_status eq 'missing_crt';
-		return $raw_local_status;
-	};
-	local *format_type = sub {
-		my ($raw_type) = @_;
-		return 'DV' if $raw_type eq 'dv';
-		return 'EV' if $raw_type eq 'ev';
-		return $raw_type;
-	};
-	local *format_yesno = sub {
-		my ($value) = @_;
-		return $value ? 'Yes' : 'No';
-	};
-	my %formatters = (
-		expiration => \&format_expiration,
-		status => \&format_status,
-		local_status => \&format_local_status,
-		fingerprint => \&format_hash,
-		sha256_fingerprint => \&format_hash,
-		auto_renew => \&format_yesno,
-		type => \&format_type,
-		approval_method => \&format_approval_method,
-	);
-
 	my @row;
 	for my $column (@columns) {
-		if (exists $formatters{$column}) {
-			push @row, defined($cert_info->{$column}) ? $formatters{$column}->($cert_info->{$column}) : undef;
+		if (exists $cert_column_formatters{$column}) {
+			push @row, defined($cert_info->{$column}) ? $cert_column_formatters{$column}->($cert_info->{$column}) : undef;
 		} else {
 			push @row, $cert_info->{$column};
 		}
@@ -2718,8 +2951,9 @@ sub command_list {
 		print " -z                  machine-parseable output\n";
 		print "\n";
 		print "Valid columns:\n";
-		print " name, type, status, expiration, local_status, fingerprint, sha256_fingerprint,\n";
-		print " auto_renew, approver_email\n";
+		print " " . join(', ', sort keys %cert_column_titles) . "\n"; # TODO: wrap this at 80 columns
+		#print " name, type, status, expiration, local_status, fingerprint, sha256_fingerprint,\n";
+		#print " auto_renew, approver_email\n";
 		return 0;
 	}
 
@@ -2743,21 +2977,8 @@ sub command_list {
 	}
 
 	my @columns = defined($columns) ? split(/,/, $columns) : qw/name type status expiration local_status/;
-	my %column_titles = (
-				name =>			'Name',
-			        status =>		'Status',
-			        expiration =>		'Expiration',
-			        local_status => 	'Local Status',
-			        fingerprint =>		'Fingerprint',
-			        sha256_fingerprint =>	'Fingerprint (SHA-256)',
-				auto_renew =>		'Auto-renew',
-				type =>			'Type',
-				approver_email =>	'Approver Email',
-				approval_email_from =>	'Approval Email From',
-				approval_method =>	'Approval',
-			    );
 	for my $column (@columns) {
-		if (not exists $column_titles{$column}) {
+		if (not exists $cert_column_titles{$column}) {
 			print STDERR "Error: Invalid column: $column\n";
 			return 1;
 		}
@@ -2814,7 +3035,7 @@ sub command_list {
 			push @rows, format_cert_row($record, @columns);
 		}
 
-		my @titles = @column_titles{@columns};
+		my @titles = @cert_column_titles{@columns};
 		my @widths;
 		for my $i (0..@columns-1) {
 			push @widths, max(map { length($_->[$i] // '-') } \@titles, @rows);
@@ -2827,6 +3048,113 @@ sub command_list {
 	return 0;
 }
 
+sub command_show {
+	local @ARGV = @_;
+
+	my %field_titles = (%cert_column_titles, alt_names => 'Alt Names');
+
+	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
+		print "Usage: sslmate show [OPTIONS] HOSTNAME\n";
+		print "\n";
+		print "Valid options:\n";
+		print " -f, --fields=FIELDS  include the given fields, where FIELDS is comma-separated\n";
+		print " --json               JSON output\n";
+#		print " -z                   machine-parseable output\n";
+		print "\n";
+		print "Valid fields:\n";
+		print " " . join(', ', sort keys %field_titles) . "\n"; # TODO: wrap this at 80 columns
+		return 0;
+	}
+
+	my $fields;
+	my $machine_output = 0;
+	my $json_output = 0;
+
+	my $getopt = Getopt::Long::Parser->new;
+	$getopt->configure(qw(no_ignore_case permute bundling));
+	$getopt->getoptions('fields|f=s', \$fields,
+			    'json', \$json_output,
+			    'z', \$machine_output) or return 2;
+
+	if ($json_output && $machine_output) {
+		print STDERR "Error: --json and -z are mutually exclusive.\n";
+		return 2;
+	}
+	if ($machine_output && !defined($fields)) {
+		print STDERR "Error: --fields option is required if -z is used.\n";
+		return 2;
+	}
+
+	if (@ARGV != 1) {
+		print STDERR "Error: you must specify certificate name on command line.\n";
+		return 2;
+	}
+	my $cn = lc $ARGV[0];
+
+	my @fields = defined($fields) ? split(/,/, $fields) : qw/name alt_names type status expiration auto_renew approval_method approver_email fingerprint local_status/;
+	for my $field (@fields) {
+		if (not exists $field_titles{$field}) {
+			print STDERR "Error: Invalid field: $field\n";
+			return 1;
+		}
+	}
+	if (not @fields) {
+		print STDERR "Error: no fields specified\n";
+		return 1;
+	}
+
+	load_config;
+	if (!is_linked) {
+		unless (-t STDIN) {
+			print STDERR "Error: you have not yet linked this system with your SSLMate account.\n";
+			print STDERR "Please run 'sslmate link'.\n";
+			return 1;
+		}
+		do_link or return 1;
+	}
+	init_default_paths(0);
+
+	my ($status, $cert_obj) = authed_api_call('GET', '/certs/' . qs_escape($cn), { expand => ['current', 'pending'] }) or return 1;
+	if ($status != 200) {
+		print STDERR "Error: " . $cert_obj->{message} . "\n";
+		return 1;
+	}
+	my $local_cert_info = get_local_cert_info(get_cert_paths($cert_obj->{cn}));
+	my $cert_info = make_cert_info($cert_obj, $local_cert_info);
+
+	if ($json_output) {
+		print encode_json($cert_info);
+	} elsif ($machine_output) { # TODO
+		print STDERR "Error: -z not yet implemented\n";
+		return 1;
+	} else {
+		my @rows;
+		for my $field (@fields) {
+			my $title = $field_titles{$field};
+			my $value = $cert_info->{$field};
+			my $formatter = exists($cert_column_formatters{$field}) ?
+					$cert_column_formatters{$field} :
+					sub { return shift; };
+
+			next unless defined $value;
+
+			if (ref $value eq 'ARRAY') {
+				push @rows, [ "$title: ", @$value ? $formatter->($value->[0]) : '' ];
+				for my $v (@{$value}[1..@$value-1]) {
+					push @rows, [ "", $formatter->($v) ];
+				}
+			} else {
+				push @rows, [ "$title: ", $formatter->($value) ];
+			}
+		}
+
+		my $max_width = max(map { length($_->[0]) } @rows);
+		printf "%*s%s\n", $max_width, $_->[0], $_->[1] for @rows;
+	}
+
+	return 0;
+}
+
 sub command_edit {
 	local *print_our_usage = sub {
 		my ($out) = @_;
@@ -2834,11 +3162,17 @@ sub command_edit {
 		print $out "Usage: sslmate edit OPTIONS... HOSTNAME\n";
 		print $out "\n";
 		print $out "Valid options:\n";
-		print $out " --approval=METHOD   use the given approval method (email or dns)\n";
-		print $out " --email=ADDRESS     change the approver email of this cert\n";
-		print $out " --auto-renew        enable auto-renew for this cert\n";
-		print $out " --no-auto-renew     disable auto-renew for this cert\n";
-		print $out " --type=dv|ev        change the type of cert (takes effect when renewing)\n";
+		print $out " --approval=METHOD    use the given approval method (email or dns)\n";
+		print $out " --approval=HOSTNAME=METHOD\n";
+		print $out "                      use the given approval method for given hostname\n";
+		print $out " --email=ADDRESS      change the approver email of this cert\n";
+		print $out " --email=HOSTNAME=ADDRESS\n";
+		print $out "                      change the approver email for given hostname\n";
+		print $out " --auto-renew         enable auto-renew for this cert\n";
+		print $out " --no-auto-renew      disable auto-renew for this cert\n";
+		print $out " --add-name=HOSTNAME  add the given hostname (takes effect when reissuing)\n";
+		print $out " --rm-name=HOSTNAME   remove the given hostname (takes effect when reissuing)\n";
+		print $out " --type=dv|ev         change the type of cert (takes effect when renewing)\n";
 	};
 
 	local @ARGV = @_;
@@ -2849,24 +3183,25 @@ sub command_edit {
 	}
 
 	my $auto_renew;
-	my $approval_method;
-	my $approver_email;
+	my $default_approval_method;
+	my %approval_methods;
+	my $default_approver_email;
+	my %approver_emails;
+	my @add_sans;
+	my @rm_sans;
 	my $type;
 
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
 	$getopt->getoptions('auto-renew!', \$auto_renew,
-			    'approval=s', \$approval_method,
-			    'email=s', \$approver_email,
+			    'approval=s', parse_approval_arg(\$default_approval_method, \%approval_methods),
+			    'email=s', parse_approval_arg(\$default_approver_email, \%approver_emails),
+			    'add-name=s', \@add_sans,
+			    'rm-name=s', \@rm_sans,
 			    'type=s', \$type) or return 2;
 	if (@ARGV == 0) {
 		print STDERR "Error: you must specify the name of the certificate to edit.\n";
 		print_our_usage(*STDERR);
-		return 2;
-	}
-	$approval_method = 'email' if !defined($approval_method) && defined($approver_email);
-	if (defined($approver_email) && $approval_method ne 'email') {
-		print STDERR "Error: --email is only valid with --approval=email.\n";
 		return 2;
 	}
 
@@ -2899,36 +3234,118 @@ sub command_edit {
 	}
 
 	#
+	# Add, remove, and update SANs
+	#
+
+	# Iterate the current list of SAN objects and build a list of updated SAN
+	# objects in @new_san_objs.  Set $modified_sans to 1 if we make any changes.
+	my @new_san_objs;
+	my $modified_sans = 0;
+	my $modified_approval = 0;
+	for my $san_obj (@{$cert->{sans}}) {
+		if ($san_obj->{type} ne 'dns') {
+			# We don't know how to deal with non-DNS SANs, so just pass it through unmodified
+			push @new_san_objs, $san_obj;
+			next;
+		}
+		my $hostname = $san_obj->{value};
+		if (grep { $_ eq $hostname } map(lc, @rm_sans)) {
+			# Delete this SAN by not copying it through to @new_san_objs.
+			$modified_sans = 1;
+			$modified_approval = 1;
+			next;
+		}
+
+		my $approval_method = $approval_methods{$hostname} // $default_approval_method // $san_obj->{approval_method};
+		my $approver_email = $approver_emails{$hostname} // $default_approver_email // $san_obj->{approver_email};
+		if ($approval_method eq 'email' && not(defined $approver_email)) {
+			print STDERR "Error: $hostname: no approver email defined for this hostname.\n";
+			print STDERR "Tip: use '--email $hostname=ADDRESS' to specify the approver email for this hostname.\n";
+			return 2;
+		}
+		my $new_san_obj = { type => 'dns',
+				    value => $hostname,
+				    approval_method => $approval_method,
+				    approver_email => $approver_email };
+		push @new_san_objs, $new_san_obj;
+		$modified_sans ||= !compare_san_obj($san_obj, $new_san_obj);
+		$modified_approval ||= !compare_approval_method($san_obj, $new_san_obj);
+	}
+	# Add new SANs to @new_san_objs, if they aren't already there
+	for my $hostname (map lc, @add_sans) {
+		next if grep { $_->{type} eq 'dns' && $_->{value} eq $hostname } @new_san_objs;
+
+		my $approval_method = $approval_methods{$hostname} // $default_approval_method;
+		my $approver_email = $approver_emails{$hostname} // $default_approver_email;
+
+		if (not defined $approval_method) {
+			print STDERR "Error: $hostname: no approval method defined for this hostname.\n";
+			print STDERR "Tip: use '--approval $hostname=METHOD' to specify the approval method for this hostname.\n";
+			return 2;
+		}
+		if ($approval_method eq 'email' && not(defined $approver_email)) {
+			print STDERR "Error: $hostname: no approver email defined for this hostname.\n";
+			print STDERR "Tip: use '--email $hostname=ADDRESS' to specify the approver email for this hostname.\n";
+			return 2;
+		}
+
+		push @new_san_objs, { type => 'dns',
+				      value => $hostname,
+				      approval_method => $approval_method,
+				      approver_email => $approver_email };
+		$modified_sans = 1;
+		$modified_approval = 1;
+	}
+
+	#
 	# Update the cert object on the server
 	#
-	my $request = {
-		auto_renew => $auto_renew,
-		approval_method => $approval_method,
-		approver_email => $approver_email,
-		type => $type,
-	};
+	my $new_cert = { approval_method => $approval_methods{$cn} // $default_approval_method // $cert->{approval_method},
+			 approver_email => $approver_emails{$cn} // $default_approver_email // $cert->{approver_email} };
 
-	($cert_status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['pending','dns_approval.status','http_approval.status'] }, $request) or return 1;
+	if ($new_cert->{approval_method} eq 'email' && not(defined $new_cert->{approver_email})) {
+		print STDERR "Error: $cn: no approver email defined for this hostname.\n";
+		if ($cert->{sans}) {
+			print STDERR "Tip: use '--email $cn=ADDRESS' to specify the approver email for this hostname.\n";
+		} else {
+			print STDERR "Tip: use '--email ADDRESS' to specify the approver email.\n";
+		}
+		return 2;
+	}
+
+	$modified_approval ||= !compare_approval_method($cert, $new_cert);
+
+	$new_cert->{auto_renew} = to_json_bool($auto_renew) if defined $auto_renew;
+	$new_cert->{type} = $type if defined $type;
+	$new_cert->{sans} = \@new_san_objs if $modified_sans;
+
+	($cert_status, $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['pending','dns_approval.status','http_approval.status'] }, $new_cert, 'application/json') or return 1;
 	if ($cert_status != 200) {
 		print STDERR "Error: " . $new_cert->{message} . "\n";
 		return 1;
 	}
-	if (defined $approval_method) {
+
+	if ($modified_approval) {
 		if (!prepare_approval($cert, $new_cert)) {
-			authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/approval_method approver_email/));
+			authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert, qw/approval_method approver_email auto_renew type sans/), 'application/json');
 			return 1;
 		}
 	}
 
 	#
-	# If this cert is pending, and we just changed the approver email, resend the approval email
+	# If this cert is pending, and we just changed the approval method, redo approval
 	#
-	if (defined($new_cert->{pending}) && defined($approver_email)) {
-		print "Resending approval email to $approver_email... "; STDOUT->flush;
+	if (defined($new_cert->{pending}) && $modified_approval) {
+		if (not($new_cert->{sans}) && $new_cert->{approval_method} eq 'email') {
+			print "Resending approval email to " . $new_cert->{approver_email} . "... ";
+		} else {
+			print "Re-initiating certificate approval... ";
+		}
+		STDOUT->flush;
 		my ($status, $response) = authed_api_call('POST',  '/certs/' . qs_escape($cn) . '/redo_approval', undef, {}) or return 1;
 		if ($status != 200) {
 			print "\n";
-			print STDERR "Error resending approval email: " . $response->{message} . "\n";
+			print STDERR "Error: " . $response->{message} . "\n";
 			return 1;
 		}
 		print "Done.\n";
@@ -3112,39 +3529,37 @@ sub command_import {
 		print " --no-auto-renew    don't automatically renew this certificate\n";
 		print " --no-install       don't copy the key/cert to the local key/cert directories\n";
 		print " --approval=METHOD  use the given approval method (email or dns)\n";
+		print " --approval=HOSTNAME=METHOD\n";
+		print "                    use the given approval method for given hostname\n";
 		print " --email=ADDRESS    use the given approver email address\n";
+		print " --email=HOSTNAME=ADDRESS\n";
+		print "                    use the given approver email address for given hostname\n";
 		return 0;
 	}
 
+	my $cn = undef;
 	my $auto_renew = undef;
 	my $force = 0;
-	my $install = 1;
-	my $approval_method = 'email';
-	my $approver_email = undef;
+	my $install_locally = 1;
+	my $default_approval_method = 'email';
+	my %approval_methods;
+	my $default_approver_email = undef;
+	my %approver_emails;
 
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
 	$getopt->getoptions('auto-renew!', \$auto_renew,
 			    'force|f', \$force,
-			    'install!', \$install,
-			    'approval=s', \$approval_method,
-			    'email=s', \$approver_email) or return 2;
+			    'install!', \$install_locally,
+			    'approval=s', parse_approval_arg(\$default_approval_method, \%approval_methods),
+			    'email=s', parse_approval_arg(\$default_approver_email, \%approver_emails)) or return 2;
 
 	if (@ARGV != 2) {
 		print STDERR "Error: you must specify the key file and cert file paths.\n";
 		print STDERR "Example: sslmate import www.example.com.key www.example.com.crt\n";
 		return 2;
 	}
-
-	if (defined($approver_email) && $approval_method ne 'email') {
-		print STDERR "Error: --email is only valid with --approval=email.\n";
-		return 2;
-	}
-	if ($batch && $approval_method eq 'email' && not defined($approver_email)) {
-		print STDERR "Error: in batch mode, you must specify the approver email with --email.\n";
-		print STDERR "See 'sslmate help import' for help.\n";
-		return 2;
-	}
+	my ($source_key_path, $source_crt_path) = @ARGV;
 
 	# 0. Load config, etc.
 	load_config;
@@ -3158,13 +3573,6 @@ sub command_import {
 	}
 
 	init_default_paths;
-
-	do_import($force, $auto_renew, $install, $ARGV[0], $ARGV[1], undef, $approval_method, $approver_email);
-	return 0;
-}
-
-sub do_import {
-	my ($force, $auto_renew, $install_locally, $source_key_path, $source_crt_path, $cn, $approval_method, $approver_email) = @_;
 
 	# 1. Read the key
 	open(my $source_key_file, '<', $source_key_path) or die "Error: Unable to open $source_key_path: $!\n";
@@ -3185,7 +3593,7 @@ sub do_import {
 		print STDERR "Error: $source_crt_path: " . $crt_info->{message} . "\n";
 		return 1;
 	}
-	$cn //= $crt_info->{cn};
+	$cn //= lc $crt_info->{cn};
 	if ($crt_info->{pubkey_hash} ne $pubkey_hash) {
 		print STDERR "Error: The certificate ($source_crt_path)'s public key does not match the private key ($source_key_path)\n";
 		exit 1;
@@ -3239,19 +3647,51 @@ sub do_import {
 		}
 	}
 
-	# 6. Get product info from the server, ask user to choose approver email (unless we're in batch mode)
-	unless ($batch) {
-		my $product_info = get_product_info($type, $cn) or exit 1;
+	# 6. Process SANs, approval methods, etc.
+	my $product_info = get_product_info($type, $cn) or exit 1;
 
-		my $has_nondns_sans = 0;
-		my @missing_sans;
-		for my $san (@{$crt_info->{sans}}) {
-			if ($san->{type} ne 'dns') {
-				$has_nondns_sans = 1;
-			} elsif (!grep { $_ eq $san->{value} } @{$product_info->{default_sans}}) {
-				push @missing_sans, $san->{value};
+	my $has_nondns_sans;
+	my @default_sans;
+	my @nondefault_sans;
+	for my $san (@{$crt_info->{sans}}) {
+		if ($san->{type} ne 'dns') {
+			$has_nondns_sans = 1;
+		} elsif (grep { lc($_) eq lc($san->{value}) } @{$product_info->{default_sans}}) {
+			push @default_sans, $san->{value};
+		} else {
+			push @nondefault_sans, $san->{value};
+		}
+	}
+
+	my @sans;
+	my @unsupported_sans;
+	if (@nondefault_sans) {
+		# This cert contains SANs that wouldn't be covered by the default SANs for this product.
+		# Make sure they're all supported!
+		if (is_wildcard_name($cn)) {
+			# No SANs are supported on wildcard certs
+			push @unsupported_sans, @nondefault_sans;
+		} else {
+			for my $san (@nondefault_sans) {
+				if (is_wildcard_name($san)) {
+					# Wildcard SANs not supported
+					push @unsupported_sans, $san;
+				} else {
+					push @sans, lc $san;
+				}
 			}
 		}
+	}
+	if (@sans) {
+		# If we explicitly specify SANs, no SANs are added by default, so also
+		# copy @default_sans to @sans...
+		for my $default_san (map lc, @default_sans) {
+			next if grep { $_ eq $default_san } ($cn, @sans);
+			push @sans, $default_san;
+		}
+	}
+
+	unless ($batch) {
 		if ($has_nondns_sans) {
 			print "WARNING: This certificate contains non-DNS subject alternative names.\n";
 			print "SSLMate does not support non-DNS subject alternative names.  When this\n";
@@ -3260,9 +3700,10 @@ sub do_import {
 			exit 1 unless prompt_yesno();
 			print "\n";
 		}
-		if (@missing_sans) {
-			print "WARNING: This certificate contains the following subject alternative names:\n\n";
-			for my $san (@missing_sans) {
+		if (@unsupported_sans) {
+			print "WARNING: This certificate contains the following subject alternative names\n";
+			print "that are not supported by SSLMate:\n\n";
+			for my $san (@unsupported_sans) {
 				print "\t$san\n";
 			}
 			print "\nWhen this certificate renews, these subject alternative names will be dropped.\n";
@@ -3270,22 +3711,36 @@ sub do_import {
 			exit 1 unless prompt_yesno();
 			print "\n";
 		}
-		if ($approval_method eq 'email') {
-			if (defined $approver_email) {
-				if (!grep { $_ eq $approver_email } @{$product_info->{approver_emails}}) {
-					print STDERR "Error: $approver_email: not an acceptable approver email for $cn\n";
-					exit 1;
-				}
-			} else {
-				print "To prove that you are authorized to obtain a certificate for $cn,\n";
-				print "you must respond to an email sent to one of the following addresses, or add\n";
-				print "a DNS record to your domain.\n";
-				print "\n";
-				print "How would you like to prove authorization?\n";
-				print "\n";
-				($approval_method, $approver_email) = prompt_for_approval($product_info) or exit 1;
+	}
+
+	# Determine the approval method for the CN, and each SAN
+	for my $hostname ($cn, @sans) {
+		my $method = $approval_methods{$hostname} // $default_approval_method;
+		my $email = $approver_emails{$hostname} // $default_approver_email;
+
+		if ($method eq 'email' && not defined($email)) {
+			if ($batch) {
+				print STDERR "Error: no approver email address specified for $cn.\n";
+				print STDERR "Tip: in batch mode, you must specify approver email addresses with --email.\n";
+				print STDERR "See 'sslmate help import' for help.\n";
+				return 2;
 			}
+
+			my $approval_methods = get_approval_methods($type, $hostname) or return 1;
+			($method, $email) = prompt_for_approval($hostname, $approval_methods) or return 1;
 		}
+
+		$approval_methods{$hostname} = $method;
+		$approver_emails{$hostname} = $email;
+	}
+
+	# Construct a list of SAN objects
+	my @san_objs;
+	for my $san_hostname (@sans) {
+		push @san_objs, { type => 'dns',
+				  value => $san_hostname,
+				  approval_method => $approval_methods{$san_hostname},
+				  approver_email => $approver_emails{$san_hostname} };
 	}
 
 	# 7. Generate the CSR
@@ -3298,18 +3753,19 @@ sub do_import {
 
 	my $exit_with_error = sub {
 		unlink($paths->{key}) if $install_locally && !$key_already_installed;
-		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert_obj, qw/type approval_method approver_email csr/)) if defined($cert_obj);
+		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert_obj, qw/type approval_method approver_email sans csr/), 'application/json') if defined($cert_obj) && $cert_obj->{exists};
 		exit 1;
 	};
 
 	# 8. Create/update the cert object on the server
-	my $request = {	auto_renew	=> $auto_renew,
+	my $request = {	auto_renew	=> to_json_bool($auto_renew // $cert_obj->{auto_renew}),
 			type		=> $type,
-			approval_method	=> $approval_method,
-			approver_email	=> $approver_email,
-			csr		=> \$csr };
+			approval_method	=> $approval_methods{$cn},
+			approver_email	=> $approver_emails{$cn},
+			sans		=> int(@san_objs) ? \@san_objs : undef,
+			csr		=> $csr };
 
-	($status, my $new_cert_obj) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['dns_approval.status','http_approval.status'] }, $request) or $exit_with_error->();
+	($status, my $new_cert_obj) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['dns_approval.status','http_approval.status'] }, $request, 'application/json') or $exit_with_error->();
 	if ($status != 200) {
 		print STDERR "Error: " . $new_cert_obj->{message} . "\n";
 		$cert_obj = undef;
@@ -3346,6 +3802,8 @@ sub do_import {
 	if ($install_locally) {
 		print_cert_paths($paths);
 	}
+
+	return 0;
 }
 
 sub interpolate_config_template {
@@ -3540,8 +3998,8 @@ sub main {
 
 	if ($command eq 'buy') {
 		return command_buy @ARGV;
-	} elsif ($command eq 'reissue') {
-		return command_reissue @ARGV;
+	} elsif ($command eq 'reissue' || $command eq 'rekey') {
+		return command_reissue_rekey $command, @ARGV;
 	} elsif ($command eq 'revoke') {
 		return command_revoke @ARGV;
 	} elsif ($command eq 'renew') {
@@ -3552,6 +4010,8 @@ sub main {
 		return command_download @ARGV;
 	} elsif ($command eq 'list') {
 		return command_list @ARGV;
+	} elsif ($command eq 'show') {
+		return command_show @ARGV;
 	} elsif ($command eq 'edit') {
 		return command_edit @ARGV;
 	} elsif ($command eq 'resend-email') {
