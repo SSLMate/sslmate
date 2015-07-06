@@ -1099,11 +1099,15 @@ sub add_approval_for {
 			prepare_http_approval('add', $obj->{http_approval}->{options});
 			1;
 		};
-		$successful = 1 if $obj->{http_approval}->{status}->{ready};
 		if (not $successful) {
-			my $why = $@;
-			chomp $why;
-			print STDERR "Error: unable to automatically configure HTTP approval for $hostname: $why\n";
+			if ($obj->{http_approval}->{status}->{ready}) {
+				print STDERR "Notice: HTTP approval for $hostname was already present.\n";
+				$successful = 1;
+			} else {
+				my $why = $@;
+				chomp $why;
+				print STDERR "Error: unable to automatically configure HTTP approval for $hostname: $why\n";
+			}
 		}
 	} elsif ($obj->{approval_method} eq 'dns') {
 		print "Adding DNS approval record for $hostname...\n";
@@ -1111,15 +1115,19 @@ sub add_approval_for {
 			prepare_dns_approval('add', $obj->{dns_approval}->{options});
 			1;
 		};
-		$successful = 1 if $obj->{dns_approval}->{status}->{ready};
 		if (not $successful) {
-			my $why = $@;
-			chomp $why;
-			if ($batch) {
-				print STDERR "Error: unable to automatically configure DNS approval for $hostname: $why\n";
+			if ($obj->{dns_approval}->{status}->{ready}) {
+				print STDERR "Notice: DNS approval record for $hostname was already present.\n";
+				$successful = 1;
 			} else {
-				print "Notice: unable to automatically configure DNS approval for $hostname: $why\n";
-				$successful = prompt_for_manual_dns_approval($obj->{dns_approval}->{options});
+				my $why = $@;
+				chomp $why;
+				if ($batch) {
+					print STDERR "Error: unable to automatically configure DNS approval for $hostname: $why\n";
+				} else {
+					print "Notice: unable to automatically configure DNS approval for $hostname: $why\n";
+					$successful = prompt_for_manual_dns_approval($obj->{dns_approval}->{options});
+				}
 			}
 		}
 	} else {
