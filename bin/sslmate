@@ -1761,6 +1761,7 @@ sub command_buy {
 		print "Advanced options:\n";
 		print " -f, --force          replace existing files, certificates\n";
 		print " --key-type=TYPE      type of key to generate ('rsa' or 'ecdsa')\n";
+		print " --multi              buy multi-domain cert even if only one hostname specified\n";
 		return 0;
 	}
 
@@ -1777,6 +1778,7 @@ sub command_buy {
 	my $timeout = undef;
 	my $no_wait = 0;
 	my $accept_dummy = 0;
+	my $multi = 0;
 	my $key_type = undef;
 	my $csr_path = undef;
 	my $days = undef;
@@ -1794,6 +1796,7 @@ sub command_buy {
 			    'timeout=i', \$timeout,
 			    'no-wait', \$no_wait,
 			    'temp', \$accept_dummy,
+			    'multi', \$multi,
 			    'key-type=s', \$key_type,
 			    'csr=s', \$csr_path,
 			    'coupon=s', \$opts{coupon_code},
@@ -1840,6 +1843,7 @@ sub command_buy {
 	my $cn = lc shift @ARGV;
 	push @sans, map(lc, @ARGV);
 	$cert_type //= $ev ? 'ev' : 'dv';
+	$multi = 1 if @sans;
 	validate_cn($cn) or return 1;
 
 	load_config;
@@ -1909,7 +1913,7 @@ sub command_buy {
 		$product_info = get_product_info($cert_type // $cert->{type}, $cn,
 						 days => $days,
 						 coupon_code => $opts{coupon_code},
-						 sans => @sans ? int(@sans) : undef) or return 1;
+						 sans => $multi ? int(@sans) : undef) or return 1;
 
 		return 1 unless order_can_be_paid($product_info);
 
@@ -1956,7 +1960,7 @@ sub command_buy {
 	#
 	unless ($batch) {
 		prompt_for_order_confirmation($product_info,
-					      sans => int(@san_objs) ? \@san_objs : undef,
+					      sans => $multi ? \@san_objs : undef,
 					      approver_emails => \%approver_emails,
 					      approval_methods => \%approval_methods,
 					      auto_renew => $auto_renew // $cert->{auto_renew}) or return 1;
@@ -1993,7 +1997,7 @@ sub command_buy {
 			type		=> $cert_type,
 			approval_method	=> $approval_methods{$cn},
 			approver_email	=> $approver_emails{$cn},
-			sans		=> int(@san_objs) ? \@san_objs : undef,
+			sans		=> $multi ? \@san_objs : undef,
 			csr		=> $csr };
 
 	($status, my $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['dns_approval.status','http_approval.status'] }, $request, 'application/json') or $exit_with_error->();
