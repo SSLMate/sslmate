@@ -1040,7 +1040,11 @@ sub prompt_for_manual_dns_approval {
 	my ($options) = @_;
 
 	print "\n";
-	print "Please add one of the following DNS records to your domain's DNS:\n";
+	if (@$options == 1) {
+		print "Please add the following DNS record to your domain's DNS:\n";
+	} else {
+		print "Please add one of the following DNS records to your domain's DNS:\n";
+	}
 	print "\n";
 	for my $option (@$options) {
 		print "    " . join(' ', @$option{qw{name type value}}) . "\n";
