@@ -89,12 +89,12 @@ the name of the sub\-command\&.
 .RS 4
 Generate a private key and purchase a certificate for the given hostname(s)\&.
 .sp
-If only one hostname is specified, a standard single\-hostname certificate is issued\&. The hostname is placed in the certificate\*(Aqs common name (CN) field as well as a subjectAltName field\&. If the hostname starts with "www\&." or "*\&.", then a subjectAltName is also added, free of charge, for the remaining part of the the hostname, ensuring that the certificate is valid for both hostnames (e\&.g\&. if the hostname is "www\&.example\&.com", a subjectAltName is added for "example\&.com")\&. If the hostname does not start with "www\&." or "*\&.", then a subjectAltName is added, free of charge, for the hostname prefixed with "www\&." (e\&.g\&. if the hostname is "example\&.com", a subjectAltName is added for "www\&.example\&.com")\&.
+If only one hostname is specified, a standard single\-hostname certificate is issued\&. The hostname is placed in the certificate\*(Aqs common name (CN) field as well as a subjectAltName field\&. If the hostname starts with "www\&.", then a subjectAltName is also added, free of charge, for the remaining part of the the hostname, ensuring that the certificate is valid for both hostnames (e\&.g\&. if the hostname is "www\&.example\&.com", a subjectAltName is added for "example\&.com")\&. If the hostname does not start with "www\&.", then a subjectAltName is added, free of charge, for the hostname prefixed with "www\&." (e\&.g\&. if the hostname is "example\&.com", a subjectAltName is added for "www\&.example\&.com")\&.
+.sp
+If the hostname starts with "*\&.", then a wildcard certificate is issued which is valid for the wildcard domain itself and all hostnames directly below the wildcard domain\&. The certificate is not valid for hostnames two or more levels below the wildcard domain\&. For example, "*\&.example\&.com" matches "example\&.com", "www\&.example\&.com", and "subdomain\&.example\&.com", but not "www\&.subdomain\&.example\&.com")\&.
 .sp
 If more than one hostname is specified, a multi\-hostname certificate is issued\&. The first hostname is the primary name of the certificate and is placed in the certificate\*(Aqs common name field, as well as a subjectAltName field\&. The remaining hostnames are placed in subjectAltNames\&. The certificate is referred to by its primary name when downloading, renewing, reissuing, etc\&. The primary name cannot be changed without purchasing a new certificate, but alternative names can be added and removed after the certificate is issued by running
-\fBsslmate edit\fR\&.
-.sp
-If the hostname starts with "*\&.", then a wildcard certificate is issued, and the certificate is valid for all hostnames directly below the wildcard domain, but not for hostnames two or more levels below the wildcard domain (e\&.g\&. "*\&.example\&.com" matches "subdomain\&.example\&.com" but not "www\&.subdomain\&.example\&.com")\&. Multi\-hostname certificates cannot contain wildcards\&.
+\fBsslmate edit\fR\&. Multi\-hostname certificates cannot contain wildcard hostnames\&.
 .sp
 The following options are understood:
 .PP
