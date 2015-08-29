@@ -1765,7 +1765,7 @@ sub command_buy {
 		print "Advanced options:\n";
 		print " -f, --force          replace existing files, certificates\n";
 		print " --key-type=TYPE      type of key to generate ('rsa' or 'ecdsa')\n";
-		print " --multi              buy multi-domain cert even if only one hostname specified\n";
+		print " --multi              buy multi-hostname cert even if only one hostname specified\n";
 		return 0;
 	}
 
