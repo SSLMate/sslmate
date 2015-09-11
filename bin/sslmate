@@ -99,7 +99,7 @@ sub print_usage {
 	print $out " sslmate edit OPTIONS HOSTNAME    Edit certificate settings (e.g. auto-renew)\n";
 	print $out " sslmate test HOSTNAME            Check if the certificate is properly installed\n";
 	print $out " sslmate mkconfig TEMPLATE NAME   Generate configuration for the certificate\n";
-	print $out " sslmate resend-email HOSTNAME    Resend the approval email for a pending cert\n";
+	print $out " sslmate retry-approval HOSTNAME  Retry the approval process for a pending cert\n";
 	print $out " sslmate link                     Link this system with your SSLMate account\n";
 	print $out " sslmate help                     Display help\n";
 	print $out " sslmate version                  Print the version of SSLMate that's installed\n";
@@ -1144,7 +1144,7 @@ sub add_approval_for {
 sub prepare_approval {
 	my ($old_cert, $new_cert) = @_;
 
-	if ($old_cert->{exists}) {
+	if (defined($old_cert) && $old_cert->{exists}) {
 		remove_approval_for($new_cert->{cn}, $old_cert, $new_cert);
 
 		for my $old_san_obj (@{$old_cert->{sans}}) {
@@ -1889,7 +1889,8 @@ sub command_buy {
 		$errors += has_existing_files(@{$paths}{keys %$paths});
 		if (defined($cert->{pending})) {
 			print STDERR "Error: a certificate for $cn is already pending issuance.\n";
-			print STDERR "Tip: to resend or change a certificate's approver email, use 'sslmate resend-email'.\n";
+			print STDERR "Tip: to change a certificate's approval method, use 'sslmate edit'.\n";
+			print STDERR "Tip: to restart a certificate's approval process, use 'sslmate retry-approval'.\n";
 			$errors++;
 		}
 		if (defined($cert->{current}) && !$cert->{current}->{expiring}) {
@@ -2422,7 +2423,8 @@ sub command_renew {
 
 		if (defined($cert->{pending})) {
 			print STDERR "Error: a certificate for $cn is already pending issuance.\n";
-			print STDERR "Tip: to resend or change a certificate's approver email, use 'sslmate resend-email'.\n";
+			print STDERR "Tip: to change a certificate's approval method, use 'sslmate edit'.\n";
+			print STDERR "Tip: to restart a certificate's approval process, use 'sslmate retry-approval'.\n";
 			$errors++;
 		}
 		if (defined($cert->{current}) && !$cert->{current}->{expiring}) {
@@ -3397,6 +3399,10 @@ sub command_resend_email {
 		return 2;
 	}
 
+	print STDERR "Warning: 'sslmate resend-email' is deprecated in favor of 'sslmate retry-approval'.\n";
+	print STDERR "Warning: 'sslmate resend-email' will be removed in SSLMate 2.0.\n";
+	sleep(2) unless $batch;
+
 	my $cn = lc $ARGV[0];
 	validate_cn($cn) or return 1;
 	load_config;
@@ -3434,6 +3440,57 @@ sub command_resend_email {
 		return 1;
 	}
 	print "Approval email resent to " . $response->{approver_email} . ".\n";
+	return 0;
+}
+
+sub command_retry_approval {
+	local *print_our_usage = sub {
+		my ($out) = @_;
+
+		print $out "Usage: sslmate retry-approval HOSTNAME\n";
+	};
+
+	local @ARGV = @_;
+
+	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
+		print_our_usage(*STDOUT);
+		return 0;
+	}
+
+	my $cn = lc $ARGV[0];
+	validate_cn($cn) or return 1;
+	load_config;
+	if (!is_linked) {
+		unless (-t STDIN) {
+			print STDERR "Error: you have not yet linked this system with your SSLMate account.\n";
+			print STDERR "Please run 'sslmate link'.\n";
+			return 1;
+		}
+		do_link or return 1;
+	}
+	init_default_paths(0);
+
+	my ($cert_status, $cert) = authed_api_call('GET', '/certs/' . qs_escape($cn), { expand => ['dns_approval.status','http_approval.status'] }) or return 1;
+	if ($cert_status != 200) {
+		print STDERR "Error: " . $cert->{message} . "\n";
+		return 1;
+	}
+	if (not $cert->{exists}) {
+		print STDERR "Error: $cn: there is no certificate in your account with this common name.\n";
+		return 1;
+	}
+
+	# Re-prepare the approval. This should have already happened, but we do it again
+	# in case the process was interrupted.
+	prepare_approval(undef, $cert) or return 1;
+
+	print "Retrying approval for $cn... ";
+	my ($status, $response) = authed_api_call('POST',  '/certs/' . qs_escape($cn) . '/redo_approval', undef, {}) or return 1;
+	if ($status != 200) {
+		print STDERR "Error: " . $response->{message} . "\n";
+		return 1;
+	}
+	print "Done.\n";
 	return 0;
 }
 
@@ -4032,6 +4089,8 @@ sub main {
 		return command_edit @ARGV;
 	} elsif ($command eq 'resend-email') {
 		return command_resend_email @ARGV;
+	} elsif ($command eq 'retry-approval') {
+		return command_retry_approval @ARGV;
 	} elsif ($command eq 'test') {
 		return command_test @ARGV;
 	} elsif ($command eq 'import') {
