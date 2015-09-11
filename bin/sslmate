@@ -3188,9 +3188,11 @@ sub command_edit {
 		print $out "                      change the approver email for given hostname\n";
 		print $out " --auto-renew         enable auto-renew for this cert\n";
 		print $out " --no-auto-renew      disable auto-renew for this cert\n";
-		print $out " --add-name=HOSTNAME  add the given hostname (takes effect when reissuing)\n";
-		print $out " --rm-name=HOSTNAME   remove the given hostname (takes effect when reissuing)\n";
-		print $out " --type=dv|ev         change the type of cert (takes effect when renewing)\n";
+		print $out " --add-name=HOSTNAME  add the given hostname (takes effect upon reissue)\n";
+		print $out " --rm-name=HOSTNAME   remove the given hostname (takes effect upon reissue)\n";
+		print $out " --type=dv|ev         change the type of cert (takes effect upon renewal)\n";
+		print $out " --multi              convert to multi-hostname cert (takes effect upon renewal)\n";
+		print $out " --no-multi           convert to single-hostname cert (takes effect upon renewal)\n";
 	};
 
 	local @ARGV = @_;
@@ -3208,6 +3210,7 @@ sub command_edit {
 	my @add_sans;
 	my @rm_sans;
 	my $type;
+	my $multi;
 
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
@@ -3216,7 +3219,8 @@ sub command_edit {
 			    'email=s', parse_approval_arg(\$default_approver_email, \%approver_emails),
 			    'add-name=s', \@add_sans,
 			    'rm-name=s', \@rm_sans,
-			    'type=s', \$type) or return 2;
+			    'type=s', \$type,
+			    'multi!', \$multi) or return 2;
 	if (@ARGV == 0) {
 		print STDERR "Error: you must specify the name of the certificate to edit.\n";
 		print_our_usage(*STDERR);
@@ -3254,44 +3258,70 @@ sub command_edit {
 	#
 	# Add, remove, and update SANs
 	#
+	$multi //= defined($cert->{sans});
 
-	# Iterate the current list of SAN objects and build a list of updated SAN
-	# objects in @new_san_objs.  Set $modified_sans to 1 if we make any changes.
-	my @new_san_objs;
+	my $new_san_objs;
 	my $modified_sans = 0;
 	my $modified_approval = 0;
-	for my $san_obj (@{$cert->{sans}}) {
-		if ($san_obj->{type} ne 'dns') {
-			# We don't know how to deal with non-DNS SANs, so just pass it through unmodified
-			push @new_san_objs, $san_obj;
-			next;
-		}
-		my $hostname = $san_obj->{value};
-		if (grep { $_ eq $hostname } map(lc, @rm_sans)) {
-			# Delete this SAN by not copying it through to @new_san_objs.
-			$modified_sans = 1;
-			$modified_approval = 1;
-			next;
-		}
+	if (defined($cert->{sans}) && $multi) {
+		# Was already a SAN cert and user doesn't want to change that.
+		# Iterate the current list of SAN objects and build a list of updated SAN
+		# objects in @$new_san_objs.  Set $modified_sans to 1 if we make any changes.
+		$new_san_objs = [];
+		for my $san_obj (@{$cert->{sans}}) {
+			if ($san_obj->{type} ne 'dns') {
+				# We don't know how to deal with non-DNS SANs, so just pass it through unmodified
+				push @$new_san_objs, $san_obj;
+				next;
+			}
+			my $hostname = $san_obj->{value};
+			if (grep { $_ eq $hostname } map(lc, @rm_sans)) {
+				# Delete this SAN by not copying it through to @$new_san_objs.
+				$modified_sans = 1;
+				$modified_approval = 1;
+				next;
+			}
 
-		my $approval_method = $approval_methods{$hostname} // $default_approval_method // $san_obj->{approval_method};
-		my $approver_email = $approver_emails{$hostname} // $default_approver_email // $san_obj->{approver_email};
-		if ($approval_method eq 'email' && not(defined $approver_email)) {
-			print STDERR "Error: $hostname: no approver email defined for this hostname.\n";
-			print STDERR "Tip: use '--email $hostname=ADDRESS' to specify the approver email for this hostname.\n";
-			return 2;
+			my $approval_method = $approval_methods{$hostname} // $default_approval_method // $san_obj->{approval_method};
+			my $approver_email = $approver_emails{$hostname} // $default_approver_email // $san_obj->{approver_email};
+			if ($approval_method eq 'email' && not(defined $approver_email)) {
+				print STDERR "Error: $hostname: no approver email defined for this hostname.\n";
+				print STDERR "Tip: use '--email $hostname=ADDRESS' to specify the approver email for this hostname.\n";
+				return 2;
+			}
+			my $new_san_obj = { type => 'dns',
+					    value => $hostname,
+					    approval_method => $approval_method,
+					    approver_email => $approver_email };
+			push @$new_san_objs, $new_san_obj;
+			$modified_sans ||= !compare_san_obj($san_obj, $new_san_obj);
+			$modified_approval ||= !compare_approval_method($san_obj, $new_san_obj);
 		}
-		my $new_san_obj = { type => 'dns',
-				    value => $hostname,
-				    approval_method => $approval_method,
-				    approver_email => $approver_email };
-		push @new_san_objs, $new_san_obj;
-		$modified_sans ||= !compare_san_obj($san_obj, $new_san_obj);
-		$modified_approval ||= !compare_approval_method($san_obj, $new_san_obj);
+	} elsif (defined $cert->{sans}) {
+		# Was a SAN cert but user wants to make it a non-SAN cert
+		print STDERR "Notice: conversion to single-hostname certificate will take place upon renewal.\n";
+		$new_san_objs = undef;
+		$modified_sans = 1;
+	} elsif ($multi) {
+		# Wasn't a SAN cert but user wants to make it one
+		print STDERR "Notice: conversion to multi-hostname certificate will take place upon renewal.\n";
+		$new_san_objs = [];
+		$modified_sans = 1;
 	}
 	# Add new SANs to @new_san_objs, if they aren't already there
 	for my $hostname (map lc, @add_sans) {
-		next if grep { $_->{type} eq 'dns' && $_->{value} eq $hostname } @new_san_objs;
+		if (not $multi) {
+			$multi = 1;
+			$new_san_objs = [];
+			$modified_sans = 1;
+			print STDERR "Notice: this certificate is not currently a multi-hostname certificate.\n";
+			print STDERR "Notice: automatically converting to a multi-hostname certificate...\n";
+			print STDERR "Notice: conversion will take place upon renewal.\n";
+			print STDERR "Warning: starting with SSLMate 2.0, you will need to explicitly specify --multi.\n";
+			sleep(2) unless $batch;
+		}
+
+		next if grep { $_->{type} eq 'dns' && $_->{value} eq $hostname } @$new_san_objs;
 
 		my $approval_method = $approval_methods{$hostname} // $default_approval_method;
 		my $approver_email = $approver_emails{$hostname} // $default_approver_email;
@@ -3307,10 +3337,10 @@ sub command_edit {
 			return 2;
 		}
 
-		push @new_san_objs, { type => 'dns',
-				      value => $hostname,
-				      approval_method => $approval_method,
-				      approver_email => $approver_email };
+		push @$new_san_objs, { type => 'dns',
+				       value => $hostname,
+				       approval_method => $approval_method,
+				       approver_email => $approver_email };
 		$modified_sans = 1;
 		$modified_approval = 1;
 	}
@@ -3335,7 +3365,7 @@ sub command_edit {
 
 	$new_cert->{auto_renew} = to_json_bool($auto_renew) if defined $auto_renew;
 	$new_cert->{type} = $type if defined $type;
-	$new_cert->{sans} = \@new_san_objs if $modified_sans;
+	$new_cert->{sans} = $new_san_objs if $modified_sans;
 
 	($cert_status, $new_cert) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['pending','dns_approval.status','http_approval.status'] }, $new_cert, 'application/json') or return 1;
 	if ($cert_status != 200) {
