@@ -97,7 +97,7 @@
 			<command>sslmate import <arg choice="plain"><replaceable>KEYFILE</replaceable></arg> <arg choice="plain"><replaceable>CERTFILE</replaceable></arg></command>
 		</cmdsynopsis>
 		<cmdsynopsis>
-			<command>sslmate resend-email <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
+			<command>sslmate retry-approval <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></command>
 		</cmdsynopsis>
 		<cmdsynopsis>
 			<command>sslmate link</command>
@@ -376,6 +376,17 @@
 								<para>
 									The default key type can be changed by setting the <option>key_type</option>
 									configuration option (see the CONFIGURATION section for details).
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
+							<term><option>--multi</option></term>
+
+							<listitem>
+								<para>
+									Buy a multi-hostname certificate even if only one hostname was specified
+									on the command line.  This option is only necessary if you want to buy a multi-hostname
+									certificate with only one hostname.
 								</para>
 							</listitem>
 						</varlistentry>
@@ -1022,6 +1033,28 @@
 									<command>sslmate reissue</command>.  If there has been a net increase in hostnames
 									since the last issuance, your account will be charged for the new names.
 								</para>
+								<para>
+									Note that removing all alternative hostnames does not convert the
+									certificate to a single-hostname certificate.  For that, you must
+									use the <option>--no-multi</option> option.
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
+							<term><option>--multi</option></term>
+							<term><option>--no-multi</option></term>
+
+							<listitem>
+								<para>
+									Change the scope of this certificate (single-hostname or multi-hostname).
+									See the <command>sslmate buy</command> documentation for a discussion of the differences.
+								</para>
+								<para>
+									Changes to the certificate scope take effect only when renewing.  To "upgrade" an existing
+									single-hostname certificate to a multi-hostname certificate, first edit its scope
+									and add alternative names with <command>sslmate edit</command> and then
+									force an early renewal with <command>sslmate renew --force</command>.
+								</para>
 							</listitem>
 						</varlistentry>
 						<varlistentry>
@@ -1229,27 +1262,18 @@
 			</varlistentry>
 
 			<varlistentry>
-				<term><option>resend-email <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></option></term>
+				<term><option>retry-approval <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></option></term>
 				<listitem>
 					<para>
-						Resend the approval email of a certificate that's pending approval.
+						Retry the approval process of a certificate that's pending approval.
+						If the certificate uses email approval, the email will be resent.
+						If the certificate uses DNS approval, the DNS record will be added
+						if not already present, and then re-checked.
 					</para>
-					<variablelist>
-						<varlistentry>
-							<term><option>--email=<replaceable>ADDRESS</replaceable></option></term>
-
-							<listitem>
-								<para>
-									Change the certificate's approver address to <replaceable>ADDRESS</replaceable>
-									and resend the email there.
-								</para>
-								<para>
-									The new address must be one of the acceptable addresses that is listed when you
-									run <command>sslmate buy</command> for this host name.
-								</para>
-							</listitem>
-						</varlistentry>
-					</variablelist>
+					<para>
+						To change the approval method or approver email of a pending certificate,
+						use the <command>sslmate edit</command> command.
+					</para>
 				</listitem>
 			</varlistentry>
 

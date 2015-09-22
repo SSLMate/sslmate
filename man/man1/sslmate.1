@@ -59,8 +59,8 @@ sslmate \- buy and manage SSL certificates
 \fBsslmate mkconfig \fR\fB\fITEMPLATE\fR\fR\fB \fR\fB\fIHOSTNAME\fR\fR
 .HP \w'\fBsslmate\ import\ \fR\fB\fIKEYFILE\fR\fR\fB\ \fR\fB\fICERTFILE\fR\fR\ 'u
 \fBsslmate import \fR\fB\fIKEYFILE\fR\fR\fB \fR\fB\fICERTFILE\fR\fR
-.HP \w'\fBsslmate\ resend\-email\ \fR\fB\fIHOSTNAME\fR\fR\ 'u
-\fBsslmate resend\-email \fR\fB\fIHOSTNAME\fR\fR
+.HP \w'\fBsslmate\ retry\-approval\ \fR\fB\fIHOSTNAME\fR\fR\ 'u
+\fBsslmate retry\-approval \fR\fB\fIHOSTNAME\fR\fR
 .HP \w'\fBsslmate\ link\fR\ 'u
 \fBsslmate link\fR
 .SH "DESCRIPTION"
@@ -210,6 +210,11 @@ RSA provides the best compatibility with clients\&. ECDSA provides better perfor
 The default key type can be changed by setting the
 \fBkey_type\fR
 configuration option (see the CONFIGURATION section for details)\&.
+.RE
+.PP
+\fB\-\-multi\fR
+.RS 4
+Buy a multi\-hostname certificate even if only one hostname was specified on the command line\&. This option is only necessary if you want to buy a multi\-hostname certificate with only one hostname\&.
 .RE
 .RE
 .PP
@@ -667,6 +672,22 @@ The name is not added or removed immediately\&. Instead, the changes take effect
 \fB\-\-same\-key\fR
 option to
 \fBsslmate reissue\fR\&. If there has been a net increase in hostnames since the last issuance, your account will be charged for the new names\&.
+.sp
+Note that removing all alternative hostnames does not convert the certificate to a single\-hostname certificate\&. For that, you must use the
+\fB\-\-no\-multi\fR
+option\&.
+.RE
+.PP
+\fB\-\-multi\fR, \fB\-\-no\-multi\fR
+.RS 4
+Change the scope of this certificate (single\-hostname or multi\-hostname)\&. See the
+\fBsslmate buy\fR
+documentation for a discussion of the differences\&.
+.sp
+Changes to the certificate scope take effect only when renewing\&. To "upgrade" an existing single\-hostname certificate to a multi\-hostname certificate, first edit its scope and add alternative names with
+\fBsslmate edit\fR
+and then force an early renewal with
+\fBsslmate renew \-\-force\fR\&.
 .RE
 .PP
 \fB\-\-type=dv|ev\fR
@@ -783,20 +804,13 @@ Don\*(Aqt include recommended security settings\&. Output only the bare minimum 
 .RE
 .RE
 .PP
-\fBresend\-email \fR\fB[\fIOPTIONS\fR]\fR\fB \fR\fB\fIHOSTNAME\fR\fR
+\fBretry\-approval \fR\fB\fIHOSTNAME\fR\fR
 .RS 4
-Resend the approval email of a certificate that\*(Aqs pending approval\&.
-.PP
-\fB\-\-email=\fR\fB\fIADDRESS\fR\fR
-.RS 4
-Change the certificate\*(Aqs approver address to
-\fIADDRESS\fR
-and resend the email there\&.
+Retry the approval process of a certificate that\*(Aqs pending approval\&. If the certificate uses email approval, the email will be resent\&. If the certificate uses DNS approval, the DNS record will be added if not already present, and then re\-checked\&.
 .sp
-The new address must be one of the acceptable addresses that is listed when you run
-\fBsslmate buy\fR
-for this host name\&.
-.RE
+To change the approval method or approver email of a pending certificate, use the
+\fBsslmate edit\fR
+command\&.
 .RE
 .PP
 \fBlink\fR
