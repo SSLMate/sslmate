@@ -50,8 +50,19 @@ To use automatic DNS approval with Route 53, the following additional software m
 
 ## Installation
 
-* Run `make install` to install to /usr/local.
-* Run `make install PREFIX=/usr` to install to /usr.
+Run `make` and `make install`.
+
+The following Makefile variables can be passed on the command line to `make` and `make install`:
+
+* `PREFIX=/path` - Install to given path (default: `/usr/local`)
+* `DESTDIR=/path` -  Stage installed files under the given path instead of installing directly to the filesystem (intended for package building)
+
+Example:
+
+```
+make PREFIX=/usr
+make install PREFIX=/usr DESTDIR=/tmp/pkgroot
+```
 
 ## Getting started
 

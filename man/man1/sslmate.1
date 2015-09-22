@@ -2,12 +2,12 @@
 .\"     Title: sslmate
 .\"    Author: SSLMate <sslmate@sslmate.com>
 .\" Generator: DocBook XSL Stylesheets v1.76.1 <http://docbook.sf.net/>
-.\"      Date: 2015-07-02
+.\"      Date: 2015-09-22
 .\"    Manual: SSLMate
-.\"    Source: SSLMate 1.4.0
+.\"    Source: SSLMate 1.5.0
 .\"  Language: English
 .\"
-.TH "SSLMATE" "1" "2015\-07\-02" "SSLMate 1.4.0" "SSLMate"
+.TH "SSLMATE" "1" "2015\-09\-22" "SSLMate 1.5.0" "SSLMate"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -59,8 +59,8 @@ sslmate \- buy and manage SSL certificates
 \fBsslmate mkconfig \fR\fB\fITEMPLATE\fR\fR\fB \fR\fB\fIHOSTNAME\fR\fR
 .HP \w'\fBsslmate\ import\ \fR\fB\fIKEYFILE\fR\fR\fB\ \fR\fB\fICERTFILE\fR\fR\ 'u
 \fBsslmate import \fR\fB\fIKEYFILE\fR\fR\fB \fR\fB\fICERTFILE\fR\fR
-.HP \w'\fBsslmate\ resend\-email\ \fR\fB\fIHOSTNAME\fR\fR\ 'u
-\fBsslmate resend\-email \fR\fB\fIHOSTNAME\fR\fR
+.HP \w'\fBsslmate\ retry\-approval\ \fR\fB\fIHOSTNAME\fR\fR\ 'u
+\fBsslmate retry\-approval \fR\fB\fIHOSTNAME\fR\fR
 .HP \w'\fBsslmate\ link\fR\ 'u
 \fBsslmate link\fR
 .SH "DESCRIPTION"
@@ -89,12 +89,12 @@ the name of the sub\-command\&.
 .RS 4
 Generate a private key and purchase a certificate for the given hostname(s)\&.
 .sp
-If only one hostname is specified, a standard single\-domain certificate is issued\&. The hostname is placed in the certificate\*(Aqs common name (CN) field as well as a subjectAltName field\&. If the hostname starts with "www\&." or "*\&.", then a subjectAltName is also added, free of charge, for the remaining part of the the hostname, ensuring that the certificate is valid for both hostnames (e\&.g\&. if the hostname is "www\&.example\&.com", a subjectAltName is added for "example\&.com")\&. If the hostname does not start with "www\&." or "*\&.", then a subjectAltName is added, free of charge, for the hostname prefixed with "www\&." (e\&.g\&. if the hostname is "example\&.com", a subjectAltName is added for "www\&.example\&.com")\&.
+If only one hostname is specified, a standard single\-hostname certificate is issued\&. The hostname is placed in the certificate\*(Aqs common name (CN) field as well as a subjectAltName field\&. If the hostname starts with "www\&.", then a subjectAltName is also added, free of charge, for the remaining part of the the hostname, ensuring that the certificate is valid for both hostnames (e\&.g\&. if the hostname is "www\&.example\&.com", a subjectAltName is added for "example\&.com")\&. If the hostname does not start with "www\&.", then a subjectAltName is added, free of charge, for the hostname prefixed with "www\&." (e\&.g\&. if the hostname is "example\&.com", a subjectAltName is added for "www\&.example\&.com")\&.
 .sp
-If more than one hostname is specified, a multi\-domain certificate is issued\&. The first hostname is the primary name of the certificate and is placed in the certificate\*(Aqs common name field, as well as a subjectAltName field\&. The remaining hostnames are placed in subjectAltNames\&. The certificate is referred to by its primary name when downloading, renewing, reissuing, etc\&. The primary name cannot be changed without purchasing a new certificate, but alternative names can be added and removed after the certificate is issued by running
-\fBsslmate edit\fR\&.
+If the hostname starts with "*\&.", then a wildcard certificate is issued which is valid for the wildcard domain itself and all hostnames directly below the wildcard domain\&. The certificate is not valid for hostnames two or more levels below the wildcard domain\&. For example, "*\&.example\&.com" matches "example\&.com", "www\&.example\&.com", and "subdomain\&.example\&.com", but not "www\&.subdomain\&.example\&.com")\&.
 .sp
-If the hostname starts with "*\&.", then a wildcard certificate is issued, and the certificate is valid for all hostnames directly below the wildcard domain, but not for hostnames two or more levels below the wildcard domain (e\&.g\&. "*\&.example\&.com" matches "subdomain\&.example\&.com" but not "www\&.subdomain\&.example\&.com")\&. Multi\-domain certificates cannot contain wildcards\&.
+If more than one hostname is specified, a multi\-hostname certificate is issued\&. The first hostname is the primary name of the certificate and is placed in the certificate\*(Aqs common name field, as well as a subjectAltName field\&. The remaining hostnames are placed in subjectAltNames\&. The certificate is referred to by its primary name when downloading, renewing, reissuing, etc\&. The primary name cannot be changed without purchasing a new certificate, but alternative names can be added and removed after the certificate is issued by running
+\fBsslmate edit\fR\&. Multi\-hostname certificates cannot contain wildcard hostnames\&.
 .sp
 The following options are understood:
 .PP
@@ -116,7 +116,7 @@ option\&.
 .sp
 When "dns" is used, you must add a specific DNS record under your domain\&. If you use Route 53 and have appropriate AWS credentials configured, the DNS record will be automatically added\&. Otherwise, the DNS record will be displayed and you will need to add it manually\&.
 .sp
-When purchasing a multi\-domain certificate, each hostname must be approved separately\&. The approval method specified by this option applies to every hostname\&. To use a different method for a hostname, specify an option of the form
+When purchasing a multi\-hostname certificate, each hostname must be approved separately\&. The approval method specified by this option applies to every hostname\&. To use a different method for a hostname, specify an option of the form
 \fB\-\-approval=\fR\fB\fIHOSTNAME\fR\fR\fB=\fR\fB\fIMETHOD\fR\fR\&.
 .RE
 .PP
@@ -126,7 +126,7 @@ Send the approval email to the given email address\&. This address must be one o
 \fBsslmate buy\fR
 interactively\&. Only applicable if email approval is used\&.
 .sp
-When purchasing a multi\-domain certificate, this email address is used for every hostname\&. To use a different email address for a hostname, specify an option of the form
+When purchasing a multi\-hostname certificate, this email address is used for every hostname\&. To use a different email address for a hostname, specify an option of the form
 \fB\-\-email=\fR\fB\fIHOSTNAME\fR\fR\fB=\fR\fB\fIADDRESS\fR\fR\&.
 .RE
 .PP
@@ -211,6 +211,11 @@ The default key type can be changed by setting the
 \fBkey_type\fR
 configuration option (see the CONFIGURATION section for details)\&.
 .RE
+.PP
+\fB\-\-multi\fR
+.RS 4
+Buy a multi\-hostname certificate even if only one hostname was specified on the command line\&. This option is only necessary if you want to buy a multi\-hostname certificate with only one hostname\&.
+.RE
 .RE
 .PP
 \fBrenew \fR\fB[\fIOPTIONS\fR]\fR\fB \fR\fB\fIHOSTNAME\fR\fR
@@ -290,7 +295,7 @@ The following options are understood:
 .PP
 \fB\-\-same\-key\fR
 .RS 4
-Keep the same private key when reissuing\&. This is useful if you are reissuing a certificate not because of a lost key, but to add or remove the alternative names of a multi\-domain certificate\&.
+Keep the same private key when reissuing\&. This is useful if you are reissuing a certificate not because of a lost key, but to add or remove the alternative names of a multi\-hostname certificate\&.
 .sp
 Note: Starting with SSLMate 2\&.0,
 \fB\-\-same\-key\fR
@@ -569,7 +574,7 @@ The certificate\*(Aqs common name\&.
 .PP
 alt_names
 .RS 4
-The certificate\*(Aqs subject alternative names (for multi\-domain certs only)\&.
+The certificate\*(Aqs subject alternative names (for multi\-hostname certs only)\&.
 .RE
 .PP
 status
@@ -637,7 +642,7 @@ Change the approval method for this certificate\&. The new method will be used f
 For more information about approval methods, see the documentation for
 \fBsslmate buy\fR\&.
 .sp
-If this is a multi\-domain certificate, the approval method specified by this option applies to every hostname\&. To edit the approval method for a single hostname only, pass an option of the form
+If this is a multi\-hostname certificate, the approval method specified by this option applies to every hostname\&. To edit the approval method for a single hostname only, pass an option of the form
 \fB\-\-approval=\fR\fB\fIHOSTNAME\fR\fR\fB=\fR\fB\fIMETHOD\fR\fR\&.
 .RE
 .PP
@@ -649,7 +654,7 @@ The new address must be one of the acceptable addresses that is listed when you 
 \fBsslmate buy\fR
 for this host name\&. This option is only applicable when email approval is used\&.
 .sp
-If this is a multi\-domain certificate, the email address specified by this option applies to every hostname\&. To edit the email address for a single hostname only, pass an option of the form
+If this is a multi\-hostname certificate, the email address specified by this option applies to every hostname\&. To edit the email address for a single hostname only, pass an option of the form
 \fB\-\-email=\fR\fB\fIHOSTNAME\fR\fR\fB=\fR\fB\fIMETHOD\fR\fR\&.
 .RE
 .PP
@@ -660,13 +665,29 @@ Enable or disable auto\-renew for this certificate\&.
 .PP
 \fB\-\-add\-name=\fR\fB\fIHOSTNAME\fR\fR, \fB\-\-rm\-name=\fR\fB\fIHOSTNAME\fR\fR
 .RS 4
-Add or remove the given hostname to or from this certificate\&. This certificate must be a multi\-domain certificate, and only alternative names (not the common name) can be removed\&.
+Add or remove the given hostname to or from this certificate\&. This certificate must be a multi\-hostname certificate, and only alternative names (not the common name) can be removed\&.
 .sp
 The name is not added or removed immediately\&. Instead, the changes take effect on the next call to
 \fBsslmate reissue\fR\&. Any names that were added since the last issuance will need to be approved\&. Existing names do not need to be re\-approved as long as you preserve the existing private key by passing the
 \fB\-\-same\-key\fR
 option to
 \fBsslmate reissue\fR\&. If there has been a net increase in hostnames since the last issuance, your account will be charged for the new names\&.
+.sp
+Note that removing all alternative hostnames does not convert the certificate to a single\-hostname certificate\&. For that, you must use the
+\fB\-\-no\-multi\fR
+option\&.
+.RE
+.PP
+\fB\-\-multi\fR, \fB\-\-no\-multi\fR
+.RS 4
+Change the scope of this certificate (single\-hostname or multi\-hostname)\&. See the
+\fBsslmate buy\fR
+documentation for a discussion of the differences\&.
+.sp
+Changes to the certificate scope take effect only when renewing\&. To "upgrade" an existing single\-hostname certificate to a multi\-hostname certificate, first edit its scope and add alternative names with
+\fBsslmate edit\fR
+and then force an early renewal with
+\fBsslmate renew \-\-force\fR\&.
 .RE
 .PP
 \fB\-\-type=dv|ev\fR
@@ -714,7 +735,7 @@ When renewing, use the given method to prove ownership of your domain\&.
 For more information about approval methods, see the documentation for
 \fBsslmate buy\fR\&.
 .sp
-If this is a multi\-domain certificate, the approval method specified by this option applies to every hostname\&. To specify a different approval method for a particular hostname, pass an option of the form
+If this is a multi\-hostname certificate, the approval method specified by this option applies to every hostname\&. To specify a different approval method for a particular hostname, pass an option of the form
 \fB\-\-approval=\fR\fB\fIHOSTNAME\fR\fR\fB=\fR\fB\fIMETHOD\fR\fR\&.
 .RE
 .PP
@@ -724,7 +745,7 @@ When renewing, send the domain ownership email to the given email address instea
 \fBsslmate import\fR
 interactively\&. This option is only applicable when email approval is used\&.
 .sp
-If this is a multi\-domain certificate, the email address specified by this option applies to every hostname\&. To specify a different email address for a particular hostname, pass an option of the form
+If this is a multi\-hostname certificate, the email address specified by this option applies to every hostname\&. To specify a different email address for a particular hostname, pass an option of the form
 \fB\-\-approval=\fR\fB\fIHOSTNAME\fR\fR\fB=\fR\fB\fIMETHOD\fR\fR\&.
 .RE
 .PP
@@ -783,20 +804,13 @@ Don\*(Aqt include recommended security settings\&. Output only the bare minimum 
 .RE
 .RE
 .PP
-\fBresend\-email \fR\fB[\fIOPTIONS\fR]\fR\fB \fR\fB\fIHOSTNAME\fR\fR
+\fBretry\-approval \fR\fB\fIHOSTNAME\fR\fR
 .RS 4
-Resend the approval email of a certificate that\*(Aqs pending approval\&.
-.PP
-\fB\-\-email=\fR\fB\fIADDRESS\fR\fR
-.RS 4
-Change the certificate\*(Aqs approver address to
-\fIADDRESS\fR
-and resend the email there\&.
+Retry the approval process of a certificate that\*(Aqs pending approval\&. If the certificate uses email approval, the email will be resent\&. If the certificate uses DNS approval, the DNS record will be added if not already present, and then re\-checked\&.
 .sp
-The new address must be one of the acceptable addresses that is listed when you run
-\fBsslmate buy\fR
-for this host name\&.
-.RE
+To change the approval method or approver email of a pending certificate, use the
+\fBsslmate edit\fR
+command\&.
 .RE
 .PP
 \fBlink\fR
