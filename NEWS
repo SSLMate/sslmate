@@ -1,3 +1,14 @@
+v1.5.0 (2015-09-22)
+ * Replace 'sslmate resend-email' with 'sslmate retry-approval', which
+   supports non-email approval.  'resend-email' will be removed in
+   SSLMate 2.0.
+ * Rebrand "multi-domain" certs as "multi-hostname" certs.
+ * Add '--multi' option to 'sslmate buy' to force the purchase of a
+   multi-hostname certificate with just a single hostname.
+ * Add '--multi' and --no-multi options to 'sslmate edit' to convert
+   between a multi-hostname and single-hostname certificate.
+ * Improve user experience when using DNS approval.
+
 v1.4.0 (2015-07-02)
  * Add support for multi-domain certificates.
    - Specify multiple hostnames on command line to 'sslmate buy'.
