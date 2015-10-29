@@ -1147,21 +1147,25 @@ sub prepare_approval {
 	if (defined($old_cert) && $old_cert->{exists}) {
 		remove_approval_for($new_cert->{cn}, $old_cert, $new_cert);
 
-		for my $old_san_obj (@{$old_cert->{sans}}) {
-			next unless $old_san_obj->{type} eq 'dns';
+		if (defined $old_cert->{sans}) {
+			for my $old_san_obj (@{$old_cert->{sans}}) {
+				next unless $old_san_obj->{type} eq 'dns';
 
-			my $new_san_obj = (grep { $_->{type} eq $old_san_obj->{type} &&
-						  $_->{value} eq $old_san_obj->{value} }
-					   @{$new_cert->{sans}})[0];
-			remove_approval_for($old_san_obj->{value}, $old_san_obj, $new_san_obj);
+				my $new_san_obj = (grep { $_->{type} eq $old_san_obj->{type} &&
+							  $_->{value} eq $old_san_obj->{value} }
+						   @{$new_cert->{sans}})[0];
+				remove_approval_for($old_san_obj->{value}, $old_san_obj, $new_san_obj);
+			}
 		}
 	}
 
 	add_approval_for($new_cert->{cn}, $new_cert) or return 0;
 
-	for my $san_obj (@{$new_cert->{sans}}) {
-		next unless $san_obj->{type} eq 'dns';
-		add_approval_for($san_obj->{value}, $san_obj) or return 0;
+	if (defined $new_cert->{sans}) {
+		for my $san_obj (@{$new_cert->{sans}}) {
+			next unless $san_obj->{type} eq 'dns';
+			add_approval_for($san_obj->{value}, $san_obj) or return 0;
+		}
 	}
 
 	return 1;
