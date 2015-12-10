@@ -1147,21 +1147,25 @@ sub prepare_approval {
 	if (defined($old_cert) && $old_cert->{exists}) {
 		remove_approval_for($new_cert->{cn}, $old_cert, $new_cert);
 
-		for my $old_san_obj (@{$old_cert->{sans}}) {
-			next unless $old_san_obj->{type} eq 'dns';
+		if (defined $old_cert->{sans}) {
+			for my $old_san_obj (@{$old_cert->{sans}}) {
+				next unless $old_san_obj->{type} eq 'dns';
 
-			my $new_san_obj = (grep { $_->{type} eq $old_san_obj->{type} &&
-						  $_->{value} eq $old_san_obj->{value} }
-					   @{$new_cert->{sans}})[0];
-			remove_approval_for($old_san_obj->{value}, $old_san_obj, $new_san_obj);
+				my $new_san_obj = (grep { $_->{type} eq $old_san_obj->{type} &&
+							  $_->{value} eq $old_san_obj->{value} }
+						   @{$new_cert->{sans}})[0];
+				remove_approval_for($old_san_obj->{value}, $old_san_obj, $new_san_obj);
+			}
 		}
 	}
 
 	add_approval_for($new_cert->{cn}, $new_cert) or return 0;
 
-	for my $san_obj (@{$new_cert->{sans}}) {
-		next unless $san_obj->{type} eq 'dns';
-		add_approval_for($san_obj->{value}, $san_obj) or return 0;
+	if (defined $new_cert->{sans}) {
+		for my $san_obj (@{$new_cert->{sans}}) {
+			next unless $san_obj->{type} eq 'dns';
+			add_approval_for($san_obj->{value}, $san_obj) or return 0;
+		}
 	}
 
 	return 1;
@@ -2444,15 +2448,28 @@ sub command_renew {
 	unless ($batch) {
 		# Get product/pricing info from the server, ask user for confirmation
 
-		# TODO TODO: specify # of SANs when getting product info
-		my $product_info = get_product_info($cert->{type}, $cn, days => $days, coupon_code => $opts{coupon_code}) or exit 1;
+		my $product_info = get_product_info($cert->{type}, $cn,
+						 days => $days,
+						 coupon_code => $opts{coupon_code},
+						 sans => defined($cert->{sans}) ? int(@{$cert->{sans}}) : undef) or return 1;
 
 		exit 1 unless order_can_be_paid($product_info);
 
-		# TODO TODO: pass SAN info to prompt_for_order_confirmation
+		my $approver_emails = { $cn => $cert->{approver_email} };
+		my $approval_methods = { $cn => $cert->{approval_method} };
+		if (defined $cert->{sans}) {
+			for my $san (@{$cert->{sans}}) {
+				if ($san->{type} eq 'dns') {
+					$approver_emails->{$san->{value}} = $san->{approver_email};
+					$approval_methods->{$san->{value}} = $san->{approval_method};
+				}
+			}
+		}
+
 		prompt_for_order_confirmation($product_info,
-					      approver_emails => { $cn => $cert->{approver_email} },
-					      approval_methods => { $cn => $cert->{approval_method} },
+					      sans => $cert->{sans},
+					      approver_emails => $approver_emails,
+					      approval_methods => $approval_methods,
 					      auto_renew => $cert->{auto_renew}) or exit 1;
 
 		$authorized_charge_currency = $product_info->{price}->{currency};
