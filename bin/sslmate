@@ -2115,8 +2115,9 @@ sub command_reissue_rekey {
 		unless ($same_key) {
 			$rekey = 1;
 			print STDERR "Warning: 'sslmate reissue' without the --same-key option is deprecated.\n";
-			print STDERR "Starting with SSLMate 2.0, --same-key will be implied.  To reissue\n";
-			print STDERR "a certificate with a new key, use 'sslmate rekey' instead.\n";
+			print STDERR "To reissue with a new key, use 'sslmate rekey' instead.\n";
+			print STDERR "To reissue with the same key, use 'sslmate reissue --same-key'.\n";
+			print STDERR "Starting with SSLMate 2.0, --same-key will be implied.\n";
 			sleep(3) unless $batch;
 			print STDERR "\n";
 		}
