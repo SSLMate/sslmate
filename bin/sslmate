@@ -1604,7 +1604,7 @@ sub get_product_info {
 	return undef unless defined $response;
 
 	if ($status != 200) {
-		print STDERR "Error: " . $response->{message} . "\n";
+		print STDERR "Error: $cn: " . $response->{message} . "\n";
 		return undef;
 	}
 	return $response;
@@ -1617,7 +1617,7 @@ sub get_approval_methods {
 	return undef unless defined $response;
 
 	if ($status != 200) {
-		print STDERR "Error: " . $response->{message} . "\n";
+		print STDERR "Error: $cn: " . $response->{message} . "\n";
 		return undef;
 	}
 	return $response;
