@@ -1818,6 +1818,12 @@ sub command_buy {
 		print STDERR "See 'sslmate help buy' for help.\n";
 		return 2;
 	}
+	if (@ARGV == 2 && $ARGV[1] =~ /^[0-9]+$/) {
+		print STDERR "Error: specifying the number of years is no longer supported.\n";
+		print STDERR "Please invoke sslmate without the number of years.\n";
+		print STDERR "Example: sslmate buy www.example.com\n";
+		return 2;
+	}
 	if ($no_wait && $accept_dummy) {
 		print STDERR "Error: --no-wait and --temp are mutually exclusive.\n";
 		return 2;
