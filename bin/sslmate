@@ -3510,6 +3510,11 @@ sub command_retry_approval {
 		print_our_usage(*STDOUT);
 		return 0;
 	}
+	if (@ARGV == 0) {
+		print STDERR "Error: you must specify the name of the certificate.\n";
+		print_our_usage(*STDERR);
+		return 2;
+	}
 
 	my $cn = lc $ARGV[0];
 	validate_cn($cn) or return 1;
