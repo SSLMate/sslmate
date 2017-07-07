@@ -145,7 +145,7 @@ sub call_cloudflare {
 
 # CloudFlare doesn't like trailing dots
 $rr_name =~ s/\.$//;
-$rr_value =~ s/\.$// if $rr_type eq 'CNAME';
+$rr_value =~ s/\.$// if $rr_type eq 'CNAME' or $rr_type eq 'NS';
 
 # 1. Determine the ID of the zone
 my $zone_id;
