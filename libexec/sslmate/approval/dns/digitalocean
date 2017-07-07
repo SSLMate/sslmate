@@ -141,7 +141,7 @@ sub call_digitalocean {
 # DigitalOcean doesn't use trailing dots
 $rr_name =~ s/\.$//;
 my $dotless_rr_value = $rr_value;
-$dotless_rr_value =~ s/\.$// if $rr_type eq 'CNAME';
+$dotless_rr_value =~ s/\.$// if $rr_type eq 'CNAME' or $rr_type eq 'NS';
 
 # 1. Determine the domain of the hosted zone
 my @subdomain;
