@@ -181,8 +181,12 @@ while (1) {
 		}
 	}
 	last if defined($existing_record_id);
-	last unless defined $response->{links}->{pages}->{next};
-	(undef, $response) = call_digitalocean('GET', $response->{links}->{pages}->{next});
+
+	my $next_page = $response->{links}->{pages}->{next};
+	last if not defined($next_page);
+	$next_page =~ s|^https://api.digitalocean.com/v2||;
+
+	(undef, $response) = call_digitalocean('GET', $next_page);
 	defined($response) or exit(1);
 }
 
