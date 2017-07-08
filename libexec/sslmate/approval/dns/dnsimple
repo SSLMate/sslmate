@@ -156,7 +156,7 @@ sub call_dnsimple {
 
 # DNSimple doesn't use trailing dots
 $rr_name =~ s/\.$//;
-$rr_value =~ s/\.$// if $rr_type eq 'CNAME';
+$rr_value =~ s/\.$// if $rr_type eq 'CNAME' or $rr_type eq 'NS';
 
 # 1. Determine the domain of the hosted zone
 my @subdomain;
