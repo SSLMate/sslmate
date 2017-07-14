@@ -1382,7 +1382,7 @@
 				</listitem>
 			</varlistentry>
 			<varlistentry>
-				<term><option>--p <replaceable>PROFILE</replaceable></option></term>
+				<term><option>-p <replaceable>PROFILE</replaceable></option></term>
 				<term><option>--profile=<replaceable>PROFILE</replaceable></option></term>
 
 				<listitem>
