@@ -1,7 +1,7 @@
 '\" t
 .\"     Title: sslmate
 .\"    Author: SSLMate <sslmate@sslmate.com>
-.\" Generator: DocBook XSL Stylesheets v1.76.1 <http://docbook.sf.net/>
+.\" Generator: DocBook XSL Stylesheets v1.78.1 <http://docbook.sf.net/>
 .\"      Date: 2015-12-10
 .\"    Manual: SSLMate
 .\"    Source: SSLMate 1.5.1
@@ -65,7 +65,6 @@ sslmate \- buy and manage SSL certificates
 \fBsslmate link\fR
 .SH "DESCRIPTION"
 .PP
-
 \fBsslmate\fR
 is the command line client for SSLMate (\m[blue]\fBhttps://sslmate\&.com\fR\m[]), a service for purchasing and managing SSL certificates\&. SSLMate provides easy\-to\-use tools for buying, renewing, and revoking certificates, for monitoring the expiration date of your certificates, and for synchronizing your certificates between your servers\&.
 .PP
@@ -79,7 +78,6 @@ command, you must create a free account at
 \m[blue]\fBhttps://sslmate\&.com\fR\m[]\&.
 .SH "COMMANDS"
 .PP
-
 \fBsslmate\fR
 is logically divided into several sub\-commands which perform distinct tasks\&. Each sub\-command, and its arguments, are documented below\&. Note that arguments and options to sub\-commands must be specified on the command line
 \fIafter\fR
@@ -398,8 +396,7 @@ certificates for this hostname, including the most recent active certificate\&. 
 WARNING: if you use this option, SSLMate will no longer be able to issue new certificates for this hostname unless you buy a brand new certificate\&. Generally, to revoke a certificate, you should first reissue it with the
 \fBreissue\fR
 command and then use
-\fBrevoke\fR
-\fIwithout\fR
+\fBrevoke\fR\fIwithout\fR
 the
 \fB\-\-all\fR
 option\&. Only use
@@ -884,7 +881,7 @@ Display additional information about what
 is doing\&.
 .RE
 .PP
-\fB\-\-p \fR\fB\fIPROFILE\fR\fR, \fB\-\-profile=\fR\fB\fIPROFILE\fR\fR
+\fB\-p \fR\fB\fIPROFILE\fR\fR, \fB\-\-profile=\fR\fB\fIPROFILE\fR\fR
 .RS 4
 Use the given configuration profile, instead of the default\&. If this option is specified, the string "\-\fIPROFILE\fR" will be appended to the paths of the configuration file and default key and certificate directories\&.
 .sp
@@ -1075,7 +1072,6 @@ $HOME/\&.sslmate\&.
 .RE
 .SH "SEE ALSO"
 .PP
-
 \m[blue]\fBOnline SSLMate Help\fR\m[]\&\s-2\u[4]\d\s+2,
 \fBopenssl\fR(1)
 .SH "NOTES"
