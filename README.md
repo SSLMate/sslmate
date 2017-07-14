@@ -10,10 +10,12 @@ To use the `sslmate` command, you must create a free account at https://sslmate.
 
 SSLMate officially supports:
 
- * Debian 6, 7, and 8
- * Ubuntu 12.04, 14.04, 14.10, and 15.04
+ * Debian 7, 8, and 9
+ * Ubuntu 12.04, 14.04, 15.04, 15.10, 16.04, 16,10, and 17.04
  * RHEL/CentOS 6 and 7
- * Mac OS X 10.9 and above
+ * Fedora 20 and above
+ * Arch Linux (available in the AUR)
+ * Mac OS X 10.9 and above (available from Homebrew)
 
 Packages (.deb, .rpm, and .pkg) for the above operating systems [are available](https://sslmate.com/help/install).
 

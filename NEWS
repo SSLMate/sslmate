@@ -1,3 +1,12 @@
+v1.5.2 (2017-07-14)
+ * Bugfix release.
+ * Fix pagination bug in digitalocean DNS handler.
+ * Ensure NS records are properly handled by DNS handlers.
+ * Ensure parent directories are created by documentroot HTTP handler.
+ * Check for missing argument to retry-approval.
+ * Clarify some unclear error and warning messages.
+ * Fix typo in man page.
+
 v1.5.1 (2015-12-10)
  * Bugfix release.
  * Fix bug with renewing multi-hostname certs where it said

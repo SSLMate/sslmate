@@ -42,6 +42,8 @@
 
 USAGE="$0 add|del hostname path contents"
 
+umask 022
+
 if [ $# != 4 ]
 then
 	echo "Usage: $USAGE" >&2
@@ -73,7 +75,7 @@ fi
 
 if [ $action = "add" ]
 then
-	# TODO: mkdir?
+	mkdir -p "$(dirname "$document_root$path")"
 	printf "documentroot: Writing $document_root$path... "
 	printf "%s" "$contents" > "$document_root$path"
 	printf "Done.\n"

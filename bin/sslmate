@@ -1604,7 +1604,7 @@ sub get_product_info {
 	return undef unless defined $response;
 
 	if ($status != 200) {
-		print STDERR "Error: " . $response->{message} . "\n";
+		print STDERR "Error: $cn: " . $response->{message} . "\n";
 		return undef;
 	}
 	return $response;
@@ -1617,7 +1617,7 @@ sub get_approval_methods {
 	return undef unless defined $response;
 
 	if ($status != 200) {
-		print STDERR "Error: " . $response->{message} . "\n";
+		print STDERR "Error: $cn: " . $response->{message} . "\n";
 		return undef;
 	}
 	return $response;
@@ -1816,6 +1816,12 @@ sub command_buy {
 		print STDERR "Example: sslmate buy www.example.com\n";
 		print STDERR "     or: sslmate buy '*.example.com'\n";
 		print STDERR "See 'sslmate help buy' for help.\n";
+		return 2;
+	}
+	if (@ARGV == 2 && $ARGV[1] =~ /^[0-9]+$/) {
+		print STDERR "Error: specifying the number of years is no longer supported.\n";
+		print STDERR "Please invoke sslmate without the number of years.\n";
+		print STDERR "Example: sslmate buy www.example.com\n";
 		return 2;
 	}
 	if ($no_wait && $accept_dummy) {
@@ -2115,8 +2121,9 @@ sub command_reissue_rekey {
 		unless ($same_key) {
 			$rekey = 1;
 			print STDERR "Warning: 'sslmate reissue' without the --same-key option is deprecated.\n";
-			print STDERR "Starting with SSLMate 2.0, --same-key will be implied.  To reissue\n";
-			print STDERR "a certificate with a new key, use 'sslmate rekey' instead.\n";
+			print STDERR "To reissue with a new key, use 'sslmate rekey' instead.\n";
+			print STDERR "To reissue with the same key, use 'sslmate reissue --same-key'.\n";
+			print STDERR "Starting with SSLMate 2.0, --same-key will be implied.\n";
 			sleep(3) unless $batch;
 			print STDERR "\n";
 		}
@@ -3502,6 +3509,11 @@ sub command_retry_approval {
 	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
 		print_our_usage(*STDOUT);
 		return 0;
+	}
+	if (@ARGV == 0) {
+		print STDERR "Error: you must specify the name of the certificate.\n";
+		print_our_usage(*STDERR);
+		return 2;
 	}
 
 	my $cn = lc $ARGV[0];
