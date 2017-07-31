@@ -220,10 +220,10 @@ sub restore_file_permissions {
 	}
 
 	# 1. Restore user and group
-	if (!chown($srcstat[4], -1, $destfile)) {
+	if (!chown($srcstat[4], -1, "$destfile")) {
 		warn "Warning: unable to preserve ownership of $srcfile: chown failed: $!\n";
 	}
-	if (!chown(-1, $srcstat[5], $destfile)) {
+	if (!chown(-1, $srcstat[5], "$destfile")) {
 		warn "Warning: unable to preserve group ownership of $srcfile: chown failed: $!\n";
 	}
 
