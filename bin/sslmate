@@ -1297,7 +1297,7 @@ sub extract_pubkey_from_key {
 
 	# The pkey command is only available in OpenSSL 1.0.0 and higher. But older versions of
 	# OpenSSL don't support ECC anyways, so it's OK to just use the rsa command instead.
-	my $has_pkey_command = grep /^pkey$/, `openssl list-standard-commands`;
+	my $has_pkey_command = not(`openssl version` =~ /^OpenSSL 0\./);
 	my $pkey_command = $has_pkey_command ? 'pkey' : 'rsa';
 
 	pipe(my $openssl_reader, my $openssl_writer) or die "Error: pipe failed: $!";
@@ -1346,7 +1346,7 @@ sub extract_pubkey_from_crt {
 	} else {
 		# The pkey command is only available in OpenSSL 1.0.0 and higher. But older versions of
 		# OpenSSL don't support ECC anyways, so it's OK to just use the rsa command instead.
-		my $has_pkey_command = grep /^pkey$/, `openssl list-standard-commands`;
+		my $has_pkey_command = not(`openssl version` =~ /^OpenSSL 0\./);
 		$pkey_command = $has_pkey_command ? 'pkey' : 'rsa';
 
 		pipe(my $pkey_reader, my $pkey_writer) or die "Error: pipe failed: $!";
