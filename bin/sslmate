@@ -1039,6 +1039,8 @@ sub compare_approval_options {
 sub prompt_for_manual_dns_approval {
 	my ($options) = @_;
 
+	my $begins_with_underscore = grep { $_->{name} =~ /^_/ } @$options;
+
 	print "\n";
 	if (@$options == 1) {
 		print "Please add the following DNS record to your domain's DNS:\n";
@@ -1050,6 +1052,7 @@ sub prompt_for_manual_dns_approval {
 		print "    " . join(' ', @$option{qw{name type value}}) . "\n";
 	}
 	print "\n";
+	print "Attention: the DNS record name begins with an underscore!\n\n" if $begins_with_underscore;
 	print "You may remove any DNS record you previously added for this certificate.\n";
 	print "You should leave the new DNS record in place as long as this certificate\n";
 	print "is in use.\n";
