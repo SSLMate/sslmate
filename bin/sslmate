@@ -1759,7 +1759,7 @@ sub command_buy {
 		print "                      email an invoice to the given address\n";
 		print "\n";
 		print "Batch options:\n";
-		print " --approval=METHOD    use the given approval method (email or dns)\n";
+		print " --approval=METHOD    use the given approval method (email, dns, or http)\n";
 		print " --approval=HOSTNAME=METHOD\n";
 		print "                      use the given approval method for given hostname\n";
 		print " --email=ADDRESS      use the given approver email address\n";
@@ -3207,7 +3207,7 @@ sub command_edit {
 		print $out "Usage: sslmate edit OPTIONS... HOSTNAME\n";
 		print $out "\n";
 		print $out "Valid options:\n";
-		print $out " --approval=METHOD    use the given approval method (email or dns)\n";
+		print $out " --approval=METHOD    use the given approval method (email, dns, or http)\n";
 		print $out " --approval=HOSTNAME=METHOD\n";
 		print $out "                      use the given approval method for given hostname\n";
 		print $out " --email=ADDRESS      change the approver email of this cert\n";
@@ -3663,7 +3663,7 @@ sub command_import {
 		print " --auto-renew       automatically renew this certificate before it expires\n";
 		print " --no-auto-renew    don't automatically renew this certificate\n";
 		print " --no-install       don't copy the key/cert to the local key/cert directories\n";
-		print " --approval=METHOD  use the given approval method (email or dns)\n";
+		print " --approval=METHOD  use the given approval method (email, dns, or http)\n";
 		print " --approval=HOSTNAME=METHOD\n";
 		print "                    use the given approval method for given hostname\n";
 		print " --email=ADDRESS    use the given approver email address\n";
