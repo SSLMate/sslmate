@@ -1,3 +1,9 @@
+v1.6.0 (2017-08-03)
+ * Add support for HTTP approval (see https://sslmate.com/help/approval/http).
+ * Fix compatibility bug with OpenSSL 1.1 affecting elliptic curve certificates.
+ * Fix invalid argument error when setting file ownership under Perl 5.24.
+ * Various refinements and documentation improvements.
+
 v1.5.2 (2017-07-14)
  * Bugfix release.
  * Fix pagination bug in digitalocean DNS handler.
