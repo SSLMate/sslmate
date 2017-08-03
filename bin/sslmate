@@ -1447,6 +1447,9 @@ sub prompt_for_approval {
 	print "you must respond to an email sent to one of the following addresses, or add\n";
 	print "a DNS record to your domain.\n";
 	print "\n";
+	print "Tip: visit https://sslmate.com/help/approval to learn how to automate the\n";
+	print "approval of certificates.\n";
+	print "\n";
 	print "How would you like to prove authorization?\n";
 	print "\n";
 
