@@ -4,10 +4,10 @@
 .\" Generator: DocBook XSL Stylesheets v1.78.1 <http://docbook.sf.net/>
 .\"      Date: 2017-07-14
 .\"    Manual: SSLMate
-.\"    Source: SSLMate 1.5.2
+.\"    Source: SSLMate 1.6.0
 .\"  Language: English
 .\"
-.TH "SSLMATE" "1" "2017\-07\-14" "SSLMate 1.5.2" "SSLMate"
+.TH "SSLMATE" "1" "2017\-07\-14" "SSLMate 1.6.0" "SSLMate"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -87,7 +87,7 @@ the name of the sub\-command\&.
 .RS 4
 Generate a private key and purchase a certificate for the given hostname(s)\&.
 .sp
-If only one hostname is specified, a standard single\-hostname certificate is issued\&. The hostname is placed in the certificate\*(Aqs common name (CN) field as well as a subjectAltName field\&. If the hostname starts with "www\&.", then a subjectAltName is also added, free of charge, for the remaining part of the the hostname, ensuring that the certificate is valid for both hostnames (e\&.g\&. if the hostname is "www\&.example\&.com", a subjectAltName is added for "example\&.com")\&. If the hostname does not start with "www\&.", then a subjectAltName is added, free of charge, for the hostname prefixed with "www\&." (e\&.g\&. if the hostname is "example\&.com", a subjectAltName is added for "www\&.example\&.com")\&.
+If only one hostname is specified, a standard single\-hostname certificate is issued\&. The hostname is placed in the certificate\*(Aqs common name (CN) field as well as a subjectAltName field\&. Unless the hostname already starts with "www\&.", a subjectAltName is added, free of charge, for the hostname prefixed with "www\&." (e\&.g\&. if the hostname is "example\&.com", a subjectAltName is added for "www\&.example\&.com")\&.
 .sp
 If the hostname starts with "*\&.", then a wildcard certificate is issued which is valid for the wildcard domain itself and all hostnames directly below the wildcard domain\&. The certificate is not valid for hostnames two or more levels below the wildcard domain\&. For example, "*\&.example\&.com" matches "example\&.com", "www\&.example\&.com", and "subdomain\&.example\&.com", but not "www\&.subdomain\&.example\&.com")\&.
 .sp
@@ -103,7 +103,7 @@ Enable or disable automatic renewal for this certificate\&. If neither option is
 The auto\-renewal setting of an already\-purchased certificate can be changed from the SSLMate website\&.
 .RE
 .PP
-\fB\-\-approval=email|dns\fR
+\fB\-\-approval=email|dns|http\fR
 .RS 4
 Use the given method to prove ownership of your domain\&.
 .sp
@@ -112,7 +112,11 @@ When "email" is used (the default), you must respond to an email sent to one of 
 \fB\-\-email=\fR\fB\fIADDRESS\fR\fR
 option\&.
 .sp
-When "dns" is used, you must add a specific DNS record under your domain\&. If you use Route 53 and have appropriate AWS credentials configured, the DNS record will be automatically added\&. Otherwise, the DNS record will be displayed and you will need to add it manually\&.
+When "dns" is used, you must add a specific DNS record under your domain\&. If you have configured your SSLMate account to integrate with a supported DNS provider (see
+\m[blue]\fBhttps://sslmate\&.com/account/integrations\fR\m[]), then the DNS record will be added automatically\&. Otherwise, the DNS record will be displayed and you will need to add it manually\&.
+.sp
+When "http" is used, you must configure the web server for your domain to proxy certain URLs to an SSLMate approval server, as described at
+\m[blue]\fBhttps://sslmate\&.com/help/approval/http\fR\m[]\&. Once your web server is configured, certificates using HTTP approval will be approved and issued automatically\&.
 .sp
 When purchasing a multi\-hostname certificate, each hostname must be approved separately\&. The approval method specified by this option applies to every hostname\&. To use a different method for a hostname, specify an option of the form
 \fB\-\-approval=\fR\fB\fIHOSTNAME\fR\fR\fB=\fR\fB\fIMETHOD\fR\fR\&.
@@ -632,7 +636,7 @@ Change one or more setting of the given certificate\&. The settings are specifie
 \fIOPTIONS\fR
 arguments, as described below\&. Every setting is optional; if omitted, the setting is left unchanged\&.
 .PP
-\fB\-\-approval=email|dns\fR
+\fB\-\-approval=email|dns|http\fR
 .RS 4
 Change the approval method for this certificate\&. The new method will be used for approving future reissues and renewals of the certificate\&. If the certificate is currently pending approval, the approval process will be re\-initiated\&.
 .sp
@@ -725,7 +729,7 @@ Don\*(Aqt install the key and certificate files to the local key and certificate
 command\&.)
 .RE
 .PP
-\fB\-\-approval=email|dns\fR
+\fB\-\-approval=email|dns|http\fR
 .RS 4
 When renewing, use the given method to prove ownership of your domain\&.
 .sp

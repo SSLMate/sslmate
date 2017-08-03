@@ -220,10 +220,10 @@ sub restore_file_permissions {
 	}
 
 	# 1. Restore user and group
-	if (!chown($srcstat[4], -1, $destfile)) {
+	if (!chown($srcstat[4], -1, "$destfile")) {
 		warn "Warning: unable to preserve ownership of $srcfile: chown failed: $!\n";
 	}
-	if (!chown(-1, $srcstat[5], $destfile)) {
+	if (!chown(-1, $srcstat[5], "$destfile")) {
 		warn "Warning: unable to preserve group ownership of $srcfile: chown failed: $!\n";
 	}
 
@@ -1039,6 +1039,8 @@ sub compare_approval_options {
 sub prompt_for_manual_dns_approval {
 	my ($options) = @_;
 
+	my $begins_with_underscore = grep { $_->{name} =~ /^_/ } @$options;
+
 	print "\n";
 	if (@$options == 1) {
 		print "Please add the following DNS record to your domain's DNS:\n";
@@ -1050,6 +1052,7 @@ sub prompt_for_manual_dns_approval {
 		print "    " . join(' ', @$option{qw{name type value}}) . "\n";
 	}
 	print "\n";
+	print "Attention: the DNS record name begins with an underscore!\n\n" if $begins_with_underscore;
 	print "You may remove any DNS record you previously added for this certificate.\n";
 	print "You should leave the new DNS record in place as long as this certificate\n";
 	print "is in use.\n";
@@ -1297,7 +1300,7 @@ sub extract_pubkey_from_key {
 
 	# The pkey command is only available in OpenSSL 1.0.0 and higher. But older versions of
 	# OpenSSL don't support ECC anyways, so it's OK to just use the rsa command instead.
-	my $has_pkey_command = grep /^pkey$/, `openssl list-standard-commands`;
+	my $has_pkey_command = not(`openssl version` =~ /^OpenSSL 0\./);
 	my $pkey_command = $has_pkey_command ? 'pkey' : 'rsa';
 
 	pipe(my $openssl_reader, my $openssl_writer) or die "Error: pipe failed: $!";
@@ -1346,7 +1349,7 @@ sub extract_pubkey_from_crt {
 	} else {
 		# The pkey command is only available in OpenSSL 1.0.0 and higher. But older versions of
 		# OpenSSL don't support ECC anyways, so it's OK to just use the rsa command instead.
-		my $has_pkey_command = grep /^pkey$/, `openssl list-standard-commands`;
+		my $has_pkey_command = not(`openssl version` =~ /^OpenSSL 0\./);
 		$pkey_command = $has_pkey_command ? 'pkey' : 'rsa';
 
 		pipe(my $pkey_reader, my $pkey_writer) or die "Error: pipe failed: $!";
@@ -1444,6 +1447,9 @@ sub prompt_for_approval {
 	print "you must respond to an email sent to one of the following addresses, or add\n";
 	print "a DNS record to your domain.\n";
 	print "\n";
+	print "Tip: visit https://sslmate.com/help/approval to learn how to automate the\n";
+	print "approval of certificates.\n";
+	print "\n";
 	print "How would you like to prove authorization?\n";
 	print "\n";
 
@@ -1457,8 +1463,17 @@ sub prompt_for_approval {
 	}
 	if ($approval_methods->{dns}->{available}) {
 		my $i = int(@choices) + 1;
-		print "$i. Add a DNS record\n";
+		if ($approval_methods->{dns}->{integrated}) {
+			print "$i. Add a DNS record (automatic)\n";
+		} else {
+			print "$i. Add a DNS record (manual)\n";
+		}
 		push @choices, [ 'dns' ];
+	}
+	if ($approval_methods->{http}->{available} && $approval_methods->{http}->{integrated}) {
+		my $i = int(@choices) + 1;
+		print "$i. HTTP (automatic)\n";
+		push @choices, [ 'http' ];
 	}
 
 	my $num_choices = int(@choices);
@@ -1756,7 +1771,7 @@ sub command_buy {
 		print "                      email an invoice to the given address\n";
 		print "\n";
 		print "Batch options:\n";
-		print " --approval=METHOD    use the given approval method (email or dns)\n";
+		print " --approval=METHOD    use the given approval method (email, dns, or http)\n";
 		print " --approval=HOSTNAME=METHOD\n";
 		print "                      use the given approval method for given hostname\n";
 		print " --email=ADDRESS      use the given approver email address\n";
@@ -3204,7 +3219,7 @@ sub command_edit {
 		print $out "Usage: sslmate edit OPTIONS... HOSTNAME\n";
 		print $out "\n";
 		print $out "Valid options:\n";
-		print $out " --approval=METHOD    use the given approval method (email or dns)\n";
+		print $out " --approval=METHOD    use the given approval method (email, dns, or http)\n";
 		print $out " --approval=HOSTNAME=METHOD\n";
 		print $out "                      use the given approval method for given hostname\n";
 		print $out " --email=ADDRESS      change the approver email of this cert\n";
@@ -3660,7 +3675,7 @@ sub command_import {
 		print " --auto-renew       automatically renew this certificate before it expires\n";
 		print " --no-auto-renew    don't automatically renew this certificate\n";
 		print " --no-install       don't copy the key/cert to the local key/cert directories\n";
-		print " --approval=METHOD  use the given approval method (email or dns)\n";
+		print " --approval=METHOD  use the given approval method (email, dns, or http)\n";
 		print " --approval=HOSTNAME=METHOD\n";
 		print "                    use the given approval method for given hostname\n";
 		print " --email=ADDRESS    use the given approver email address\n";

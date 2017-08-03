@@ -29,7 +29,7 @@
 	<refentryinfo>
 		<title>SSLMate</title>
 		<date>2017-07-14</date>
-		<productname>SSLMate 1.5.2</productname>
+		<productname>SSLMate 1.6.0</productname>
 
 		<author>
 			<othername>SSLMate</othername>
@@ -152,12 +152,9 @@
 					<para>
 						If only one hostname is specified, a standard single-hostname certificate is issued.
 						The hostname is placed in the certificate's common name (CN) field as well as a
-						subjectAltName field.  If the hostname starts with "www.", then a subjectAltName
-						is also added, free of charge, for the remaining part of the the hostname, ensuring that
-						the certificate is valid for both hostnames (e.g. if the hostname is "www.example.com", a
-						subjectAltName is added for "example.com").  If the hostname does not start with "www.",
-						then a subjectAltName is added, free of charge, for the hostname prefixed with
-						"www." (e.g. if the hostname is "example.com", a subjectAltName is added for "www.example.com").
+						subjectAltName field.  Unless the hostname already starts with "www.", a subjectAltName is added,
+						free of charge, for the hostname prefixed with "www." (e.g. if the hostname is
+						"example.com", a subjectAltName is added for "www.example.com").
 					</para>
 					<para>
 						If the hostname starts with "*.", then a wildcard certificate is issued which is
@@ -198,7 +195,7 @@
 							</listitem>
 						</varlistentry>
 						<varlistentry>
-							<term><option>--approval=email|dns</option></term>
+							<term><option>--approval=email|dns|http</option></term>
 
 							<listitem>
 								<para>
@@ -213,9 +210,17 @@
 								</para>
 								<para>
 									When "dns" is used, you must add a specific DNS record under your domain.
-									If you use Route 53 and have appropriate AWS credentials configured, the
-									DNS record will be automatically added.  Otherwise, the DNS record will
+									If you have configured your SSLMate account to integrate with a supported
+									DNS provider (see <ulink url="https://sslmate.com/account/integrations">https://sslmate.com/account/integrations</ulink>),
+									then the DNS record will be added automatically.  Otherwise, the DNS record will
 									be displayed and you will need to add it manually.
+								</para>
+								<para>
+									When "http" is used, you must configure the web server for your domain
+									to proxy certain URLs to an SSLMate approval server, as described
+									at <ulink url="https://sslmate.com/help/approval/http">https://sslmate.com/help/approval/http</ulink>.
+									Once your web server is configured, certificates using
+									HTTP approval will be approved and issued automatically.
 								</para>
 								<para>
 									When purchasing a multi-hostname certificate, each hostname must be approved
@@ -960,7 +965,7 @@
 					</para>
 					<variablelist>
 						<varlistentry>
-							<term><option>--approval=email|dns</option></term>
+							<term><option>--approval=email|dns|http</option></term>
 
 							<listitem>
 								<para>
@@ -1121,7 +1126,7 @@
 							</listitem>
 						</varlistentry>
 						<varlistentry>
-							<term><option>--approval=email|dns</option></term>
+							<term><option>--approval=email|dns|http</option></term>
 
 							<listitem>
 								<para>
