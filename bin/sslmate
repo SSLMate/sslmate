@@ -1460,8 +1460,17 @@ sub prompt_for_approval {
 	}
 	if ($approval_methods->{dns}->{available}) {
 		my $i = int(@choices) + 1;
-		print "$i. Add a DNS record\n";
+		if ($approval_methods->{dns}->{integrated}) {
+			print "$i. Add a DNS record (automatic)\n";
+		} else {
+			print "$i. Add a DNS record (manual)\n";
+		}
 		push @choices, [ 'dns' ];
+	}
+	if ($approval_methods->{http}->{available} && $approval_methods->{http}->{integrated}) {
+		my $i = int(@choices) + 1;
+		print "$i. HTTP (automatic)\n";
+		push @choices, [ 'http' ];
 	}
 
 	my $num_choices = int(@choices);
