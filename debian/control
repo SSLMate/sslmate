@@ -8,7 +8,7 @@ Build-Depends: debhelper (>= 9)
 
 Package: sslmate
 Architecture: all
-Depends: ${misc:Depends}, ${perl:Depends}, libwww-perl (>= 6) | curl, liburi-perl, perl (>= 5.14) | libjson-pp-perl | libjson-perl (<< 2.49), libterm-readkey-perl, openssl, ca-certificates
+Depends: ${misc:Depends}, perl, libwww-perl (>= 6) | curl, liburi-perl, perl (>= 5.14) | libjson-pp-perl | libjson-perl (<< 2.49), libterm-readkey-perl, openssl, ca-certificates
 Recommends: python, python-boto (>= 2.2)
 Section: utils
 Priority: extra
