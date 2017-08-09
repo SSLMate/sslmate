@@ -1,3 +1,9 @@
+sslmate (1.6.0-2) unstable; urgency=medium
+
+  * Fix perl:any dependency errors
+
+ -- SSLMate Software Release Role <software@sslmate.com>  Wed, 09 Aug 2017 10:05:53 -0700
+
 sslmate (1.6.0-1) unstable; urgency=medium
 
   * New upstream release.
