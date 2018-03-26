@@ -64,6 +64,8 @@ our $API_ENDPOINT = 'https://sslmate.com/api/v2';
 our $PKCS12_PASSWORD = 'sslmate';
 our $DEFAULT_CERT_TIMEOUT = 600;
 
+our $MINIMUM_RSA_KEY_SIZE = 2048;
+
 our $DEFAULT_LIBEXEC_DIR = undef;
 our $LIBEXEC_DIR = $ENV{'SSLMATE_LIBEXEC_DIR'} // $DEFAULT_LIBEXEC_DIR // "$FindBin::Bin/../libexec/sslmate";
 
@@ -1224,10 +1226,17 @@ sub openssl_ecparam_genkey {
 }
 
 sub genkey {
-	my ($key_file, $key_type) = @_;
+	my ($key_file, $key_type, $rsa_key_size) = @_;
 	$key_type //= get_config('key_type', 'rsa');
+	
 	if (lc $key_type eq 'rsa') {
-		openssl_genrsa($key_file, get_config('rsa_bits', 2048));
+		$rsa_key_size //= get_config('rsa_key_size', 2048);
+		if($rsa_key_size < $MINIMUM_RSA_KEY_SIZE) {
+			print STDERR "Error: Key size must be at least $MINIMUM_RSA_KEY_SIZE bits\n";
+			return 0;
+		}
+
+		openssl_genrsa($key_file, get_config('rsa_bits', $rsa_key_size));
 	} elsif (lc $key_type eq 'ecdsa') {
 		openssl_ecparam_genkey($key_file, get_config('ecdsa_curve', 'prime256v1'));
 	} else {
@@ -1784,6 +1793,7 @@ sub command_buy {
 		print "Advanced options:\n";
 		print " -f, --force          replace existing files, certificates\n";
 		print " --key-type=TYPE      type of key to generate ('rsa' or 'ecdsa')\n";
+		print " --rsa-key-size=SIZE  size of key to generate for rsa keys (must be greater than $MINIMUM_RSA_KEY_SIZE)\n";
 		print " --multi              buy multi-hostname cert even if only one hostname specified\n";
 		return 0;
 	}
@@ -1803,6 +1813,7 @@ sub command_buy {
 	my $accept_dummy = 0;
 	my $multi = 0;
 	my $key_type = undef;
+	my $rsa_key_size = undef;
 	my $csr_path = undef;
 	my $days = undef;
 
@@ -1821,6 +1832,7 @@ sub command_buy {
 			    'temp', \$accept_dummy,
 			    'multi', \$multi,
 			    'key-type=s', \$key_type,
+			    'rsa-key-size=i', \$rsa_key_size,
 			    'csr=s', \$csr_path,
 			    'coupon=s', \$opts{coupon_code},
 			    'email-invoice-to=s', \$opts{email_invoice_to},
@@ -2011,7 +2023,7 @@ sub command_buy {
 
 		print "Generating private key... "; STDOUT->flush;
 		truncate($key_file, 0);
-		genkey($key_file, $key_type) or $exit_with_error->();
+		genkey($key_file, $key_type, $rsa_key_size) or $exit_with_error->();
 		close($key_file);
 		print "Done.\n";
 
@@ -2087,17 +2099,18 @@ sub command_reissue_rekey {
 		if ($command eq 'reissue') {
 			print "\n";
 			print "Options:\n";
-			print " --same-key         reissue with the same key instead of generating a new key\n";
+			print " --same-key           reissue with the same key instead of generating a new key\n";
 		}
 		print "\n";
 		print "Batch options:\n";
-		print " --timeout=SECONDS  wait at most SECONDS seconds for new cert to be issued\n";
-		print " --no-wait          return immediately; don't wait for new cert to be issued\n";
+		print " --timeout=SECONDS    wait at most SECONDS seconds for new cert to be issued\n";
+		print " --no-wait            return immediately; don't wait for new cert to be issued\n";
 		if ($command eq 'rekey') {
 			print "\n";
 			print "Advanced options:\n";
-			print " -f, --force        overwrite existing files\n";
-			print " --key-type=TYPE    type of key to generate ('rsa' or 'ecdsa')\n";
+			print " -f, --force          overwrite existing files\n";
+			print " --key-type=TYPE      type of key to generate ('rsa' or 'ecdsa')\n";
+			print " --rsa-key-size=SIZE  size of key to generate for rsa keys (must be greater than $MINIMUM_RSA_KEY_SIZE)\n";
 		}
 		return 0;
 	}
@@ -2107,6 +2120,7 @@ sub command_reissue_rekey {
 	my $timeout = undef;
 	my $no_wait = 0;
 	my $key_type = undef;
+	my $rsa_key_size = undef;
 	my $csr_path = undef;
 
 	my @optspec = ('timeout=i', \$timeout,
@@ -2114,7 +2128,8 @@ sub command_reissue_rekey {
 	#if ($command eq 'rekey') { Uncomment with SSLMate 2.0
 		push @optspec, ('force|f', \$force,
 				'csr=s', \$csr_path,
-				'key-type=s', \$key_type);
+				'key-type=s', \$key_type,
+				'rsa-key-size=i', \$rsa_key_size);
 	#}
 	if ($command eq 'reissue') {
 		push @optspec, ('same-key', \$same_key);
@@ -2225,7 +2240,7 @@ sub command_reissue_rekey {
 			# 3. Generate new key and CSR
 			print "Generating private key... "; STDOUT->flush;
 			truncate($key_file, 0);
-			genkey($key_file, $key_type) or $exit_with_error->();
+			genkey($key_file, $key_type, $rsa_key_size) or $exit_with_error->();
 			close($key_file);
 			print "Done.\n";
 
@@ -2560,17 +2575,19 @@ sub command_req {
 		print "         sslmate req '*.example.com'\n";
 		print "\n";
 		print "Valid options:\n";
-		print " -f, --force        overwrite existing files\n";
-		print " --key-file=FILE    write private key to FILE (- for stdout)\n";
-		print " --csr-file=FILE    write CSR to FILE (- for stdout)\n";
-		print " --key-type=TYPE    type of key to generate ('rsa' or 'ecdsa')\n";
-		print " --dn NAME=VALUE    set the given DN attribute in the request\n";
+		print " -f, --force          overwrite existing files\n";
+		print " --key-file=FILE      write private key to FILE (- for stdout)\n";
+		print " --csr-file=FILE      write CSR to FILE (- for stdout)\n";
+		print " --key-type=TYPE      type of key to generate ('rsa' or 'ecdsa')\n";
+		print " --rsa-key-size=SIZE  size of key to generate for rsa keys (must be greater than $MINIMUM_RSA_KEY_SIZE)\n";
+		print " --dn NAME=VALUE      set the given DN attribute in the request\n";
 		return 0;
 	}
 
 	my $force = 0;
 	my $dn = {};
 	my $key_type;
+	my $rsa_key_size;
 	my $key_filename;
 	my $csr_filename;
 
@@ -2580,7 +2597,8 @@ sub command_req {
 			    'dn=s', $dn,
 			    'key-file=s', \$key_filename,
 			    'csr-file=s', \$csr_filename,
-			    'key-type=s', \$key_type) or return 2;
+			    'key-type=s', \$key_type,
+			    'rsa-key-size=i', \$rsa_key_size) or return 2;
 
 	if (@ARGV != 1) {
 		print STDERR "Error: you must specify the hostname for the certificate.\n";
@@ -2624,7 +2642,7 @@ sub command_req {
 
 	# 1. Generate a key
 	print STDERR "Generating private key... "; STDERR->flush;
-	genkey($key_file, $key_type) or return 1;
+	genkey($key_file, $key_type, $rsa_key_size) or return 1;
 	close($key_file);
 	print STDERR "$key_filename\n";
 
