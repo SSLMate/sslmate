@@ -1,3 +1,6 @@
+v1.7.0 (2018-06-20)
+ * Add support for wildcards in multi-hostname certificates.
+
 v1.6.0 (2017-08-03)
  * Add support for HTTP approval (see https://sslmate.com/help/approval/http).
  * Fix compatibility bug with OpenSSL 1.1 affecting elliptic curve certificates.
