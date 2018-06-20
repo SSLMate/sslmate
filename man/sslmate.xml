@@ -170,8 +170,7 @@
 						placed in subjectAltNames.  The certificate is referred to by its primary name
 						when downloading, renewing, reissuing, etc.  The primary name cannot be changed without
 						purchasing a new certificate, but alternative names can be added and removed after the certificate
-						is issued by running <command>sslmate edit</command>.  Multi-hostname certificates
-						cannot contain wildcard hostnames.
+						is issued by running <command>sslmate edit</command>.
 					</para>
 
 					<para>

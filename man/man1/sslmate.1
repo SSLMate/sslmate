@@ -92,7 +92,7 @@ If only one hostname is specified, a standard single\-hostname certificate is is
 If the hostname starts with "*\&.", then a wildcard certificate is issued which is valid for the wildcard domain itself and all hostnames directly below the wildcard domain\&. The certificate is not valid for hostnames two or more levels below the wildcard domain\&. For example, "*\&.example\&.com" matches "example\&.com", "www\&.example\&.com", and "subdomain\&.example\&.com", but not "www\&.subdomain\&.example\&.com")\&.
 .sp
 If more than one hostname is specified, a multi\-hostname certificate is issued\&. The first hostname is the primary name of the certificate and is placed in the certificate\*(Aqs common name field, as well as a subjectAltName field\&. The remaining hostnames are placed in subjectAltNames\&. The certificate is referred to by its primary name when downloading, renewing, reissuing, etc\&. The primary name cannot be changed without purchasing a new certificate, but alternative names can be added and removed after the certificate is issued by running
-\fBsslmate edit\fR\&. Multi\-hostname certificates cannot contain wildcard hostnames\&.
+\fBsslmate edit\fR\&.
 .sp
 The following options are understood:
 .PP
