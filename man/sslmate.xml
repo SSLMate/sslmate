@@ -1,7 +1,7 @@
 <!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.2//EN" "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
 <refentry>
 	<!--
-		Copyright (c) 2014-2017 Opsmate, Inc.
+		Copyright (c) 2014-2018 Opsmate, Inc.
 
 		Permission is hereby granted, free of charge, to any person obtaining a
 		copy of this software and associated documentation files (the "Software"),
@@ -28,8 +28,8 @@
 	-->
 	<refentryinfo>
 		<title>SSLMate</title>
-		<date>2017-07-14</date>
-		<productname>SSLMate 1.6.0</productname>
+		<date>2018-06-20</date>
+		<productname>SSLMate 1.7.0</productname>
 
 		<author>
 			<othername>SSLMate</othername>
@@ -170,8 +170,7 @@
 						placed in subjectAltNames.  The certificate is referred to by its primary name
 						when downloading, renewing, reissuing, etc.  The primary name cannot be changed without
 						purchasing a new certificate, but alternative names can be added and removed after the certificate
-						is issued by running <command>sslmate edit</command>.  Multi-hostname certificates
-						cannot contain wildcard hostnames.
+						is issued by running <command>sslmate edit</command>.
 					</para>
 
 					<para>
