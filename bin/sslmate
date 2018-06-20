@@ -210,6 +210,32 @@ sub is_wildcard_name {
 	return $name =~ /^\*\./;
 }
 
+sub count_nonwildcard_sans {
+	my @sans = @_;
+	my $cnt = 0;
+	for my $san (@sans) {
+		if (ref($san) eq 'HASH') {
+			$cnt++ if not is_wildcard_name($san->{value});
+		} else {
+			$cnt++ if not is_wildcard_name($san);
+		}
+	}
+	return $cnt;
+}
+
+sub count_wildcard_sans {
+	my @sans = @_;
+	my $cnt = 0;
+	for my $san (@sans) {
+		if (ref($san) eq 'HASH') {
+			$cnt++ if is_wildcard_name($san->{value});
+		} else {
+			$cnt++ if is_wildcard_name($san);
+		}
+	}
+	return $cnt;
+}
+
 sub restore_file_permissions {
 	my ($destfile, $srcfile) = @_;
 
@@ -1943,7 +1969,8 @@ sub command_buy {
 		$product_info = get_product_info($cert_type // $cert->{type}, $cn,
 						 days => $days,
 						 coupon_code => $opts{coupon_code},
-						 sans => $multi ? int(@sans) : undef) or return 1;
+						 sans => $multi ? count_nonwildcard_sans(@sans) : undef,
+						 wildcard_sans => $multi ? count_wildcard_sans(@sans) : undef) or return 1;
 
 		return 1 unless order_can_be_paid($product_info);
 
@@ -2473,7 +2500,8 @@ sub command_renew {
 		my $product_info = get_product_info($cert->{type}, $cn,
 						 days => $days,
 						 coupon_code => $opts{coupon_code},
-						 sans => defined($cert->{sans}) ? int(@{$cert->{sans}}) : undef) or return 1;
+						 sans => defined($cert->{sans}) ? count_nonwildcard_sans(@{$cert->{sans}}) : undef,
+						 wildcard_sans => defined($cert->{sans}) ? count_wildcard_sans(@{$cert->{sans}}) : undef) or return 1;
 
 		exit 1 unless order_can_be_paid($product_info);
 
