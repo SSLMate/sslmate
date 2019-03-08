@@ -1,3 +1,9 @@
+sslmate (1.7.1-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- SSLMate Software Release Role <software@sslmate.com>  Fri, 08 Mar 2019 11:07:09 -0800
+
 sslmate (1.7.0-1) unstable; urgency=medium
 
   * New upstream release.
