@@ -2731,8 +2731,9 @@ sub command_download {
 		validate_cn($cn) or return 1;
 		my ($status, $cert) = authed_api_call('GET', '/certs/' . qs_escape($cn), { expand => ['current.crt', 'current.chain', 'current.root', 'pending.crt', 'pending.chain', 'pending.root'], _command => 'download' }) or return 1;
 		if ($status != 200) {
-			print STDERR "Error: " . $cert->{message} . "\n";
-			return 1;
+			print STDERR "Error: $cn: " . $cert->{message} . "\n";
+			++$errors;
+			next;
 		} elsif (not $cert->{exists}) {
 			print STDERR "Error: $cn: There is no certificate in your account with this name.\n";
 			++$errors;
