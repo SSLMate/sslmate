@@ -1,3 +1,8 @@
+v1.7.1 (2019-03-08)
+ * Bugfix release.
+ * sslmate download: don't prevent further downloads if there is an error
+   with just one certificate.
+
 v1.7.0 (2018-06-20)
  * Add support for wildcards in multi-hostname certificates.
 
