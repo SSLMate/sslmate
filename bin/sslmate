@@ -2220,14 +2220,6 @@ sub command_reissue_rekey {
 		print STDERR "Error: $cn: there is no certificate in your account with this common name.\n";
 		return 1;
 	}
-	if (not defined $cert->{current}) {
-		print STDERR "Error: this certificate is not active.  Only active (non-expired, non-pending) certs may be reissued.  Please purchase a new certificate with 'sslmate buy'.\n";
-		return 1;
-	}
-	if ($cert->{current}->{source} eq 'import') {
-		print STDERR "Error: this certificate was not purchased from SSLMate.  To reissue this cert, please see the vendor where you purchased it.\n";
-		return 1;
-	}
 
 	# 2. Open the files
 	my $paths = get_cert_paths($cn);
