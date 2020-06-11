@@ -57,8 +57,6 @@ sslmate \- buy and manage SSL certificates
 \fBsslmate test \fR\fB\fIHOSTNAME\fR\fR
 .HP \w'\fBsslmate\ mkconfig\ \fR\fB\fITEMPLATE\fR\fR\fB\ \fR\fB\fIHOSTNAME\fR\fR\ 'u
 \fBsslmate mkconfig \fR\fB\fITEMPLATE\fR\fR\fB \fR\fB\fIHOSTNAME\fR\fR
-.HP \w'\fBsslmate\ import\ \fR\fB\fIKEYFILE\fR\fR\fB\ \fR\fB\fICERTFILE\fR\fR\ 'u
-\fBsslmate import \fR\fB\fIKEYFILE\fR\fR\fB \fR\fB\fICERTFILE\fR\fR
 .HP \w'\fBsslmate\ retry\-approval\ \fR\fB\fIHOSTNAME\fR\fR\ 'u
 \fBsslmate retry\-approval \fR\fB\fIHOSTNAME\fR\fR
 .HP \w'\fBsslmate\ link\fR\ 'u
@@ -701,58 +699,6 @@ Changes to the certificate type take effect only when renewing\&. To "upgrade" a
 \fBsslmate edit\fR
 and then force an early renewal with
 \fBsslmate renew \-\-force\fR\&.
-.RE
-.RE
-.PP
-\fBimport \fR\fB[\fIOPTIONS\fR]\fR\fB \fR\fB\fIKEYFILE\fR\fR\fB \fR\fB\fICERTFILE\fR\fR
-.RS 4
-Import the given certificate to your SSLMate account\&. An imported certificate works just like a certificate purchased from SSLMate with
-\fBsslmate buy\fR, meaning SSLMate will monitor its expiration and you can set up automated renewals for it\&.
-.sp
-You must specify the paths to the key file (\fIKEYFILE\fR) and to the certificate file (\fICERTFILE\fR)\&. Note that the private key is
-\fInot\fR
-uploaded to SSLMate;
-\fBsslmate\fR
-only uses it to generate a certificate signing request\&.
-.sp
-The following options are understood:
-.PP
-\fB\-\-auto\-renew\fR, \fB\-\-no\-auto\-renew\fR
-.RS 4
-Enable or disable automatic renewal for this certificate\&. If neither option is specified, your account\*(Aqs default auto\-renewal setting is used\&.
-.RE
-.PP
-\fB\-\-no\-install\fR
-.RS 4
-Don\*(Aqt install the key and certificate files to the local key and certificate directories\&. (By default, keys and certificates are copied there, as if the certificate had just been purchased with the
-\fBsslmate buy\fR
-command\&.)
-.RE
-.PP
-\fB\-\-approval=email|dns|http\fR
-.RS 4
-When renewing, use the given method to prove ownership of your domain\&.
-.sp
-For more information about approval methods, see the documentation for
-\fBsslmate buy\fR\&.
-.sp
-If this is a multi\-hostname certificate, the approval method specified by this option applies to every hostname\&. To specify a different approval method for a particular hostname, pass an option of the form
-\fB\-\-approval=\fR\fB\fIHOSTNAME\fR\fR\fB=\fR\fB\fIMETHOD\fR\fR\&.
-.RE
-.PP
-\fB\-\-email=\fR\fB\fIADDRESS\fR\fR
-.RS 4
-When renewing, send the domain ownership email to the given email address instead of prompting for one\&. This address must be one of the addresses that is listed when you run
-\fBsslmate import\fR
-interactively\&. This option is only applicable when email approval is used\&.
-.sp
-If this is a multi\-hostname certificate, the email address specified by this option applies to every hostname\&. To specify a different email address for a particular hostname, pass an option of the form
-\fB\-\-approval=\fR\fB\fIHOSTNAME\fR\fR\fB=\fR\fB\fIMETHOD\fR\fR\&.
-.RE
-.PP
-\fB\-f\fR, \fB\-\-force\fR
-.RS 4
-Import the certificate even if there are existing key and certificate files, or if an active certificate with this name already exists in your SSLMate account\&. Existing key and certificate files will be overwritten\&.
 .RE
 .RE
 .PP
