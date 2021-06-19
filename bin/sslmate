@@ -1516,18 +1516,6 @@ sub prompt_for_approval {
 	}
 }
 
-sub product_info_to_approval_methods {
-	my ($product_info) = @_;
-	my $approval_methods = {};
-	for my $method (@{$product_info->{approval_methods}}) {
-		$approval_methods->{$method}->{available} = 1;
-		if ($method eq 'email') {
-			$approval_methods->{email}->{addresses} = $product_info->{approver_emails};
-		}
-	}
-	return $approval_methods;
-}
-
 sub order_can_be_paid {
 	my ($product_info) = @_;
 
