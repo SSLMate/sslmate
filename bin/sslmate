@@ -1765,7 +1765,6 @@ sub command_buy {
 		print "Common options:\n";
 		print " --auto-renew         automatically renew this certificate before it expires\n";
 		print " --no-auto-renew      don't automatically renew this certificate\n";
-		print " --ev                 purchase an extended validation (EV) certificate\n";
 		print " --coupon=CODE        use the given coupon code for a discount\n";
 		print " --invoice-note=NOTE  include the given note with the invoice\n";
 		print " --email-invoice-to=ADDRESS\n";
@@ -3192,7 +3191,6 @@ sub command_edit {
 		print $out " --no-auto-renew      disable auto-renew for this cert\n";
 		print $out " --add-name=HOSTNAME  add the given hostname (takes effect upon reissue)\n";
 		print $out " --rm-name=HOSTNAME   remove the given hostname (takes effect upon reissue)\n";
-		print $out " --type=dv|ev         change the type of cert (takes effect upon renewal)\n";
 		print $out " --multi              convert to multi-hostname cert (takes effect upon renewal)\n";
 		print $out " --no-multi           convert to single-hostname cert (takes effect upon renewal)\n";
 	};

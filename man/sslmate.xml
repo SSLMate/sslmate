@@ -287,37 +287,6 @@
 							</listitem>
 						</varlistentry>
 						<varlistentry>
-							<term><option>--ev</option></term>
-
-							<listitem>
-								<para>
-									Purchase an extended validation (EV) certificate, instead of a domain validation (DV)
-									certificate.
-								</para>
-								<para>
-									EV certificates provide equivalent security to DV certificates, but are subject to
-									a more rigorous approval process.  An EV certificate verifies not only that the bearer
-									of the certificate controls the domain in question, but also that the domain is owned by
-									a legally established business or organization with a verifiable identity.  When viewing
-									a website with an EV certificate, web browsers display a green address bar along with
-									the verified name of the organization.
-								</para>
-								<para>
-									To purchase EV certificates, you must first provide additional information about your
-									organization on your <ulink url="https://sslmate.com/account">online SSLMate account
-									page</ulink>.  Unlike a DV certificate, an EV certificate takes several days to issue
-									while your identity is verified.  When purchasing an EV certificate, <command>sslmate
-									buy</command> returns immediately with a temporary self-signed certificate (as if the
-									<option>--temp</option> had been specified).  When your real certificate is issued, you
-									will receive an email and be able to download it with the <command>sslmate download</command>
-									command.
-								</para>
-								<para>
-									If you're not sure what kind of certificate you need, buy a DV certificate (the default).
-								</para>
-							</listitem>
-						</varlistentry>
-						<varlistentry>
 							<term><option>--coupon=<replaceable>CODE</replaceable></option></term>
 
 							<listitem>
@@ -1054,21 +1023,6 @@
 									Changes to the certificate scope take effect only when renewing.  To "upgrade" an existing
 									single-hostname certificate to a multi-hostname certificate, first edit its scope
 									and add alternative names with <command>sslmate edit</command> and then
-									force an early renewal with <command>sslmate renew --force</command>.
-								</para>
-							</listitem>
-						</varlistentry>
-						<varlistentry>
-							<term><option>--type=dv|ev</option></term>
-
-							<listitem>
-								<para>
-									Change the type of this certificate (domain validation or extended validation).
-									See the <command>sslmate buy</command> documentation for a discussion of certificate types.
-								</para>
-								<para>
-									Changes to the certificate type take effect only when renewing.  To "upgrade" an existing
-									DV certificate to EV, first change its type with <command>sslmate edit</command> and then
 									force an early renewal with <command>sslmate renew --force</command>.
 								</para>
 							</listitem>
