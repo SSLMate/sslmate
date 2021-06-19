@@ -1517,17 +1517,21 @@ sub prompt_for_approval {
 }
 
 sub order_can_be_paid {
-	my ($product_info) = @_;
+	my ($pricing_result) = @_;
 
-	if ($product_info->{price}->{currency} ne "USD") {
-		print STDERR "Error: this version of the sslmate command does not support non-USD currencies. Please download a new version as per the instructions at https://sslmate.com.\n";
+	if ($pricing_result->{duration_unit} ne 'year') {
+		print STDERR "Error: this version of the sslmate command does not support non-yearly products. Please upgrade the sslmate command.\n";
 		return 0;
 	}
-	if ($product_info->{payment} && $product_info->{payment}->{method} eq 'none') {
+	if ($pricing_result->{currency} ne "USD") {
+		print STDERR "Error: this version of the sslmate command does not support non-USD currencies. Please upgrade the sslmate command.\n";
+		return 0;
+	}
+	if ($pricing_result->{payment} && $pricing_result->{payment}->{method} eq 'none') {
 		print STDERR "Error: your account has no payment method on file. Please visit https://sslmate.com/account to update your account.\n";
 		return 0;
 	}
-	if ($product_info->{payment} && $product_info->{payment}->{method} eq 'credit_card' && $product_info->{payment}->{credit_card}->{expired}) {
+	if ($pricing_result->{payment} && $pricing_result->{payment}->{method} eq 'credit_card' && $pricing_result->{payment}->{credit_card}->{expired}) {
 		print STDERR "Error: your credit card is expired. Please visit https://sslmate.com/account to update your credit card.\n";
 		return 0;
 	}
@@ -1535,42 +1539,29 @@ sub order_can_be_paid {
 }
 
 sub prompt_for_order_confirmation {
-	my ($product_info, %other_info) = @_;
+	my ($pricing_result, %other_info) = @_;
 
-	my $cn = $product_info->{cn};
+	my @hostnames = @{$pricing_result->{dns_names}};
 
 	print "\n";
 	print "============ Order summary ============\n";
-	my @sans;
-	if (defined $other_info{sans}) {
-		for my $san (@{$other_info{sans}}) {
-			push @sans, $san->{value} if $san->{type} eq 'dns';
-		}
-	} else {
-		push @sans, grep { $_ ne $cn } @{$product_info->{default_sans}};
-	}
-	if (@sans) {
+	if (int(@hostnames) > 1) {
 		print "      Hostnames: ";
 	} else {
 		print "       Hostname: ";
 	}
-	print $cn . "\n";
-	for my $san (@sans) {
-		print "                 " . $san . "\n";
+	print $hostnames[0] . "\n";
+	for my $hostname (@hostnames[1..int(@hostnames)-1]) {
+		print "                 " . $hostname . "\n";
 	}
-	if (defined $product_info->{years}) {
-		print "        Product: " . $product_info->{description} . "\n";
-		print "          Price: " . format_money($product_info->{price}->{base_price}) . " / year\n";
-		print "          Years: " . $product_info->{years} . "\n";
-	} else {
-		print "        Product: " . $product_info->{description} . "\n";
-		print "          Price: " . format_money($product_info->{price}->{base_price}) . "\n";
-	}
+	print "        Product: " . $pricing_result->{duration} . " Year " . $pricing_result->{description} . "\n";
 	if (defined $other_info{auto_renew}) {
 		print "     Auto-Renew: " . ($other_info{auto_renew} ? "Yes" : "No") . "\n";
 	}
 	if (defined $other_info{approval_methods}) {
+		my $cn = $other_info{cn};
 		if (defined $other_info{sans}) {
+			my @sans = @{$other_info{sans}};
 			my $first = 1;
 			for my $hostname ($cn, @sans) {
 				if ($first) {
@@ -1597,22 +1588,19 @@ sub prompt_for_order_confirmation {
 	}
 	print "\n";
 	print "=========== Payment details ===========\n";
-	if ($product_info->{price}->{amount_due}) {
+	if ($pricing_result->{payment}) {
 		print "Payment Method: ";
-		if ($product_info->{payment}->{method} eq 'credit_card') {
-			my $card = $product_info->{payment}->{credit_card};
+		if ($pricing_result->{payment}->{method} eq 'credit_card') {
+			my $card = $pricing_result->{payment}->{credit_card};
 			print $card->{type} . " ending in " . $card->{last4};
-		} elsif ($product_info->{payment}->{method} eq 'balance') {
+		} elsif ($pricing_result->{payment}->{method} eq 'balance') {
 			print "Account Balance";
 		} else {
 			print "Other";
 		}
 		print "\n";
 	}
-	if ($product_info->{price}->{discount}) {
-		print "      Discount: " . format_money($product_info->{price}->{discount}) . " (USD)\n";
-	}
-	print "    Amount Due: " . format_money($product_info->{price}->{amount_due}) . " (USD)\n";
+	print "    Amount Due: " . format_money($pricing_result->{price}) . " (USD)\n";
 	print "\n";
 
 	while (1) {
@@ -1625,14 +1613,14 @@ sub prompt_for_order_confirmation {
 	}
 }
 
-sub get_product_info {
-	my ($type, $cn, %other_info) = @_;
+sub get_pricing {
+	my (%request) = @_;
 
-	my ($status, $response) = authed_api_call('GET', '/products/' . qs_escape($type), { cn => $cn, %other_info });
+	my ($status, $response) = authed_api_call('GET', '/pricing', \%request);
 	return undef unless defined $response;
 
 	if ($status != 200) {
-		print STDERR "Error: $cn: " . $response->{message} . "\n";
+		print STDERR "Error: " . $request{cn} . ": " . $response->{message} . "\n";
 		return undef;
 	}
 	return $response;
@@ -1948,16 +1936,13 @@ sub command_buy {
 	# This is done mainly to prompt the user for confirmation and provide early
 	# error detection, so elide it when in batch mode to reduce roundtrips to server.
 	#
-	my $product_info;
+	my $pricing_result;
 
 	unless ($batch) {
-		$product_info = get_product_info($cert_type // $cert->{type}, $cn,
-						 days => $days,
-						 coupon_code => $opts{coupon_code},
-						 sans => $multi ? count_nonwildcard_sans(@sans) : undef,
-						 wildcard_sans => $multi ? count_wildcard_sans(@sans) : undef) or return 1;
-
-		return 1 unless order_can_be_paid($product_info);
+		$pricing_result = get_pricing(cn => $cn,
+					      custom_sans => $multi ? 'true' : 'false', 
+					      san => $multi ? \@sans : undef) or return 1;
+		return 1 unless order_can_be_paid($pricing_result);
 	}
 
 	#
@@ -1998,8 +1983,9 @@ sub command_buy {
 	# Ask user for confirmation, if not in batch mode
 	#
 	unless ($batch) {
-		prompt_for_order_confirmation($product_info,
-					      sans => $multi ? \@san_objs : undef,
+		prompt_for_order_confirmation($pricing_result,
+					      cn => $cn,
+					      sans => $multi ? \@sans : undef,
 					      approver_emails => \%approver_emails,
 					      approval_methods => \%approval_methods,
 					      auto_renew => $auto_renew // $cert->{auto_renew}) or return 1;
@@ -2452,27 +2438,30 @@ sub command_renew {
 	unless ($batch) {
 		# Get product/pricing info from the server, ask user for confirmation
 
-		my $product_info = get_product_info($cert->{type}, $cn,
-						 days => $days,
-						 coupon_code => $opts{coupon_code},
-						 sans => defined($cert->{sans}) ? count_nonwildcard_sans(@{$cert->{sans}}) : undef,
-						 wildcard_sans => defined($cert->{sans}) ? count_wildcard_sans(@{$cert->{sans}}) : undef) or return 1;
-
-		exit 1 unless order_can_be_paid($product_info);
-
+		my $multi = 0;
+		my @sans;
 		my $approver_emails = { $cn => $cert->{approver_email} };
 		my $approval_methods = { $cn => $cert->{approval_method} };
 		if (defined $cert->{sans}) {
+			$multi = 1;
 			for my $san (@{$cert->{sans}}) {
 				if ($san->{type} eq 'dns') {
+					push @sans, $san->{value};
 					$approver_emails->{$san->{value}} = $san->{approver_email};
 					$approval_methods->{$san->{value}} = $san->{approval_method};
 				}
 			}
 		}
 
-		prompt_for_order_confirmation($product_info,
-					      sans => $cert->{sans},
+		my $pricing_result = get_pricing(cn => $cn,
+						 custom_sans => $multi ? 'true' : 'false',
+						 san => $multi ? \@sans : undef) or return 1;
+
+		exit 1 unless order_can_be_paid($pricing_result);
+
+		prompt_for_order_confirmation($pricing_result,
+					      cn => $cn,
+					      sans => $multi ? \@sans : undef,
 					      approver_emails => $approver_emails,
 					      approval_methods => $approval_methods,
 					      auto_renew => $cert->{auto_renew}) or exit 1;
