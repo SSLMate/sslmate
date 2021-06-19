@@ -1949,8 +1949,6 @@ sub command_buy {
 	# error detection, so elide it when in batch mode to reduce roundtrips to server.
 	#
 	my $product_info;
-	my $authorized_charge;
-	my $authorized_charge_currency;
 
 	unless ($batch) {
 		$product_info = get_product_info($cert_type // $cert->{type}, $cn,
@@ -1960,9 +1958,6 @@ sub command_buy {
 						 wildcard_sans => $multi ? count_wildcard_sans(@sans) : undef) or return 1;
 
 		return 1 unless order_can_be_paid($product_info);
-
-		$authorized_charge = $product_info->{price}->{amount_due};
-		$authorized_charge_currency = $product_info->{price}->{currency};
 	}
 
 	#
@@ -2057,10 +2052,7 @@ sub command_buy {
 	# Buy the certificate from SSLMate
 	#
 	print "Placing order...\n";
-	$request = { days			=> $days,
-		     authorized_charge		=> $authorized_charge,
-		     authorized_charge_currency	=> $authorized_charge_currency,
-		     %opts };
+	$request = { days => $days, %opts };
 
 	my $cert_instance;
 	($status, $cert_instance) = authed_api_call('POST', '/certs/' . qs_escape($cn) . '/buy', undef, $request) or $exit_with_error->();
@@ -2457,9 +2449,6 @@ sub command_renew {
 		}
 	}
 
-	my $authorized_charge;
-	my $authorized_charge_currency;
-
 	unless ($batch) {
 		# Get product/pricing info from the server, ask user for confirmation
 
@@ -2487,9 +2476,6 @@ sub command_renew {
 					      approver_emails => $approver_emails,
 					      approval_methods => $approval_methods,
 					      auto_renew => $cert->{auto_renew}) or exit 1;
-
-		$authorized_charge_currency = $product_info->{price}->{currency};
-		$authorized_charge = $product_info->{price}->{amount_due};
 	}
 
 	my $new_cert;
@@ -2520,10 +2506,7 @@ sub command_renew {
 
 	# Renew the certificate
 	print "Placing order...\n";
-	my $request = { days				=> $days,
-			authorized_charge		=> $authorized_charge,
-			authorized_charge_currency	=> $authorized_charge_currency,
-			%opts };
+	my $request = { days => $days, %opts };
 
 	my $cert_instance;
 	($status, $cert_instance) = authed_api_call('POST', '/certs/' . qs_escape($cn) . '/buy', undef, $request) or $exit_with_error->();
