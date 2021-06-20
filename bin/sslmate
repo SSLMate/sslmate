@@ -222,19 +222,6 @@ sub count_nonwildcard_sans {
 	return $cnt;
 }
 
-sub count_wildcard_sans {
-	my @sans = @_;
-	my $cnt = 0;
-	for my $san (@sans) {
-		if (ref($san) eq 'HASH') {
-			$cnt++ if is_wildcard_name($san->{value});
-		} else {
-			$cnt++ if is_wildcard_name($san);
-		}
-	}
-	return $cnt;
-}
-
 sub restore_file_permissions {
 	my ($destfile, $srcfile) = @_;
 
