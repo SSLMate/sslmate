@@ -1784,7 +1784,7 @@ sub command_buy {
 		print "Advanced options:\n";
 		print " -f, --force          replace existing files, certificates\n";
 		print " --key-type=TYPE      type of key to generate ('rsa' or 'ecdsa')\n";
-		print " --multi              buy multi-hostname cert even if only one hostname specified\n";
+		print " --no-auto-san        don't automatically add an alt name for www/base domain\n";
 		return 0;
 	}
 
@@ -1819,6 +1819,7 @@ sub command_buy {
 			    'timeout=i', \$timeout,
 			    'no-wait', \$no_wait,
 			    'temp', \$accept_dummy,
+			    'no-auto-san', \$multi,
 			    'multi', \$multi,
 			    'key-type=s', \$key_type,
 			    'csr=s', \$csr_path,
@@ -3191,8 +3192,7 @@ sub command_edit {
 		print $out " --no-auto-renew      disable auto-renew for this cert\n";
 		print $out " --add-name=HOSTNAME  add the given hostname (takes effect upon reissue)\n";
 		print $out " --rm-name=HOSTNAME   remove the given hostname (takes effect upon reissue)\n";
-		print $out " --multi              convert to multi-hostname cert (takes effect upon renewal)\n";
-		print $out " --no-multi           convert to single-hostname cert (takes effect upon renewal)\n";
+		print $out " --no-auto-san        remove the automatic hostname (takes effect upon reissue)\n";
 	};
 
 	local @ARGV = @_;
@@ -3220,6 +3220,7 @@ sub command_edit {
 			    'add-name=s', \@add_sans,
 			    'rm-name=s', \@rm_sans,
 			    'type=s', \$type,
+			    'no-auto-san', \$multi,
 			    'multi!', \$multi) or return 2;
 	if (@ARGV == 0) {
 		print STDERR "Error: you must specify the name of the certificate to edit.\n";

@@ -147,11 +147,13 @@
 						Generate a private key and purchase a certificate for the given hostname(s).
 					</para>
 					<para>
-						If only one hostname is specified, a standard single-hostname certificate is issued.
+						If only one hostname is specified, a single-hostname certificate is issued.
 						The hostname is placed in the certificate's common name (CN) field as well as a
-						subjectAltName field.  Unless the hostname already starts with "www.", a subjectAltName is added,
-						free of charge, for the hostname prefixed with "www." (e.g. if the hostname is
-						"example.com", a subjectAltName is added for "www.example.com").
+						subjectAltName field.  If the hostname starts with "www.", a second subjectAltName is added,
+						free of charge, for the base domain (formed by removing the "www." prefix).  If the
+						hostname does not start with "www.", a second subjectAltName is added, free of charge, for
+						the www subdomain (formed by adding the "www." prefix).  To disable the automatic addition
+						of the second subjectAltName, specify the <option>--no-auto-san</option> option.
 					</para>
 					<para>
 						If the hostname starts with "*.", then a wildcard certificate is issued which is
@@ -350,13 +352,12 @@
 							</listitem>
 						</varlistentry>
 						<varlistentry>
-							<term><option>--multi</option></term>
+							<term><option>--no-auto-san</option></term>
 
 							<listitem>
 								<para>
-									Buy a multi-hostname certificate even if only one hostname was specified
-									on the command line.  This option is only necessary if you want to buy a multi-hostname
-									certificate with only one hostname.
+									Disable the addition of the automatic second subjectAltName if only one
+									one hostname was specified on the command line.
 								</para>
 							</listitem>
 						</varlistentry>
@@ -991,8 +992,7 @@
 							<listitem>
 								<para>
 									Add or remove the given hostname to or from this certificate.
-									This certificate must be a multi-hostname certificate, and only
-									alternative names (not the common name) can be removed.
+									Only alternative names (not the common name) can be removed.
 								</para>
 								<para>
 									The name is not added or removed immediately.  Instead,
@@ -1003,27 +1003,25 @@
 									<command>sslmate reissue</command>.  If there has been a net increase in hostnames
 									since the last issuance, your account will be charged for the new names.
 								</para>
-								<para>
-									Note that removing all alternative hostnames does not convert the
-									certificate to a single-hostname certificate.  For that, you must
-									use the <option>--no-multi</option> option.
-								</para>
 							</listitem>
 						</varlistentry>
 						<varlistentry>
-							<term><option>--multi</option></term>
-							<term><option>--no-multi</option></term>
+							<term><option>--no-auto-san</option></term>
 
 							<listitem>
 								<para>
-									Change the scope of this certificate (single-hostname or multi-hostname).
-									See the <command>sslmate buy</command> documentation for a discussion of the differences.
+									Remove the automatically-added second subjectAltName from a single-hostname certificate.
+									See the <command>sslmate buy</command> documentation for details about the automatic
+									second subjectAltName.
 								</para>
 								<para>
-									Changes to the certificate scope take effect only when renewing.  To "upgrade" an existing
-									single-hostname certificate to a multi-hostname certificate, first edit its scope
-									and add alternative names with <command>sslmate edit</command> and then
-									force an early renewal with <command>sslmate renew --force</command>.
+									The subjectAltName is not removed immediately.  Instead,
+									the changes take effect on the next call to <command>sslmate reissue</command>.
+								</para>
+								<para>
+									There is no specific option to add back the automatic second subjectAltName after it
+									has been removed, but you can pass the hostname to the <option>--add-name</option> option
+									to achieve the same effect.
 								</para>
 							</listitem>
 						</varlistentry>
