@@ -3192,7 +3192,6 @@ sub command_edit {
 		print $out " --no-auto-renew      disable auto-renew for this cert\n";
 		print $out " --add-name=HOSTNAME  add the given hostname (takes effect upon reissue)\n";
 		print $out " --rm-name=HOSTNAME   remove the given hostname (takes effect upon reissue)\n";
-		print $out " --no-auto-san        remove the automatic hostname (takes effect upon reissue)\n";
 	};
 
 	local @ARGV = @_;
@@ -3220,7 +3219,6 @@ sub command_edit {
 			    'add-name=s', \@add_sans,
 			    'rm-name=s', \@rm_sans,
 			    'type=s', \$type,
-			    'no-auto-san', \$multi,
 			    'multi!', \$multi) or return 2;
 	if (@ARGV == 0) {
 		print STDERR "Error: you must specify the name of the certificate to edit.\n";
@@ -3254,6 +3252,15 @@ sub command_edit {
 	if (not $cert->{exists}) {
 		print STDERR "Error: $cn: there is no certificate in your account with this common name.\n";
 		return 1;
+	}
+
+	if (not(defined($cert->{sans}))) {
+		# If this is a non-SAN cert, and user wants to remove the automatic SAN,
+		# convert it to a non-SAN cert so the user gets what they want.
+		my $auto_san = make_auto_san($cn);
+		if (grep { $_ eq $auto_san } map(lc, @rm_sans)) {
+			$multi = 1;
+		}
 	}
 
 	#

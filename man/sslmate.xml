@@ -1009,26 +1009,6 @@
 								</para>
 							</listitem>
 						</varlistentry>
-						<varlistentry>
-							<term><option>--no-auto-san</option></term>
-
-							<listitem>
-								<para>
-									Remove the automatically-added second subjectAltName from a single-hostname certificate.
-									See the <command>sslmate buy</command> documentation for details about the automatic
-									second subjectAltName.
-								</para>
-								<para>
-									The subjectAltName is not removed immediately.  Instead,
-									the changes take effect on the next call to <command>sslmate reissue</command>.
-								</para>
-								<para>
-									There is no specific option to add back the automatic second subjectAltName after it
-									has been removed, but you can pass the hostname to the <option>--add-name</option> option
-									to achieve the same effect.
-								</para>
-							</listitem>
-						</varlistentry>
 					</variablelist>
 				</listitem>
 			</varlistentry>
