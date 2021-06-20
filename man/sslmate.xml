@@ -837,8 +837,12 @@
 										<listitem><para>The certificate's common name.</para></listitem>
 									</varlistentry>
 									<varlistentry>
+										<term>all_alt_names</term>
+										<listitem><para>The certificate's subject alternative names (SANs), including any automatically-added SAN for a single-hostname certificate.</para></listitem>
+									</varlistentry>
+									<varlistentry>
 										<term>alt_names</term>
-										<listitem><para>The certificate's subject alternative names (for multi-hostname certs only).</para></listitem>
+										<listitem><para>The certificate's subject alternative names (SAN).  For backwards compatibility, this field is null if the certificate is a single-hostname certificate with the automatically-added SAN.  You generally want to use all_alt_names instead.</para></listitem>
 									</varlistentry>
 									<varlistentry>
 										<term>status</term>

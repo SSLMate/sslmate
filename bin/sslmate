@@ -222,6 +222,18 @@ sub count_nonwildcard_sans {
 	return $cnt;
 }
 
+sub make_auto_san {
+	my ($cn) = @_;
+
+	if ($cn =~ /^www\.(.*)$/) {
+		return $1;
+	} elsif ($cn =~ /^\*\.(.*)$/) {
+		return $1;
+	} else {
+		return "www.$cn";
+	}
+}
+
 sub restore_file_permissions {
 	my ($destfile, $srcfile) = @_;
 
@@ -2863,6 +2875,7 @@ sub make_cert_info {
 		approval_email_from => $latest ? $latest->{approval_email_from} : undef,
 		approval_method => $cert->{approval_method},
 		alt_names => $cert->{sans} ? [ map { $_->{value} } grep { $_->{type} eq 'dns' } @{$cert->{sans}} ] : undef,
+		all_alt_names => $cert->{sans} ? [ map { $_->{value} } grep { $_->{type} eq 'dns' } @{$cert->{sans}} ] : [ make_auto_san($cert->{cn}) ],
 	};
 }
 
@@ -3058,7 +3071,7 @@ sub command_list {
 sub command_show {
 	local @ARGV = @_;
 
-	my %field_titles = (%cert_column_titles, alt_names => 'Alt Names');
+	my %field_titles = (%cert_column_titles, alt_names => 'Alt Names', all_alt_names => 'Alt Names');
 
 	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
 		print "Usage: sslmate show [OPTIONS] HOSTNAME\n";
@@ -3098,7 +3111,7 @@ sub command_show {
 	}
 	my $cn = lc $ARGV[0];
 
-	my @fields = defined($fields) ? split(/,/, $fields) : qw/name alt_names type status expiration auto_renew approval_method approver_email fingerprint local_status/;
+	my @fields = defined($fields) ? split(/,/, $fields) : qw/name all_alt_names type status expiration auto_renew approval_method approver_email fingerprint local_status/;
 	for my $field (@fields) {
 		if (not exists $field_titles{$field}) {
 			print STDERR "Error: Invalid field: $field\n";
