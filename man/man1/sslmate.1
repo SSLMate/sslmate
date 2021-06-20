@@ -85,7 +85,9 @@ the name of the sub\-command\&.
 .RS 4
 Generate a private key and purchase a certificate for the given hostname(s)\&.
 .sp
-If only one hostname is specified, a standard single\-hostname certificate is issued\&. The hostname is placed in the certificate\*(Aqs common name (CN) field as well as a subjectAltName field\&. Unless the hostname already starts with "www\&.", a subjectAltName is added, free of charge, for the hostname prefixed with "www\&." (e\&.g\&. if the hostname is "example\&.com", a subjectAltName is added for "www\&.example\&.com")\&.
+If only one hostname is specified, a single\-hostname certificate is issued\&. The hostname is placed in the certificate\*(Aqs common name (CN) field as well as a subjectAltName field\&. If the hostname starts with "www\&.", a second subjectAltName is added, free of charge, for the base domain (formed by removing the "www\&." prefix)\&. If the hostname does not start with "www\&.", a second subjectAltName is added, free of charge, for the www subdomain (formed by adding the "www\&." prefix)\&. To disable the automatic addition of the second subjectAltName, specify the
+\fB\-\-no\-auto\-san\fR
+option\&.
 .sp
 If the hostname starts with "*\&.", then a wildcard certificate is issued which is valid for the wildcard domain itself and all hostnames directly below the wildcard domain\&. The certificate is not valid for hostnames two or more levels below the wildcard domain\&. For example, "*\&.example\&.com" matches "example\&.com", "www\&.example\&.com", and "subdomain\&.example\&.com", but not "www\&.subdomain\&.example\&.com")\&.
 .sp
@@ -194,9 +196,9 @@ The default key type can be changed by setting the
 configuration option (see the CONFIGURATION section for details)\&.
 .RE
 .PP
-\fB\-\-multi\fR
+\fB\-\-no\-auto\-san\fR
 .RS 4
-Buy a multi\-hostname certificate even if only one hostname was specified on the command line\&. This option is only necessary if you want to buy a multi\-hostname certificate with only one hostname\&.
+Disable the addition of the automatic second subjectAltName if only one one hostname was specified on the command line\&.
 .RE
 .RE
 .PP
@@ -554,9 +556,14 @@ name
 The certificate\*(Aqs common name\&.
 .RE
 .PP
+all_alt_names
+.RS 4
+The certificate\*(Aqs subject alternative names (SANs), including any automatically\-added SAN for a single\-hostname certificate\&.
+.RE
+.PP
 alt_names
 .RS 4
-The certificate\*(Aqs subject alternative names (for multi\-hostname certs only)\&.
+The certificate\*(Aqs subject alternative names (SAN)\&. For backwards compatibility, this field is null if the certificate is a single\-hostname certificate with the automatically\-added SAN\&. You generally want to use all_alt_names instead\&.
 .RE
 .PP
 status
@@ -647,29 +654,13 @@ Enable or disable auto\-renew for this certificate\&.
 .PP
 \fB\-\-add\-name=\fR\fB\fIHOSTNAME\fR\fR, \fB\-\-rm\-name=\fR\fB\fIHOSTNAME\fR\fR
 .RS 4
-Add or remove the given hostname to or from this certificate\&. This certificate must be a multi\-hostname certificate, and only alternative names (not the common name) can be removed\&.
+Add or remove the given hostname to or from this certificate\&. Only alternative names (not the common name) can be removed\&.
 .sp
 The name is not added or removed immediately\&. Instead, the changes take effect on the next call to
 \fBsslmate reissue\fR\&. Any names that were added since the last issuance will need to be approved\&. Existing names do not need to be re\-approved as long as you preserve the existing private key by passing the
 \fB\-\-same\-key\fR
 option to
 \fBsslmate reissue\fR\&. If there has been a net increase in hostnames since the last issuance, your account will be charged for the new names\&.
-.sp
-Note that removing all alternative hostnames does not convert the certificate to a single\-hostname certificate\&. For that, you must use the
-\fB\-\-no\-multi\fR
-option\&.
-.RE
-.PP
-\fB\-\-multi\fR, \fB\-\-no\-multi\fR
-.RS 4
-Change the scope of this certificate (single\-hostname or multi\-hostname)\&. See the
-\fBsslmate buy\fR
-documentation for a discussion of the differences\&.
-.sp
-Changes to the certificate scope take effect only when renewing\&. To "upgrade" an existing single\-hostname certificate to a multi\-hostname certificate, first edit its scope and add alternative names with
-\fBsslmate edit\fR
-and then force an early renewal with
-\fBsslmate renew \-\-force\fR\&.
 .RE
 .RE
 .PP
