@@ -3299,12 +3299,10 @@ sub command_edit {
 		}
 	} elsif (defined $cert->{sans}) {
 		# Was a SAN cert but user wants to make it a non-SAN cert
-		print STDERR "Notice: conversion to single-hostname certificate will take place upon renewal.\n";
 		$new_san_objs = undef;
 		$modified_sans = 1;
 	} elsif ($multi) {
 		# Wasn't a SAN cert but user wants to make it one
-		print STDERR "Notice: conversion to multi-hostname certificate will take place upon renewal.\n";
 		$new_san_objs = [];
 		$modified_sans = 1;
 	}
@@ -3314,11 +3312,6 @@ sub command_edit {
 			$multi = 1;
 			$new_san_objs = [];
 			$modified_sans = 1;
-			print STDERR "Notice: this certificate is not currently a multi-hostname certificate.\n";
-			print STDERR "Notice: automatically converting to a multi-hostname certificate...\n";
-			print STDERR "Notice: conversion will take place upon renewal.\n";
-			print STDERR "Warning: starting with SSLMate 2.0, you will need to explicitly specify --multi.\n";
-			sleep(2) unless $batch;
 		}
 
 		next if grep { $_->{type} eq 'dns' && $_->{value} eq $hostname } @$new_san_objs;
