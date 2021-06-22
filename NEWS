@@ -1,3 +1,17 @@
+v1.8.0 (2021-06-22)
+ * buy: add --no-auto-san option to disable addition of an alt name for the
+   base domain or www. sub-domain.
+ * edit: allow the automatic alt name (for the base domain or www. sub-domain)
+   to be removed with --rm-name just like any other alt name.
+ * show: always show the alt names, even if they have the default values.
+ * Deprecate --multi and --no-multi options.  There is no longer a distinction
+   between multi-hostname and single-hostname certificates.
+ * Remove import sub-command.
+ * Remove support for EV certificates.
+ * buy, renew: fix bug that would display the wrong price for multi-hostname
+   certificates that contained the same SANs as a standard, non-multi cert.
+ * reissue, rekey: eliminate spurious "this certificate is not active" errors.
+
 v1.7.1 (2019-03-08)
  * Bugfix release.
  * sslmate download: don't prevent further downloads if there is an error

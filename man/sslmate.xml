@@ -1,7 +1,7 @@
 <!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.2//EN" "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
 <refentry>
 	<!--
-		Copyright (c) 2014-2019 Opsmate, Inc.
+		Copyright (c) 2014-2021 Opsmate, Inc.
 
 		Permission is hereby granted, free of charge, to any person obtaining a
 		copy of this software and associated documentation files (the "Software"),
@@ -28,8 +28,8 @@
 	-->
 	<refentryinfo>
 		<title>SSLMate</title>
-		<date>2019-03-08</date>
-		<productname>SSLMate 1.7.1</productname>
+		<date>2021-06-22</date>
+		<productname>SSLMate 1.8.0</productname>
 
 		<author>
 			<othername>SSLMate</othername>
