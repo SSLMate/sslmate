@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
 
 #
-# Copyright (c) 2014-2019 Opsmate, Inc.
+# Copyright (c) 2014-2021 Opsmate, Inc.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -94,7 +94,6 @@ sub print_usage {
 	print $out " sslmate rekey HOSTNAME           Rekey the certificate for given hostname\n";
 	print $out " sslmate revoke [-a] HOSTNAME     Revoke the certificate for given hostname\n";
 	print $out " sslmate download HOSTNAME        Download the certificate for given hostname\n";
-	print $out " sslmate import KEYFILE CERTFILE  Import this certificate to your account\n";
 	print $out " sslmate list                     List certificates in your SSLMate account\n";
 	print $out " sslmate edit OPTIONS HOSTNAME    Edit certificate settings (e.g. auto-renew)\n";
 	print $out " sslmate test HOSTNAME            Check if the certificate is properly installed\n";
@@ -223,17 +222,16 @@ sub count_nonwildcard_sans {
 	return $cnt;
 }
 
-sub count_wildcard_sans {
-	my @sans = @_;
-	my $cnt = 0;
-	for my $san (@sans) {
-		if (ref($san) eq 'HASH') {
-			$cnt++ if is_wildcard_name($san->{value});
-		} else {
-			$cnt++ if is_wildcard_name($san);
-		}
+sub make_auto_san {
+	my ($cn) = @_;
+
+	if ($cn =~ /^www\.(.*)$/) {
+		return $1;
+	} elsif ($cn =~ /^\*\.(.*)$/) {
+		return $1;
+	} else {
+		return "www.$cn";
 	}
-	return $cnt;
 }
 
 sub restore_file_permissions {
@@ -1517,30 +1515,22 @@ sub prompt_for_approval {
 	}
 }
 
-sub product_info_to_approval_methods {
-	my ($product_info) = @_;
-	my $approval_methods = {};
-	for my $method (@{$product_info->{approval_methods}}) {
-		$approval_methods->{$method}->{available} = 1;
-		if ($method eq 'email') {
-			$approval_methods->{email}->{addresses} = $product_info->{approver_emails};
-		}
-	}
-	return $approval_methods;
-}
-
 sub order_can_be_paid {
-	my ($product_info) = @_;
+	my ($pricing_result) = @_;
 
-	if ($product_info->{price}->{currency} ne "USD") {
-		print STDERR "Error: this version of the sslmate command does not support non-USD currencies. Please download a new version as per the instructions at https://sslmate.com.\n";
+	if ($pricing_result->{duration_unit} ne 'year') {
+		print STDERR "Error: this version of the sslmate command does not support non-yearly products. Please upgrade the sslmate command.\n";
 		return 0;
 	}
-	if ($product_info->{payment} && $product_info->{payment}->{method} eq 'none') {
+	if ($pricing_result->{currency} ne "USD") {
+		print STDERR "Error: this version of the sslmate command does not support non-USD currencies. Please upgrade the sslmate command.\n";
+		return 0;
+	}
+	if ($pricing_result->{payment} && $pricing_result->{payment}->{method} eq 'none') {
 		print STDERR "Error: your account has no payment method on file. Please visit https://sslmate.com/account to update your account.\n";
 		return 0;
 	}
-	if ($product_info->{payment} && $product_info->{payment}->{method} eq 'credit_card' && $product_info->{payment}->{credit_card}->{expired}) {
+	if ($pricing_result->{payment} && $pricing_result->{payment}->{method} eq 'credit_card' && $pricing_result->{payment}->{credit_card}->{expired}) {
 		print STDERR "Error: your credit card is expired. Please visit https://sslmate.com/account to update your credit card.\n";
 		return 0;
 	}
@@ -1548,42 +1538,29 @@ sub order_can_be_paid {
 }
 
 sub prompt_for_order_confirmation {
-	my ($product_info, %other_info) = @_;
+	my ($pricing_result, %other_info) = @_;
 
-	my $cn = $product_info->{cn};
+	my @hostnames = @{$pricing_result->{dns_names}};
 
 	print "\n";
 	print "============ Order summary ============\n";
-	my @sans;
-	if (defined $other_info{sans}) {
-		for my $san (@{$other_info{sans}}) {
-			push @sans, $san->{value} if $san->{type} eq 'dns';
-		}
-	} else {
-		push @sans, grep { $_ ne $cn } @{$product_info->{default_sans}};
-	}
-	if (@sans) {
+	if (int(@hostnames) > 1) {
 		print "      Hostnames: ";
 	} else {
 		print "       Hostname: ";
 	}
-	print $cn . "\n";
-	for my $san (@sans) {
-		print "                 " . $san . "\n";
+	print $hostnames[0] . "\n";
+	for my $hostname (@hostnames[1..int(@hostnames)-1]) {
+		print "                 " . $hostname . "\n";
 	}
-	if (defined $product_info->{years}) {
-		print "        Product: " . $product_info->{description} . "\n";
-		print "          Price: " . format_money($product_info->{price}->{base_price}) . " / year\n";
-		print "          Years: " . $product_info->{years} . "\n";
-	} else {
-		print "        Product: " . $product_info->{description} . "\n";
-		print "          Price: " . format_money($product_info->{price}->{base_price}) . "\n";
-	}
+	print "        Product: " . $pricing_result->{duration} . " Year " . $pricing_result->{description} . "\n";
 	if (defined $other_info{auto_renew}) {
 		print "     Auto-Renew: " . ($other_info{auto_renew} ? "Yes" : "No") . "\n";
 	}
 	if (defined $other_info{approval_methods}) {
+		my $cn = $other_info{cn};
 		if (defined $other_info{sans}) {
+			my @sans = @{$other_info{sans}};
 			my $first = 1;
 			for my $hostname ($cn, @sans) {
 				if ($first) {
@@ -1610,22 +1587,19 @@ sub prompt_for_order_confirmation {
 	}
 	print "\n";
 	print "=========== Payment details ===========\n";
-	if ($product_info->{price}->{amount_due}) {
+	if ($pricing_result->{payment}) {
 		print "Payment Method: ";
-		if ($product_info->{payment}->{method} eq 'credit_card') {
-			my $card = $product_info->{payment}->{credit_card};
+		if ($pricing_result->{payment}->{method} eq 'credit_card') {
+			my $card = $pricing_result->{payment}->{credit_card};
 			print $card->{type} . " ending in " . $card->{last4};
-		} elsif ($product_info->{payment}->{method} eq 'balance') {
+		} elsif ($pricing_result->{payment}->{method} eq 'balance') {
 			print "Account Balance";
 		} else {
 			print "Other";
 		}
 		print "\n";
 	}
-	if ($product_info->{price}->{discount}) {
-		print "      Discount: " . format_money($product_info->{price}->{discount}) . " (USD)\n";
-	}
-	print "    Amount Due: " . format_money($product_info->{price}->{amount_due}) . " (USD)\n";
+	print "    Amount Due: " . format_money($pricing_result->{price}) . " (USD)\n";
 	print "\n";
 
 	while (1) {
@@ -1638,14 +1612,14 @@ sub prompt_for_order_confirmation {
 	}
 }
 
-sub get_product_info {
-	my ($type, $cn, %other_info) = @_;
+sub get_pricing {
+	my (%request) = @_;
 
-	my ($status, $response) = authed_api_call('GET', '/products/' . qs_escape($type), { cn => $cn, %other_info });
+	my ($status, $response) = authed_api_call('GET', '/pricing', \%request);
 	return undef unless defined $response;
 
 	if ($status != 200) {
-		print STDERR "Error: $cn: " . $response->{message} . "\n";
+		print STDERR "Error: " . $request{cn} . ": " . $response->{message} . "\n";
 		return undef;
 	}
 	return $response;
@@ -1790,7 +1764,6 @@ sub command_buy {
 		print "Common options:\n";
 		print " --auto-renew         automatically renew this certificate before it expires\n";
 		print " --no-auto-renew      don't automatically renew this certificate\n";
-		print " --ev                 purchase an extended validation (EV) certificate\n";
 		print " --coupon=CODE        use the given coupon code for a discount\n";
 		print " --invoice-note=NOTE  include the given note with the invoice\n";
 		print " --email-invoice-to=ADDRESS\n";
@@ -1810,7 +1783,7 @@ sub command_buy {
 		print "Advanced options:\n";
 		print " -f, --force          replace existing files, certificates\n";
 		print " --key-type=TYPE      type of key to generate ('rsa' or 'ecdsa')\n";
-		print " --multi              buy multi-hostname cert even if only one hostname specified\n";
+		print " --no-auto-san        don't automatically add an alt name for www/base domain\n";
 		return 0;
 	}
 
@@ -1845,6 +1818,7 @@ sub command_buy {
 			    'timeout=i', \$timeout,
 			    'no-wait', \$no_wait,
 			    'temp', \$accept_dummy,
+			    'no-auto-san', \$multi,
 			    'multi', \$multi,
 			    'key-type=s', \$key_type,
 			    'csr=s', \$csr_path,
@@ -1961,21 +1935,13 @@ sub command_buy {
 	# This is done mainly to prompt the user for confirmation and provide early
 	# error detection, so elide it when in batch mode to reduce roundtrips to server.
 	#
-	my $product_info;
-	my $authorized_charge;
-	my $authorized_charge_currency;
+	my $pricing_result;
 
 	unless ($batch) {
-		$product_info = get_product_info($cert_type // $cert->{type}, $cn,
-						 days => $days,
-						 coupon_code => $opts{coupon_code},
-						 sans => $multi ? count_nonwildcard_sans(@sans) : undef,
-						 wildcard_sans => $multi ? count_wildcard_sans(@sans) : undef) or return 1;
-
-		return 1 unless order_can_be_paid($product_info);
-
-		$authorized_charge = $product_info->{price}->{amount_due};
-		$authorized_charge_currency = $product_info->{price}->{currency};
+		$pricing_result = get_pricing(cn => $cn,
+					      custom_sans => $multi ? 'true' : 'false', 
+					      san => $multi ? \@sans : undef) or return 1;
+		return 1 unless order_can_be_paid($pricing_result);
 	}
 
 	#
@@ -2016,8 +1982,9 @@ sub command_buy {
 	# Ask user for confirmation, if not in batch mode
 	#
 	unless ($batch) {
-		prompt_for_order_confirmation($product_info,
-					      sans => $multi ? \@san_objs : undef,
+		prompt_for_order_confirmation($pricing_result,
+					      cn => $cn,
+					      sans => $multi ? \@sans : undef,
 					      approver_emails => \%approver_emails,
 					      approval_methods => \%approval_methods,
 					      auto_renew => $auto_renew // $cert->{auto_renew}) or return 1;
@@ -2070,28 +2037,12 @@ sub command_buy {
 	# Buy the certificate from SSLMate
 	#
 	print "Placing order...\n";
-	$request = { days			=> $days,
-		     authorized_charge		=> $authorized_charge,
-		     authorized_charge_currency	=> $authorized_charge_currency,
-		     %opts };
+	$request = { days => $days, %opts };
 
 	my $cert_instance;
 	($status, $cert_instance) = authed_api_call('POST', '/certs/' . qs_escape($cn) . '/buy', undef, $request) or $exit_with_error->();
-	if ($status != 200 && $cert_instance->{reason} eq 'daily_buy_limit_exceeded') {
-		print STDERR "Error: this purchase would exceed your daily spending limit.\n";
-		print STDERR "To change your limit, visit https://sslmate.com/account\n";
-		$exit_with_error->() if $batch;
-		my $password = prompt_password("Enter your SSLMate password to approve this purchase: ");
-		my ($account_id, undef) = split('_', get_config('api_key'));
-		($status, $cert_instance) = api_call('POST', '/certs/' . qs_escape($cn) . '/buy', { username => $account_id, password => $password }, undef, $request) or $exit_with_error->();
-	}
-
 	if ($status != 200) {
-		if ($cert_instance->{reason} eq 'price_not_authorized') {
-			print STDERR "Error: the price of this certificate has changed. Please run 'sslmate buy' again.\n";
-		} else {
-			print STDERR "Error: " . $cert_instance->{message} . "\n";
-		}
+		print STDERR "Error: " . $cert_instance->{message} . "\n";
 		$exit_with_error->();
 	}
 
@@ -2218,14 +2169,6 @@ sub command_reissue_rekey {
 
 	if (not $cert->{exists}) {
 		print STDERR "Error: $cn: there is no certificate in your account with this common name.\n";
-		return 1;
-	}
-	if (not defined $cert->{current}) {
-		print STDERR "Error: this certificate is not active.  Only active (non-expired, non-pending) certs may be reissued.  Please purchase a new certificate with 'sslmate buy'.\n";
-		return 1;
-	}
-	if ($cert->{current}->{source} eq 'import') {
-		print STDERR "Error: this certificate was not purchased from SSLMate.  To reissue this cert, please see the vendor where you purchased it.\n";
 		return 1;
 	}
 
@@ -2491,39 +2434,36 @@ sub command_renew {
 		}
 	}
 
-	my $authorized_charge;
-	my $authorized_charge_currency;
-
 	unless ($batch) {
 		# Get product/pricing info from the server, ask user for confirmation
 
-		my $product_info = get_product_info($cert->{type}, $cn,
-						 days => $days,
-						 coupon_code => $opts{coupon_code},
-						 sans => defined($cert->{sans}) ? count_nonwildcard_sans(@{$cert->{sans}}) : undef,
-						 wildcard_sans => defined($cert->{sans}) ? count_wildcard_sans(@{$cert->{sans}}) : undef) or return 1;
-
-		exit 1 unless order_can_be_paid($product_info);
-
+		my $multi = 0;
+		my @sans;
 		my $approver_emails = { $cn => $cert->{approver_email} };
 		my $approval_methods = { $cn => $cert->{approval_method} };
 		if (defined $cert->{sans}) {
+			$multi = 1;
 			for my $san (@{$cert->{sans}}) {
 				if ($san->{type} eq 'dns') {
+					push @sans, $san->{value};
 					$approver_emails->{$san->{value}} = $san->{approver_email};
 					$approval_methods->{$san->{value}} = $san->{approval_method};
 				}
 			}
 		}
 
-		prompt_for_order_confirmation($product_info,
-					      sans => $cert->{sans},
+		my $pricing_result = get_pricing(cn => $cn,
+						 custom_sans => $multi ? 'true' : 'false',
+						 san => $multi ? \@sans : undef) or return 1;
+
+		exit 1 unless order_can_be_paid($pricing_result);
+
+		prompt_for_order_confirmation($pricing_result,
+					      cn => $cn,
+					      sans => $multi ? \@sans : undef,
 					      approver_emails => $approver_emails,
 					      approval_methods => $approval_methods,
 					      auto_renew => $cert->{auto_renew}) or exit 1;
-
-		$authorized_charge_currency = $product_info->{price}->{currency};
-		$authorized_charge = $product_info->{price}->{amount_due};
 	}
 
 	my $new_cert;
@@ -2554,19 +2494,12 @@ sub command_renew {
 
 	# Renew the certificate
 	print "Placing order...\n";
-	my $request = { days				=> $days,
-			authorized_charge		=> $authorized_charge,
-			authorized_charge_currency	=> $authorized_charge_currency,
-			%opts };
+	my $request = { days => $days, %opts };
 
 	my $cert_instance;
 	($status, $cert_instance) = authed_api_call('POST', '/certs/' . qs_escape($cn) . '/buy', undef, $request) or $exit_with_error->();
 	if ($status != 200) {
-		if ($cert_instance->{reason} eq 'price_not_authorized') {
-			print STDERR "Error: the price of this certificate has changed. Please run 'sslmate renew' again.\n";
-		} else {
-			print STDERR "Error: " . $cert_instance->{message} . "\n";
-		}
+		print STDERR "Error: " . $cert_instance->{message} . "\n";
 		$exit_with_error->();
 	}
 
@@ -2942,6 +2875,7 @@ sub make_cert_info {
 		approval_email_from => $latest ? $latest->{approval_email_from} : undef,
 		approval_method => $cert->{approval_method},
 		alt_names => $cert->{sans} ? [ map { $_->{value} } grep { $_->{type} eq 'dns' } @{$cert->{sans}} ] : undef,
+		all_alt_names => $cert->{sans} ? [ map { $_->{value} } grep { $_->{type} eq 'dns' } @{$cert->{sans}} ] : [ make_auto_san($cert->{cn}) ],
 	};
 }
 
@@ -3137,7 +3071,7 @@ sub command_list {
 sub command_show {
 	local @ARGV = @_;
 
-	my %field_titles = (%cert_column_titles, alt_names => 'Alt Names');
+	my %field_titles = (%cert_column_titles, alt_names => 'Alt Names', all_alt_names => 'Alt Names');
 
 	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
 		print "Usage: sslmate show [OPTIONS] HOSTNAME\n";
@@ -3177,7 +3111,7 @@ sub command_show {
 	}
 	my $cn = lc $ARGV[0];
 
-	my @fields = defined($fields) ? split(/,/, $fields) : qw/name alt_names type status expiration auto_renew approval_method approver_email fingerprint local_status/;
+	my @fields = defined($fields) ? split(/,/, $fields) : qw/name all_alt_names type status expiration auto_renew approval_method approver_email fingerprint local_status/;
 	for my $field (@fields) {
 		if (not exists $field_titles{$field}) {
 			print STDERR "Error: Invalid field: $field\n";
@@ -3258,9 +3192,6 @@ sub command_edit {
 		print $out " --no-auto-renew      disable auto-renew for this cert\n";
 		print $out " --add-name=HOSTNAME  add the given hostname (takes effect upon reissue)\n";
 		print $out " --rm-name=HOSTNAME   remove the given hostname (takes effect upon reissue)\n";
-		print $out " --type=dv|ev         change the type of cert (takes effect upon renewal)\n";
-		print $out " --multi              convert to multi-hostname cert (takes effect upon renewal)\n";
-		print $out " --no-multi           convert to single-hostname cert (takes effect upon renewal)\n";
 	};
 
 	local @ARGV = @_;
@@ -3323,6 +3254,15 @@ sub command_edit {
 		return 1;
 	}
 
+	if (not(defined($cert->{sans}))) {
+		# If this is a non-SAN cert, and user wants to remove the automatic SAN,
+		# convert it to a non-SAN cert so the user gets what they want.
+		my $auto_san = make_auto_san($cn);
+		if (grep { $_ eq $auto_san } map(lc, @rm_sans)) {
+			$multi = 1;
+		}
+	}
+
 	#
 	# Add, remove, and update SANs
 	#
@@ -3367,12 +3307,10 @@ sub command_edit {
 		}
 	} elsif (defined $cert->{sans}) {
 		# Was a SAN cert but user wants to make it a non-SAN cert
-		print STDERR "Notice: conversion to single-hostname certificate will take place upon renewal.\n";
 		$new_san_objs = undef;
 		$modified_sans = 1;
 	} elsif ($multi) {
 		# Wasn't a SAN cert but user wants to make it one
-		print STDERR "Notice: conversion to multi-hostname certificate will take place upon renewal.\n";
 		$new_san_objs = [];
 		$modified_sans = 1;
 	}
@@ -3382,11 +3320,6 @@ sub command_edit {
 			$multi = 1;
 			$new_san_objs = [];
 			$modified_sans = 1;
-			print STDERR "Notice: this certificate is not currently a multi-hostname certificate.\n";
-			print STDERR "Notice: automatically converting to a multi-hostname certificate...\n";
-			print STDERR "Notice: conversion will take place upon renewal.\n";
-			print STDERR "Warning: starting with SSLMate 2.0, you will need to explicitly specify --multi.\n";
-			sleep(2) unless $batch;
 		}
 
 		next if grep { $_->{type} eq 'dns' && $_->{value} eq $hostname } @$new_san_objs;
@@ -3691,297 +3624,6 @@ sub command_test {
 	return 0;
 }
 
-sub command_import {
-	local @ARGV = @_;
-
-	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
-		print "Usage: sslmate import [OPTIONS] KEYFILE CERTFILE\n";
-		print "\n";
-		print "Example: sslmate import www.example.com.key www.example.com.crt\n";
-		print "\n";
-		print "Valid options:\n";
-		print " -f, --force        replace existing files, certificates\n";
-		print " --auto-renew       automatically renew this certificate before it expires\n";
-		print " --no-auto-renew    don't automatically renew this certificate\n";
-		print " --no-install       don't copy the key/cert to the local key/cert directories\n";
-		print " --approval=METHOD  use the given approval method (email, dns, or http)\n";
-		print " --approval=HOSTNAME=METHOD\n";
-		print "                    use the given approval method for given hostname\n";
-		print " --email=ADDRESS    use the given approver email address\n";
-		print " --email=HOSTNAME=ADDRESS\n";
-		print "                    use the given approver email address for given hostname\n";
-		return 0;
-	}
-
-	my $cn = undef;
-	my $auto_renew = undef;
-	my $force = 0;
-	my $install_locally = 1;
-	my $default_approval_method = 'email';
-	my %approval_methods;
-	my $default_approver_email = undef;
-	my %approver_emails;
-
-	my $getopt = Getopt::Long::Parser->new;
-	$getopt->configure(qw(no_ignore_case permute bundling));
-	$getopt->getoptions('auto-renew!', \$auto_renew,
-			    'force|f', \$force,
-			    'install!', \$install_locally,
-			    'approval=s', parse_approval_arg(\$default_approval_method, \%approval_methods),
-			    'email=s', parse_approval_arg(\$default_approver_email, \%approver_emails)) or return 2;
-
-	if (@ARGV != 2) {
-		print STDERR "Error: you must specify the key file and cert file paths.\n";
-		print STDERR "Example: sslmate import www.example.com.key www.example.com.crt\n";
-		return 2;
-	}
-	my ($source_key_path, $source_crt_path) = @ARGV;
-
-	# 0. Load config, etc.
-	load_config;
-	if (!is_linked) {
-		if ($batch || not(-t STDIN)) {
-			print STDERR "Error: you have not yet linked this system with your SSLMate account.\n";
-			print STDERR "Please run 'sslmate link'.\n";
-			return 1;
-		}
-		do_link or return 1;
-	}
-
-	init_default_paths;
-
-	# 1. Read the key
-	open(my $source_key_file, '<', $source_key_path) or die "Error: Unable to open $source_key_path: $!\n";
-	my $key = do { local $/; <$source_key_file> };
-	close($source_key_file);
-	my $pubkey_hash = sha256_hex(extract_pubkey_from_key($source_key_path));
-
-	# 2. Read the crt
-	-f $source_crt_path && -r $source_crt_path or die "Error: No such file: $source_crt_path\n";
-	my $crt = extract_crt_from_file($source_crt_path, 'PEM');
-	defined($crt) or die "Error: Unable to parse $source_crt_path - is it a valid certificate file?\n";
-
-	# 3. Parse the crt
-	# We could do this with a Perl module like Crypt::X509 (well, except for determining EV status), but
-	# in order to keep the dependency footprint small, we do this with an API call instead.
-	my ($status, $crt_info) = authed_api_call('POST', '/utils/parse_crt', undef, { crt => \$crt }) or exit 1;
-	if ($status != 200) {
-		print STDERR "Error: $source_crt_path: " . $crt_info->{message} . "\n";
-		return 1;
-	}
-	$cn //= lc $crt_info->{cn};
-	if ($crt_info->{pubkey_hash} ne $pubkey_hash) {
-		print STDERR "Error: The certificate ($source_crt_path)'s public key does not match the private key ($source_key_path)\n";
-		exit 1;
-	}
-	validate_cn($cn) or return 1;
-
-	my $type = $crt_info->{ev} ? 'ev' : 'dv';
-
-	# 4. Retrieve the current cert object from the server
-	my $cert_obj;
-	($status, $cert_obj) = authed_api_call('GET', '/certs/' . qs_escape($cn), { expand => ['current'] }) or exit 1;
-	if ($status != 200) {
-		print STDERR "Error: " . $cert_obj->{message} . "\n";
-		exit 1;
-	}
-	$cn = $cert_obj->{cn}; # So that we use the canonical CN
-
-	# 5. Check for existing files/certs
-	my $paths;
-	my $key_already_installed = 0;
-	my $crt_already_installed = 0;
-	if ($install_locally) {
-		$paths = get_cert_paths($cn);
-		if (realpath($source_key_path) eq realpath($paths->{key})) {
-			$key_already_installed = 1;
-		}
-		if (realpath($source_crt_path) eq realpath($paths->{crt})) {
-			$crt_already_installed = 1;
-		}
-	}
-	unless ($force) {
-		my $errors = 0;
-
-		if ($install_locally) {
-			my @check_files;
-			for my $file_type (keys %$paths) {
-				# Don't care if .key or .crt files exist if they're the same as the files we're importing.
-				next if $file_type eq 'key' && $key_already_installed;
-				next if $file_type eq 'crt' && $crt_already_installed;
-				push @check_files, $file_type;
-			}
-			$errors += has_existing_files(@{$paths}{@check_files});
-		}
-		if (defined($cert_obj->{current}) && $cert_obj->{current}->{expiration} >= $crt_info->{expiration}) {
-			print STDERR "Error: your account already has an active certificate for $cn.\n";
-			$errors++;
-		}
-		if ($errors) {
-			print STDERR "Tip: use --force to override the above error" . ($errors == 1 ? "" : "s") . ".\n";
-			exit 1;
-		}
-	}
-
-	# 6. Process SANs, approval methods, etc.
-	my $product_info = get_product_info($type, $cn) or exit 1;
-
-	my $has_nondns_sans;
-	my @default_sans;
-	my @nondefault_sans;
-	for my $san (@{$crt_info->{sans}}) {
-		if ($san->{type} ne 'dns') {
-			$has_nondns_sans = 1;
-		} elsif (grep { lc($_) eq lc($san->{value}) } @{$product_info->{default_sans}}) {
-			push @default_sans, $san->{value};
-		} else {
-			push @nondefault_sans, $san->{value};
-		}
-	}
-
-	my @sans;
-	my @unsupported_sans;
-	if (@nondefault_sans) {
-		# This cert contains SANs that wouldn't be covered by the default SANs for this product.
-		# Make sure they're all supported!
-		if (is_wildcard_name($cn)) {
-			# No SANs are supported on wildcard certs
-			push @unsupported_sans, @nondefault_sans;
-		} else {
-			for my $san (@nondefault_sans) {
-				if (is_wildcard_name($san)) {
-					# Wildcard SANs not supported
-					push @unsupported_sans, $san;
-				} else {
-					push @sans, lc $san;
-				}
-			}
-		}
-	}
-	if (@sans) {
-		# If we explicitly specify SANs, no SANs are added by default, so also
-		# copy @default_sans to @sans...
-		for my $default_san (map lc, @default_sans) {
-			next if grep { $_ eq $default_san } ($cn, @sans);
-			push @sans, $default_san;
-		}
-	}
-
-	unless ($batch) {
-		if ($has_nondns_sans) {
-			print "WARNING: This certificate contains non-DNS subject alternative names.\n";
-			print "SSLMate does not support non-DNS subject alternative names.  When this\n";
-			print "certificate renews, the non-DNS subject alternative names will be dropped.\n\n";
-			print "Do you understand and want to import this certificate anyways?\n\n";
-			exit 1 unless prompt_yesno();
-			print "\n";
-		}
-		if (@unsupported_sans) {
-			print "WARNING: This certificate contains the following subject alternative names\n";
-			print "that are not supported by SSLMate:\n\n";
-			for my $san (@unsupported_sans) {
-				print "\t$san\n";
-			}
-			print "\nWhen this certificate renews, these subject alternative names will be dropped.\n";
-			print "Do you understand and want to import this certificate anyways?\n\n";
-			exit 1 unless prompt_yesno();
-			print "\n";
-		}
-	}
-
-	# Determine the approval method for the CN, and each SAN
-	for my $hostname ($cn, @sans) {
-		my $method = $approval_methods{$hostname} // $default_approval_method;
-		my $email = $approver_emails{$hostname} // $default_approver_email;
-
-		if ($method eq 'email' && not defined($email)) {
-			if ($batch) {
-				print STDERR "Error: no approver email address specified for $cn.\n";
-				print STDERR "Tip: in batch mode, you must specify approver email addresses with --email.\n";
-				print STDERR "See 'sslmate help import' for help.\n";
-				return 2;
-			}
-
-			my $approval_methods = get_approval_methods($type, $hostname) or return 1;
-			($method, $email) = prompt_for_approval($hostname, $approval_methods) or return 1;
-		}
-
-		$approval_methods{$hostname} = $method;
-		$approver_emails{$hostname} = $email;
-	}
-
-	# Construct a list of SAN objects
-	my @san_objs;
-	for my $san_hostname (@sans) {
-		push @san_objs, { type => 'dns',
-				  value => $san_hostname,
-				  approval_method => $approval_methods{$san_hostname},
-				  approver_email => $approver_emails{$san_hostname} };
-	}
-
-	# 7. Generate the CSR
-	my $csr = openssl_req($source_key_path, $cert_obj->{dn} // make_dn($cn));
-
-	my $key_file;
-	if ($install_locally && !$key_already_installed) {
-		$key_file = open_key_file($paths->{key}, $force);
-	}
-
-	my $exit_with_error = sub {
-		unlink($paths->{key}) if $install_locally && !$key_already_installed;
-		authed_api_call('POST', '/certs/' . qs_escape($cn), undef, object_subset($cert_obj, qw/type approval_method approver_email sans csr/), 'application/json') if defined($cert_obj) && $cert_obj->{exists};
-		exit 1;
-	};
-
-	# 8. Create/update the cert object on the server
-	my $request = {	auto_renew	=> to_json_bool($auto_renew // $cert_obj->{auto_renew}),
-			type		=> $type,
-			approval_method	=> $approval_methods{$cn},
-			approver_email	=> $approver_emails{$cn},
-			sans		=> int(@san_objs) ? \@san_objs : undef,
-			csr		=> $csr };
-
-	($status, my $new_cert_obj) = authed_api_call('POST', '/certs/' . qs_escape($cn), { expand => ['dns_approval.status','http_approval.status'] }, $request, 'application/json') or $exit_with_error->();
-	if ($status != 200) {
-		print STDERR "Error: " . $new_cert_obj->{message} . "\n";
-		$cert_obj = undef;
-		$exit_with_error->();
-	}
-
-	prepare_approval($cert_obj, $new_cert_obj) or $exit_with_error->();
-
-	# 9. Create a new cert instance with this crt file
-	print "Importing certificate for $cn...\n";
-	my $cert_instance;
-	($status, $cert_instance) = authed_api_call('POST', '/certs/' . qs_escape($cn) . '/instances',
-							{ expand => ['chain','root'] },
-							{ crt => \$crt }) or $exit_with_error->();
-	if ($status != 200) {
-		print STDERR "Error: " . $cert_instance->{message} . "\n";
-		$exit_with_error->();
-	}
-
-	# 10. Write the key, crt, and chain to the destination directory
-	if ($install_locally) {
-		if (defined $key_file) {
-			# write .key file
-			truncate($key_file, 0);
-			print $key_file $key;
-			close $key_file;
-		}
-
-		write_cert_files($paths, undef, $crt, format_chain($cert_instance->{chain}), $cert_instance->{root});
-	}
-
-	print "\n";
-	print "Your certificate has been imported to SSLMate.\n\n";
-	if ($install_locally) {
-		print_cert_paths($paths);
-	}
-
-	return 0;
-}
-
 sub interpolate_config_template {
 	my ($in, $paths) = @_;
 	my $in_len = length($in);
@@ -4196,8 +3838,6 @@ sub main {
 		return command_retry_approval @ARGV;
 	} elsif ($command eq 'test') {
 		return command_test @ARGV;
-	} elsif ($command eq 'import') {
-		return command_import @ARGV;
 	} elsif ($command eq 'link') {
 		return command_link @ARGV;
 	} elsif ($command eq 'mkconfig') {

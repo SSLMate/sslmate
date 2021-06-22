@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2014-2019 Opsmate, Inc.
+# Copyright (c) 2014-2021 Opsmate, Inc.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -31,4 +31,4 @@ use 5.010;	# 5.10
 use strict;
 use warnings;
 
-our $VERSION = '1.7.1';
+our $VERSION = '1.8.0';
