@@ -10,14 +10,13 @@ To use the `sslmate` command, you must create a free account at https://sslmate.
 
 SSLMate officially supports:
 
- * Debian 7, 8, and 9
- * Ubuntu 12.04, 14.04, 15.04, 15.10, 16.04, 16,10, and 17.04
- * RHEL/CentOS 6 and 7
- * Fedora 20 and above
- * Arch Linux (available in the AUR)
- * Mac OS X 10.9 and above (available from Homebrew)
+ * Debian 9 and newer
+ * Ubuntu 18.04 and newer
+ * RHEL/CentOS 7 and 8
+ * Amazon Linux 1 and 2
+ * Fedora 27 and newer
 
-Packages (.deb, .rpm, and .pkg) for the above operating systems [are available](https://sslmate.com/help/install).
+Packages (.deb, .rpm) for the above operating systems [are available](https://sslmate.com/help/cmdline/install).
 
 SSLMate can run on other Unix-based operating systems provided the following software is installed:
 
@@ -40,16 +39,6 @@ SSLMate can run on other Unix-based operating systems provided the following sof
    2. `LWP` is optional; if not available SSLMate will fall back to executing the `curl` command directly.
 
 
-## Optional Dependencies
-
-To use automatic DNS approval with Route 53, the following additional software must be installed:
-
- * Python 2.6, Python 2.7, Python 3, or newer.
- * Boto (Python module) 2.2 or newer.
-   * Debian/Ubuntu package: `python-boto` (on Debian 6, requires [backports](http://backports.debian.org/Instructions/))
-   * RHEL/CentOS package:   `python-boto` (requires [EPEL repository](https://fedoraproject.org/wiki/EPEL))
-
-
 ## Installation
 
 Run `make` and `make install`.
@@ -68,11 +57,11 @@ make install PREFIX=/usr DESTDIR=/tmp/pkgroot
 
 ## Getting started
 
-See SSLMate's [guide to getting started](https://sslmate.com/help/getting_started).
+See SSLMate's [guide to getting started](https://sslmate.com/help/cmdline/getting_started).
 
 ## Getting help
 
 * Run `sslmate help`.
 * Read the sslmate(1) man page.
 * Consult [SSLMate's help documentation](https://sslmate.com/help).
-* Email [support@sslmate.com](mailto:support@sslmate.com) or tweet to [@SSLMate](https://twitter.com/sslmate).
+* Email [support@sslmate.com](mailto:support@sslmate.com).
