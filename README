@@ -13,22 +13,21 @@ from a cron job so that renewed certificates are automatically downloaded
 to your server.
 
 To use the sslmate command, you must create a free account at
-https://sslmate.com.
+<https://sslmate.com>.
 
 
 DEPENDENCIES
 
 SSLMate officially supports:
 
- * Debian 7, 8, and 9
- * Ubuntu 12.04, 14.04, 15.04, 15.10, 16.04, 16,10, and 17.04
- * RHEL/CentOS 6 and 7
- * Fedora 20 and above
- * Arch Linux (available in the AUR)
- * Mac OS X 10.9 and above (available from Homebrew)
+ * Debian 9 and newer
+ * Ubuntu 18.04 and newer
+ * RHEL/CentOS 7 and 8
+ * Amazon Linux 1 and 2
+ * Fedora 27 and newer
 
-Packages (.deb, .rpm, and .pkg) for the above operating systems are
-available from <https://sslmate.com/help/install>.
+Packages (.deb, .rpm) for the above operating systems are available
+from <https://sslmate.com/help/cmdline/install>.
 
 SSLMate can run on other Unix-based operating systems provided the
 following software is installed:
@@ -54,24 +53,6 @@ following software is installed:
          executing the `curl` command directly.
 
 
-OPTIONAL DEPENDENCIES
-
-To use automatic DNS approval with Route 53, the following additional
-software must be installed:
-
- * Python 2.6, Python 2.7, Python 3, or newer.
-
- * Boto (Python module) 2.2 or newer.
-
-   Debian/Ubuntu package: python-boto (on Debian 6, requires backports [1])
-   RHEL/CentOS package:   python-boto (requires EPEL repository [2])
-
-
-   Notes:
-     [1] http://backports.debian.org/Instructions/
-     [2] https://fedoraproject.org/wiki/EPEL
-
-
 INSTALLATION
 
 Run `make` and `make install`.
@@ -93,7 +74,7 @@ Example:
 
 GETTING STARTED
 
-  See <https://sslmate.com/help/getting_started>.
+  See <https://sslmate.com/help/cmdline/getting_started>.
 
 
 GETTING HELP
@@ -104,6 +85,6 @@ GETTING HELP
 
   * Consult <https://sslmate.com/help>.
 
-  * Email <support@sslmate.com> or Tweet to @SSLMate.
+  * Email <support@sslmate.com>.
 
 

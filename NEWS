@@ -1,3 +1,10 @@
+v1.9.0 (2021-09-07)
+ * Client-side DNS approval handlers have been deprecated and will be removed
+   in SSLMate 2.  To continue automatically approving certificates using DNS,
+   please integrate your SSLMate account with your DNS provider by visiting the
+   following page: https://sslmate.com/account/integrations
+ * The Route 53 approval handler now uses Python 3.
+
 v1.8.0 (2021-06-22)
  * buy: add --no-auto-san option to disable addition of an alt name for the
    base domain or www. sub-domain.

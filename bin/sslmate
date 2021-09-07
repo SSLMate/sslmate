@@ -1160,6 +1160,14 @@ sub add_approval_for {
 					$successful = prompt_for_manual_dns_approval($obj->{dns_approval}->{options});
 				}
 			}
+		} else {
+			print STDERR "\n";
+			print STDERR "Warning: client-side DNS approval handlers are deprecated and will be removed\n";
+			print STDERR "in SSLMate 2.  To continue automatically approving certificates using DNS,\n";
+			print STDERR "please integrate your SSLMate account with your DNS provider by visiting the \n";
+			print STDERR "following page: https://sslmate.com/account/integrations\n";
+			sleep(3) unless $batch;
+			print STDERR "\n";
 		}
 	} else {
 		$successful = 1;
