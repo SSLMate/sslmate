@@ -31,4 +31,4 @@ use 5.010;	# 5.10
 use strict;
 use warnings;
 
-our $VERSION = '1.8.0';
+our $VERSION = '1.9.0';
