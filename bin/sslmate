@@ -78,7 +78,6 @@ our %global_config;
 our %personal_config;
 our %ephemeral_config;
 our $https_client;
-our $http_approval_map;
 our $dns_approval_map;
 
 sub print_usage {
@@ -951,48 +950,6 @@ sub exec_approval_handler {
 	return ($handler_exit_code, \$handler_stderr_string);
 }
 
-sub prepare_http_approval {
-	my ($action, $options) = @_;
-	$http_approval_map //= load_approval_map('http');
-	my @tried_hostnames;
-	my @handlers_stderr;
-	for my $option (@$options) {
-		push @tried_hostnames, $option->{hostname};
-		if (defined($http_approval_map) && defined(my $handler = $http_approval_map->{$option->{hostname}})) {
-			my ($status, $stderr) = exec_approval_handler('http', $handler, $action, @$option{qw{hostname path content}});
-			print STDERR $$stderr;
-			return if $status == 0;
-		} else {
-			for my $handler (available_approval_handlers('http')) {
-				my ($status, $stderr) = exec_approval_handler('http', $handler, $action, @$option{qw{hostname path content}});
-				if ($status == 0) {
-					print STDERR $$stderr;
-					return;
-				} elsif ($status == 3) {
-					# This handler can't be used without parameters
-				} elsif ($status == 4) {
-					# This handler couldn't handle this host. Try the next handler...
-					push @handlers_stderr, $stderr;
-				} elsif ($status == 5 || $status == 126 || $status == 127) {
-					# This handler isn't usable due to missing dependencies. Try the next handler...
-					# (126 and 127 are returned by /usr/bin/env and are actually standarized by SUSv2)
-					push @handlers_stderr, $stderr;
-				} else {
-					# This handler could handle this host, but there was an error.
-					# Do not try any further handlers, but do continue to the next option.
-					print STDERR $$stderr;
-					last;
-				}
-			}
-		}
-	}
-
-	if ($verbose) {
-		print STDERR $$_ for @handlers_stderr;
-	}
-	die "No HTTP approval handler available for " . english_join('or', @tried_hostnames) . "." . (not($verbose) && @handlers_stderr ? " Specify the --verbose option for details." : "") . "\n";
-}
-
 sub prepare_dns_approval {
 	my ($action, $options) = @_;
 	$dns_approval_map //= load_approval_map('dns');
@@ -1094,18 +1051,7 @@ sub prompt_for_manual_dns_approval {
 sub remove_approval_for {
 	my ($hostname, $old_obj, $new_obj) = @_;
 
-	if ($old_obj->{approval_method} eq 'http') {
-		if (!defined($new_obj) ||
-				$new_obj->{approval_method} ne 'http' ||
-				!compare_approval_options($old_obj->{http_approval}->{options},
-							  $new_obj->{http_approval}->{options})) {
-			my $successful = eval {
-				prepare_http_approval('del', $old_obj->{http_approval}->{options});
-				1;
-			};
-			# Question: Display a warning if not successful?
-		}
-	} elsif ($old_obj->{approval_method} eq 'dns') {
+	if ($old_obj->{approval_method} eq 'dns') {
 		if (!defined($new_obj) ||
 				$new_obj->{approval_method} ne 'dns' ||
 				!compare_approval_options($old_obj->{dns_approval}->{options},
@@ -1126,19 +1072,11 @@ sub add_approval_for {
 	my $successful = 0;
 
 	if ($obj->{approval_method} eq 'http') {
-		$successful = eval {
-			prepare_http_approval('add', $obj->{http_approval}->{options});
-			1;
-		};
-		if (not $successful) {
-			if ($obj->{http_approval}->{status}->{ready}) {
-				print STDERR "Notice: HTTP approval for $hostname was already present.\n";
-				$successful = 1;
-			} else {
-				my $why = $@;
-				chomp $why;
-				print STDERR "Error: unable to automatically configure HTTP approval for $hostname: $why\n";
-			}
+		if ($obj->{http_approval}->{status}->{ready}) {
+			print STDERR "Notice: HTTP approval for $hostname is ready.\n";
+			$successful = 1;
+		} else {
+			print STDERR "Error: HTTP approval for $hostname is not configured. Please visit <https://sslmate.com/account/http_approval> for instructions.\n";
 		}
 	} elsif ($obj->{approval_method} eq 'dns') {
 		print "Adding DNS approval record for $hostname...\n";
