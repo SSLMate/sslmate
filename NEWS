@@ -1,3 +1,6 @@
+v1.9.1 (2022-05-03)
+ * Improve error message when HTTP approval is not configured.
+
 v1.9.0 (2021-09-07)
  * Client-side DNS approval handlers have been deprecated and will be removed
    in SSLMate 2.  To continue automatically approving certificates using DNS,
