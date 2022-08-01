@@ -1710,7 +1710,6 @@ sub command_buy {
 		print "Common options:\n";
 		print " --auto-renew         automatically renew this certificate before it expires\n";
 		print " --no-auto-renew      don't automatically renew this certificate\n";
-		print " --coupon=CODE        use the given coupon code for a discount\n";
 		print " --invoice-note=NOTE  include the given note with the invoice\n";
 		print " --email-invoice-to=ADDRESS\n";
 		print "                      email an invoice to the given address\n";
@@ -1768,7 +1767,6 @@ sub command_buy {
 			    'multi', \$multi,
 			    'key-type=s', \$key_type,
 			    'csr=s', \$csr_path,
-			    'coupon=s', \$opts{coupon_code},
 			    'email-invoice-to=s', \$opts{email_invoice_to},
 			    'invoice-note=s', \$opts{invoice_note}) or return 2;
 
@@ -2276,7 +2274,6 @@ sub command_renew {
 		print "         sslmate renew '*.example.com'\n";
 		print "\n";
 		print "Common options:\n";
-		print " --coupon=CODE        use the given coupon code for a discount\n";
 		print " --invoice-note=NOTE  include the given note with the invoice\n";
 		print " --email-invoice-to=ADDRESS\n";
 		print "                      email an invoice to the given address\n";
@@ -2303,7 +2300,6 @@ sub command_renew {
 			    'days=i', \$days,
 			    'timeout=i', \$timeout,
 			    'no-wait', \$no_wait,
-			    'coupon=s', \$opts{coupon_code},
 			    'email-invoice-to=s', \$opts{email_invoice_to},
 			    'invoice-note=s', \$opts{invoice_note}) or return 2;
 

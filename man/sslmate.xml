@@ -289,15 +289,6 @@
 							</listitem>
 						</varlistentry>
 						<varlistentry>
-							<term><option>--coupon=<replaceable>CODE</replaceable></option></term>
-
-							<listitem>
-								<para>
-									Use the given coupon code for a discount.
-								</para>
-							</listitem>
-						</varlistentry>
-						<varlistentry>
 							<term><option>--invoice-note=<replaceable>NOTE</replaceable></option></term>
 
 							<listitem>
@@ -400,15 +391,6 @@
 								</para>
 								<para>
 									This option is equivalent to <option>--timeout 0</option>.
-								</para>
-							</listitem>
-						</varlistentry>
-						<varlistentry>
-							<term><option>--coupon=<replaceable>CODE</replaceable></option></term>
-
-							<listitem>
-								<para>
-									Use the given coupon code for a discount.
 								</para>
 							</listitem>
 						</varlistentry>
