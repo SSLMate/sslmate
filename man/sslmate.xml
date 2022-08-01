@@ -348,7 +348,7 @@
 							<listitem>
 								<para>
 									Disable the addition of the automatic second subjectAltName if only one
-									one hostname was specified on the command line.
+									hostname was specified on the command line.
 								</para>
 							</listitem>
 						</varlistentry>
