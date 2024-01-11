@@ -735,7 +735,7 @@
 									</varlistentry>
 									<varlistentry>
 										<term>type</term>
-										<listitem><para>The certificate's type ("DV" or "EV").</para></listitem>
+										<listitem><para>Always "DV".  This column exists for backwards compatibility only and should no longer be used.</para></listitem>
 									</varlistentry>
 									<varlistentry>
 										<term>approval_method</term>
@@ -852,7 +852,7 @@
 									</varlistentry>
 									<varlistentry>
 										<term>type</term>
-										<listitem><para>The certificate's type ("DV" or "EV").</para></listitem>
+										<listitem><para>Always "DV".  This field exists for backwards compatibility only and should no longer be used.</para></listitem>
 									</varlistentry>
 									<varlistentry>
 										<term>approval_method</term>
