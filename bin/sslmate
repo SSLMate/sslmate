@@ -1783,6 +1783,11 @@ sub command_buy {
 		print STDERR "Example: sslmate buy www.example.com\n";
 		return 2;
 	}
+	if ($ev) {
+		print STDERR "Error: Extended Validation (EV) certificates are no longer supported.\n";
+		print STDERR "Omit the --ev option to purchase a Domain Validation certificate.\n";
+		return 2;
+	}
 	if ($no_wait && $accept_dummy) {
 		print STDERR "Error: --no-wait and --temp are mutually exclusive.\n";
 		return 2;
@@ -1796,10 +1801,6 @@ sub command_buy {
 		return 2;
 	}
 	$timeout = 0 if $no_wait;
-	if ($ev && !defined($timeout) && !$accept_dummy) {
-		# --ev implies --temp, unless --timeout or --temp were already specified
-		$accept_dummy = 1;
-	}
 	$timeout //= $DEFAULT_CERT_TIMEOUT;
 
 	my $csr = undef;
@@ -1815,7 +1816,7 @@ sub command_buy {
 
 	my $cn = lc shift @ARGV;
 	push @sans, map(lc, @ARGV);
-	$cert_type //= $ev ? 'ev' : 'dv';
+	$cert_type //= 'dv';
 	$multi = 1 if @sans;
 	validate_cn($cn) or return 1;
 
@@ -2166,7 +2167,7 @@ sub command_reissue_rekey {
 		$exit_with_error->();
 	}
 
-	$timeout //= ($cert_instance->{type} eq 'ev' ? 0 : $DEFAULT_CERT_TIMEOUT);
+	$timeout //= $DEFAULT_CERT_TIMEOUT;
 
 	print "Reissue complete.\n\n";
 	if (!do_wait_for_cert($cn, $cert_instance, $timeout, 0, $paths, $new_key_filename)) {
@@ -2445,7 +2446,7 @@ sub command_renew {
 		$exit_with_error->();
 	}
 
-	$timeout //= ($cert_instance->{type} eq 'ev' ? 0 : $DEFAULT_CERT_TIMEOUT);
+	$timeout //= $DEFAULT_CERT_TIMEOUT;
 
 	print "Renewal complete.\n\n";
 	if (!do_wait_for_cert($cn, $cert_instance, $timeout, 0, $paths)) {
