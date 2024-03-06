@@ -1415,7 +1415,7 @@ sub prompt_for_approval {
 	print "Tip: visit https://sslmate.com/help/approval to learn how to automate the\n";
 	print "approval of certificates.\n";
 	print "\n";
-	print "How would you like to prove authorization?\n";
+	print "How would you like to prove authorization for ${hostname}?\n";
 	print "\n";
 
 	my @choices;
