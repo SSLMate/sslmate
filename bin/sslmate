@@ -1207,11 +1207,6 @@ sub genkey {
 	return 1;
 }
 
-sub make_dn {
-	my ($cn, $country_code) = @_;
-	return { CN => $cn, C => $country_code // 'US', ST => 'Some-State', O => 'Internet Widgits Pty Ltd' };
-}
-
 sub openssl_req {
 	my ($key_filename, $dn) = @_;
 
@@ -2497,12 +2492,7 @@ sub command_req {
 	my $cn = lc $ARGV[0];
 	$key_filename //= "$cn.key";
 	$csr_filename //= "$cn.csr";
-	if (keys %$dn) {
-		$dn->{C} //= 'US';
-		$dn->{CN} = $cn;
-	} else {
-		$dn = make_dn($cn);
-	}
+	$dn->{CN} //= $cn;
 
 	# 0. Open the files
 	my $open_flags = O_WRONLY | O_CREAT | O_TRUNC;
