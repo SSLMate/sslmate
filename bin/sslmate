@@ -203,24 +203,6 @@ sub prompt_password {
 	return decode_input($password);
 }
 
-sub is_wildcard_name {
-	my ($name) = @_;
-	return $name =~ /^\*\./;
-}
-
-sub count_nonwildcard_sans {
-	my @sans = @_;
-	my $cnt = 0;
-	for my $san (@sans) {
-		if (ref($san) eq 'HASH') {
-			$cnt++ if not is_wildcard_name($san->{value});
-		} else {
-			$cnt++ if not is_wildcard_name($san);
-		}
-	}
-	return $cnt;
-}
-
 sub make_auto_san {
 	my ($cn) = @_;
 
