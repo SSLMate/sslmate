@@ -2781,6 +2781,7 @@ sub make_cert_info {
 		name => $cert->{cn},
 		status => $latest ? $latest->{state} : undef,
 		expiration => $latest ? $latest->{expiration} : undef,
+		billed_through => $cert->{billed_through},
 		local_status => $local_status,
 		fingerprint => $latest ? $latest->{sha1_fingerprint} : undef,
 		sha256_fingerprint => $latest ? $latest->{sha256_fingerprint} : undef,
@@ -2798,6 +2799,7 @@ my %cert_column_titles = (
 	name =>			'Name',
 	status =>		'Status',
 	expiration =>		'Expiration',
+	billed_through =>	'Billed Through',
 	local_status => 	'Local Status',
 	fingerprint =>		'Fingerprint',
 	sha256_fingerprint =>	'Fingerprint (SHA-256)',
@@ -2849,6 +2851,7 @@ sub format_yesno {
 }
 my %cert_column_formatters = (
 	expiration => \&format_expiration,
+	billed_through => \&format_expiration,
 	status => \&format_status,
 	local_status => \&format_local_status,
 	fingerprint => \&format_hash,
@@ -3026,7 +3029,7 @@ sub command_show {
 	}
 	my $cn = lc $ARGV[0];
 
-	my @fields = defined($fields) ? split(/,/, $fields) : qw/name all_alt_names type status expiration auto_renew approval_method approver_email fingerprint local_status/;
+	my @fields = defined($fields) ? split(/,/, $fields) : qw/name all_alt_names type status expiration billed_through auto_renew approval_method approver_email fingerprint local_status/;
 	for my $field (@fields) {
 		if (not exists $field_titles{$field}) {
 			print STDERR "Error: Invalid field: $field\n";
