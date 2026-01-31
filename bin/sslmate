@@ -1984,11 +1984,6 @@ sub command_reissue_rekey {
 	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
 		print "Usage: sslmate $command [OPTIONS] HOSTNAME\n\n";
 		print "Example: sslmate $command www.example.com\n";
-		if ($command eq 'reissue') {
-			print "\n";
-			print "Options:\n";
-			print " --same-key         reissue with the same key instead of generating a new key\n";
-		}
 		print "\n";
 		print "Batch options:\n";
 		print " --timeout=SECONDS  wait at most SECONDS seconds for new cert to be issued\n";
@@ -2032,16 +2027,6 @@ sub command_reissue_rekey {
 	my $rekey = 0;
 	if ($command eq 'rekey') {
 		$rekey = 1;
-	} elsif ($command eq 'reissue') {
-		unless ($same_key) {
-			$rekey = 1;
-			print STDERR "Warning: 'sslmate reissue' without the --same-key option is deprecated.\n";
-			print STDERR "To reissue with a new key, use 'sslmate rekey' instead.\n";
-			print STDERR "To reissue with the same key, use 'sslmate reissue --same-key'.\n";
-			print STDERR "Starting with SSLMate 2.0, --same-key will be implied.\n";
-			sleep(3) unless $batch;
-			print STDERR "\n";
-		}
 	}
 
 	if (defined($timeout) && $no_wait) {

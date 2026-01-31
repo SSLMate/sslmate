@@ -436,14 +436,7 @@
 				<term><option>reissue <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></option></term>
 				<listitem>
 					<para>
-						Generate a new private key (unless <option>--same-key</option> is specified) and reissue the
-						certificate for the given hostname.
-					</para>
-					<para>
-						Note: <command>sslmate reissue</command> without the
-						<option>--same-key</option> option is deprecated.  Starting with SSLMate 2.0,
-						<option>--same-key</option> will be implied.  To reissue a certificate with a
-						new key, use <option>sslmate rekey</option> instead.
+						Reissue the certificate for the given hostname, keeping the same private key.
 					</para>
 					<para>
 						Reissuing a certificate does <emphasis>not</emphasis> revoke it. Use the <command>sslmate revoke</command>
@@ -454,22 +447,6 @@
 						The following options are understood:
 					</para>
 					<variablelist>
-						<varlistentry>
-							<term><option>--same-key</option></term>
-
-							<listitem>
-								<para>
-									Keep the same private key when reissuing.  This is useful if you are reissuing
-									a certificate not because of a lost key, but to add or remove the alternative
-									names of a multi-hostname certificate.
-								</para>
-								<para>
-									Note: Starting with SSLMate 2.0,
-									<option>--same-key</option> will be implied.  To reissue a certificate with a
-									new key, use <option>sslmate rekey</option> instead.
-								</para>
-							</listitem>
-						</varlistentry>
 						<varlistentry>
 							<term><option>--timeout=<replaceable>SECONDS</replaceable></option></term>
 
@@ -984,9 +961,8 @@
 									The name is not added or removed immediately.  Instead,
 									the changes take effect on the next call to <command>sslmate reissue</command>.
 									Any names that were added since the last issuance will need to be approved.
-									Existing names do not need to be re-approved as long as you preserve the
-									existing private key by passing the <option>--same-key</option> option to
-									<command>sslmate reissue</command>.  If there has been a net increase in hostnames
+									Existing names do not need to be re-approved.
+									If there has been a net increase in hostnames
 									since the last issuance, your account will be charged for the new names.
 								</para>
 							</listitem>
