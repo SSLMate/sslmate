@@ -171,6 +171,12 @@
 						purchasing a new certificate, but alternative names can be added and removed after the certificate
 						is issued by running <command>sslmate edit</command>.
 					</para>
+					<para>
+						<command>sslmate buy</command> will bill you for a one year subscription, and
+						the issued certificate will have the longest lifetime allowed by industry
+						regulations. You can get new certificates at no charge using <command>sslmate renew</command>
+						or <command>sslmate reissue</command> until the subscription ends.
+					</para>
 
 					<para>
 						The following options are understood:
@@ -360,7 +366,21 @@
 				<term><option>renew <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></option></term>
 				<listitem>
 					<para>
-						Renew the certificate for the given hostname.
+						Renew an expiring certificate for the given hostname. Using this command is unnecessary when auto-renew is enabled as
+						SSLMate will automatically renew expiring certificates, which you can download using <command>sslmate download</command>.
+					</para>
+
+					<para>
+						If the certificate's subscription is ending soon, then this command will bill your account for a new subscription
+						which ends one year from the end date of the current subscription. Unless <option>--batch</option> is used, you'll
+						be prompted to confirm the purchase. The new certificate will have the maximum lifetime allowed by industry regulations.
+					</para>
+
+					<para>
+						If the certificate's subscription is not ending soon, then this command will issue a new certificate using
+						the current subscription, at no charge. Note that the new certificate's expiration will be no later than the
+						subscription's end date, as indicated by <command>sslmate show</command> under "Billed Through".
+						You can use the <option>--force-new-subscription</option> to force the purchase of a new subscription.
 					</para>
 
 					<para>
@@ -422,9 +442,18 @@
 
 							<listitem>
 								<para>
-									Renew the certificate even if it's not about to expire.  Note that the
-									renewed certificate will expire one year from the today's date, not from
-									the expiration date of the current certificate.
+									Renew the certificate even if it's not about to expire.
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
+							<term><option>--force-new-subscription</option></term>
+
+							<listitem>
+								<para>
+									Purchase a new subscription even if the current subscription is not ending soon.
+									The new subscription will end one year from today.
+									The issued certificate will have the longest lifetime allowed by industry regulations.
 								</para>
 							</listitem>
 						</varlistentry>
@@ -437,6 +466,12 @@
 				<listitem>
 					<para>
 						Reissue the certificate for the given hostname, keeping the same private key.
+						After adding or removing hostnames using <command>sslmate edit</command>, you must
+						use <command>sslmate reissue</command> to get a new certificate with the new set of hostnames.
+					</para>
+					<para>
+						The new certificate will have an expiration date no later than the subscription end date, as indicated
+						by <command>sslmate show</command> under "Billed Through".
 					</para>
 					<para>
 						Reissuing a certificate does <emphasis>not</emphasis> revoke it. Use the <command>sslmate revoke</command>
@@ -695,6 +730,10 @@
 										<listitem><para>The certificate's expiration date, in YYYY-MM-DD format.</para></listitem>
 									</varlistentry>
 									<varlistentry>
+										<term>billed_through</term>
+										<listitem><para>The end date of the certificate's subscription, in YYYY-MM-DD format.</para></listitem>
+									</varlistentry>
+									<varlistentry>
 										<term>local_status</term>
 										<listitem><para>The status of the locally-installed copy of the certificate ("Installed", "Temporary", "Mismatched key", "No key file", "Out-of-date", or "None").</para></listitem>
 									</varlistentry>
@@ -810,6 +849,10 @@
 									<varlistentry>
 										<term>expiration</term>
 										<listitem><para>The certificate's expiration date, in YYYY-MM-DD format.</para></listitem>
+									</varlistentry>
+									<varlistentry>
+										<term>billed_through</term>
+										<listitem><para>The end date of the certificate's subscription, in YYYY-MM-DD format.</para></listitem>
 									</varlistentry>
 									<varlistentry>
 										<term>local_status</term>

@@ -1959,7 +1959,7 @@ sub command_buy {
 	# Buy the certificate from SSLMate
 	#
 	print "Placing order...\n";
-	$request = { days => $days, %opts };
+	$request = { force_new_subscription => 'true', days => $days, %opts };
 
 	my $cert_instance;
 	($status, $cert_instance) = authed_api_call('POST', '/certs/' . qs_escape($cn) . '/buy', undef, $request) or $exit_with_error->();
@@ -2247,6 +2247,8 @@ sub command_renew {
 		print "\n";
 		print "Advanced options:\n";
 		print " -f, --force          replace existing files, certificates\n";
+		print " --force-new-subscription\n";
+		print "                      always renew the subscription, even if it's not ending\n";
 		return 0;
 	}
 
@@ -2255,10 +2257,12 @@ sub command_renew {
 	my $timeout = undef;
 	my $days = undef;
 	my $no_wait = 0;
+	my $force_new_subscription = 0;
 
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
 	$getopt->getoptions('force|f', \$force,
+			    'force-new-subscription', \$force_new_subscription,
 			    'batch', \$batch, # compat with pre-1.0
 			    'days=i', \$days,
 			    'timeout=i', \$timeout,
@@ -2313,6 +2317,8 @@ sub command_renew {
 		exit 1;
 	}
 
+	my $buy_subscription = $force_new_subscription || not(defined($cert->{subscription_ending})) || $cert->{subscription_ending};
+
 	my $paths = get_cert_paths($cn);
 	my $pubkey_hash = undef;
 	if (-f $paths->{key} && -r $paths->{key}) {
@@ -2328,7 +2334,7 @@ sub command_renew {
 			print STDERR "Tip: to restart a certificate's approval process, use 'sslmate retry-approval'.\n";
 			$errors++;
 		}
-		if (defined($cert->{current}) && !$cert->{current}->{expiring}) {
+		if (not($force_new_subscription) && defined($cert->{current}) && !$cert->{current}->{expiring}) {
 			print STDERR "Error: the certificate for $cn is not about to expire.\n";
 			print STDERR "Tip: to reissue this certificate, run 'sslmate reissue $cn'.\n";
 			$errors++;
@@ -2339,7 +2345,7 @@ sub command_renew {
 		}
 	}
 
-	unless ($batch) {
+	if ($buy_subscription && not($batch)) {
 		# Get product/pricing info from the server, ask user for confirmation
 
 		my $multi = 0;
@@ -2398,14 +2404,23 @@ sub command_renew {
 	prepare_approval($cert, $new_cert) or $exit_with_error->();
 
 	# Renew the certificate
-	print "Placing order...\n";
-	my $request = { days => $days, %opts };
-
 	my $cert_instance;
-	($status, $cert_instance) = authed_api_call('POST', '/certs/' . qs_escape($cn) . '/buy', undef, $request) or $exit_with_error->();
-	if ($status != 200) {
-		print STDERR "Error: " . $cert_instance->{message} . "\n";
-		$exit_with_error->();
+	if ($buy_subscription) {
+		print "Placing order...\n";
+		my $request = { force_new_subscription => 'true', days => $days, %opts };
+
+		($status, $cert_instance) = authed_api_call('POST', '/certs/' . qs_escape($cn) . '/buy', undef, $request) or $exit_with_error->();
+		if ($status != 200) {
+			print STDERR "Error: " . $cert_instance->{message} . "\n";
+			$exit_with_error->();
+		}
+	} else {
+		print "Renewing certificate using existing subscription...\n";
+		($status, $cert_instance) = authed_api_call('POST', '/certs/' . qs_escape($cn) . '/reissue') or $exit_with_error->();
+		if ($status != 200) {
+			print STDERR "Error: " . $cert_instance->{message} . "\n";
+			$exit_with_error->();
+		}
 	}
 
 	$timeout //= $DEFAULT_CERT_TIMEOUT;
