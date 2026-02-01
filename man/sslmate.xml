@@ -1,7 +1,7 @@
 <!DOCTYPE refentry PUBLIC "-//OASIS//DTD DocBook XML V4.2//EN" "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd">
 <refentry>
 	<!--
-		Copyright (c) 2014-2022 Opsmate, Inc.
+		Copyright (c) 2014-2026 Opsmate, Inc.
 
 		Permission is hereby granted, free of charge, to any person obtaining a
 		copy of this software and associated documentation files (the "Software"),
@@ -28,8 +28,8 @@
 	-->
 	<refentryinfo>
 		<title>SSLMate</title>
-		<date>2022-05-03</date>
-		<productname>SSLMate 1.9.1</productname>
+		<date>2026-02-01</date>
+		<productname>SSLMate 1.10.0</productname>
 
 		<author>
 			<othername>SSLMate</othername>
@@ -171,6 +171,12 @@
 						purchasing a new certificate, but alternative names can be added and removed after the certificate
 						is issued by running <command>sslmate edit</command>.
 					</para>
+					<para>
+						<command>sslmate buy</command> will bill you for a one year subscription, and
+						the issued certificate will have the longest lifetime allowed by industry
+						regulations. You can get new certificates at no charge using <command>sslmate renew</command>
+						or <command>sslmate reissue</command> until the subscription ends.
+					</para>
 
 					<para>
 						The following options are understood:
@@ -289,15 +295,6 @@
 							</listitem>
 						</varlistentry>
 						<varlistentry>
-							<term><option>--coupon=<replaceable>CODE</replaceable></option></term>
-
-							<listitem>
-								<para>
-									Use the given coupon code for a discount.
-								</para>
-							</listitem>
-						</varlistentry>
-						<varlistentry>
 							<term><option>--invoice-note=<replaceable>NOTE</replaceable></option></term>
 
 							<listitem>
@@ -357,7 +354,7 @@
 							<listitem>
 								<para>
 									Disable the addition of the automatic second subjectAltName if only one
-									one hostname was specified on the command line.
+									hostname was specified on the command line.
 								</para>
 							</listitem>
 						</varlistentry>
@@ -369,7 +366,21 @@
 				<term><option>renew <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></option></term>
 				<listitem>
 					<para>
-						Renew the certificate for the given hostname.
+						Renew an expiring certificate for the given hostname. Using this command is unnecessary when auto-renew is enabled as
+						SSLMate will automatically renew expiring certificates, which you can download using <command>sslmate download</command>.
+					</para>
+
+					<para>
+						If the certificate's subscription is ending soon, then this command will bill your account for a new subscription
+						which ends one year from the end date of the current subscription. Unless <option>--batch</option> is used, you'll
+						be prompted to confirm the purchase. The new certificate will have the maximum lifetime allowed by industry regulations.
+					</para>
+
+					<para>
+						If the certificate's subscription is not ending soon, then this command will issue a new certificate using
+						the current subscription, at no charge. Note that the new certificate's expiration will be no later than the
+						subscription's end date, as indicated by <command>sslmate show</command> under "Billed Through".
+						You can use the <option>--force-new-subscription</option> to force the purchase of a new subscription.
 					</para>
 
 					<para>
@@ -404,15 +415,6 @@
 							</listitem>
 						</varlistentry>
 						<varlistentry>
-							<term><option>--coupon=<replaceable>CODE</replaceable></option></term>
-
-							<listitem>
-								<para>
-									Use the given coupon code for a discount.
-								</para>
-							</listitem>
-						</varlistentry>
-						<varlistentry>
 							<term><option>--invoice-note=<replaceable>NOTE</replaceable></option></term>
 
 							<listitem>
@@ -440,9 +442,18 @@
 
 							<listitem>
 								<para>
-									Renew the certificate even if it's not about to expire.  Note that the
-									renewed certificate will expire one year from the today's date, not from
-									the expiration date of the current certificate.
+									Renew the certificate even if it's not about to expire.
+								</para>
+							</listitem>
+						</varlistentry>
+						<varlistentry>
+							<term><option>--force-new-subscription</option></term>
+
+							<listitem>
+								<para>
+									Purchase a new subscription even if the current subscription is not ending soon.
+									The new subscription will end one year from today.
+									The issued certificate will have the longest lifetime allowed by industry regulations.
 								</para>
 							</listitem>
 						</varlistentry>
@@ -454,14 +465,13 @@
 				<term><option>reissue <arg choice="opt"><replaceable>OPTIONS</replaceable></arg> <arg choice="plain"><replaceable>HOSTNAME</replaceable></arg></option></term>
 				<listitem>
 					<para>
-						Generate a new private key (unless <option>--same-key</option> is specified) and reissue the
-						certificate for the given hostname.
+						Reissue the certificate for the given hostname, keeping the same private key.
+						After adding or removing hostnames using <command>sslmate edit</command>, you must
+						use <command>sslmate reissue</command> to get a new certificate with the new set of hostnames.
 					</para>
 					<para>
-						Note: <command>sslmate reissue</command> without the
-						<option>--same-key</option> option is deprecated.  Starting with SSLMate 2.0,
-						<option>--same-key</option> will be implied.  To reissue a certificate with a
-						new key, use <option>sslmate rekey</option> instead.
+						The new certificate will have an expiration date no later than the subscription end date, as indicated
+						by <command>sslmate show</command> under "Billed Through".
 					</para>
 					<para>
 						Reissuing a certificate does <emphasis>not</emphasis> revoke it. Use the <command>sslmate revoke</command>
@@ -472,22 +482,6 @@
 						The following options are understood:
 					</para>
 					<variablelist>
-						<varlistentry>
-							<term><option>--same-key</option></term>
-
-							<listitem>
-								<para>
-									Keep the same private key when reissuing.  This is useful if you are reissuing
-									a certificate not because of a lost key, but to add or remove the alternative
-									names of a multi-hostname certificate.
-								</para>
-								<para>
-									Note: Starting with SSLMate 2.0,
-									<option>--same-key</option> will be implied.  To reissue a certificate with a
-									new key, use <option>sslmate rekey</option> instead.
-								</para>
-							</listitem>
-						</varlistentry>
 						<varlistentry>
 							<term><option>--timeout=<replaceable>SECONDS</replaceable></option></term>
 
@@ -736,6 +730,10 @@
 										<listitem><para>The certificate's expiration date, in YYYY-MM-DD format.</para></listitem>
 									</varlistentry>
 									<varlistentry>
+										<term>billed_through</term>
+										<listitem><para>The end date of the certificate's subscription, in YYYY-MM-DD format.</para></listitem>
+									</varlistentry>
+									<varlistentry>
 										<term>local_status</term>
 										<listitem><para>The status of the locally-installed copy of the certificate ("Installed", "Temporary", "Mismatched key", "No key file", "Out-of-date", or "None").</para></listitem>
 									</varlistentry>
@@ -753,7 +751,7 @@
 									</varlistentry>
 									<varlistentry>
 										<term>type</term>
-										<listitem><para>The certificate's type ("DV" or "EV").</para></listitem>
+										<listitem><para>Always "DV".  This column exists for backwards compatibility only and should no longer be used.</para></listitem>
 									</varlistentry>
 									<varlistentry>
 										<term>approval_method</term>
@@ -853,6 +851,10 @@
 										<listitem><para>The certificate's expiration date, in YYYY-MM-DD format.</para></listitem>
 									</varlistentry>
 									<varlistentry>
+										<term>billed_through</term>
+										<listitem><para>The end date of the certificate's subscription, in YYYY-MM-DD format.</para></listitem>
+									</varlistentry>
+									<varlistentry>
 										<term>local_status</term>
 										<listitem><para>The status of the locally-installed copy of the certificate ("Installed", "Temporary", "Mismatched key", "No key file", "Out-of-date", or "None").</para></listitem>
 									</varlistentry>
@@ -870,7 +872,7 @@
 									</varlistentry>
 									<varlistentry>
 										<term>type</term>
-										<listitem><para>The certificate's type ("DV" or "EV").</para></listitem>
+										<listitem><para>Always "DV".  This field exists for backwards compatibility only and should no longer be used.</para></listitem>
 									</varlistentry>
 									<varlistentry>
 										<term>approval_method</term>
@@ -1002,9 +1004,8 @@
 									The name is not added or removed immediately.  Instead,
 									the changes take effect on the next call to <command>sslmate reissue</command>.
 									Any names that were added since the last issuance will need to be approved.
-									Existing names do not need to be re-approved as long as you preserve the
-									existing private key by passing the <option>--same-key</option> option to
-									<command>sslmate reissue</command>.  If there has been a net increase in hostnames
+									Existing names do not need to be re-approved.
+									If there has been a net increase in hostnames
 									since the last issuance, your account will be charged for the new names.
 								</para>
 							</listitem>

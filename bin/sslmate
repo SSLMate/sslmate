@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
 
 #
-# Copyright (c) 2014-2022 Opsmate, Inc.
+# Copyright (c) 2014-2026 Opsmate, Inc.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -201,24 +201,6 @@ sub prompt_password {
 	ReadMode(0);
 
 	return decode_input($password);
-}
-
-sub is_wildcard_name {
-	my ($name) = @_;
-	return $name =~ /^\*\./;
-}
-
-sub count_nonwildcard_sans {
-	my @sans = @_;
-	my $cnt = 0;
-	for my $san (@sans) {
-		if (ref($san) eq 'HASH') {
-			$cnt++ if not is_wildcard_name($san->{value});
-		} else {
-			$cnt++ if not is_wildcard_name($san);
-		}
-	}
-	return $cnt;
 }
 
 sub make_auto_san {
@@ -1207,11 +1189,6 @@ sub genkey {
 	return 1;
 }
 
-sub make_dn {
-	my ($cn, $country_code) = @_;
-	return { CN => $cn, C => $country_code // 'US', ST => 'Some-State', O => 'Internet Widgits Pty Ltd' };
-}
-
 sub openssl_req {
 	my ($key_filename, $dn) = @_;
 
@@ -1420,7 +1397,7 @@ sub prompt_for_approval {
 	print "Tip: visit https://sslmate.com/help/approval to learn how to automate the\n";
 	print "approval of certificates.\n";
 	print "\n";
-	print "How would you like to prove authorization?\n";
+	print "How would you like to prove authorization for ${hostname}?\n";
 	print "\n";
 
 	my @choices;
@@ -1710,7 +1687,6 @@ sub command_buy {
 		print "Common options:\n";
 		print " --auto-renew         automatically renew this certificate before it expires\n";
 		print " --no-auto-renew      don't automatically renew this certificate\n";
-		print " --coupon=CODE        use the given coupon code for a discount\n";
 		print " --invoice-note=NOTE  include the given note with the invoice\n";
 		print " --email-invoice-to=ADDRESS\n";
 		print "                      email an invoice to the given address\n";
@@ -1768,7 +1744,6 @@ sub command_buy {
 			    'multi', \$multi,
 			    'key-type=s', \$key_type,
 			    'csr=s', \$csr_path,
-			    'coupon=s', \$opts{coupon_code},
 			    'email-invoice-to=s', \$opts{email_invoice_to},
 			    'invoice-note=s', \$opts{invoice_note}) or return 2;
 
@@ -1785,6 +1760,11 @@ sub command_buy {
 		print STDERR "Example: sslmate buy www.example.com\n";
 		return 2;
 	}
+	if ($ev) {
+		print STDERR "Error: Extended Validation (EV) certificates are no longer supported.\n";
+		print STDERR "Omit the --ev option to purchase a Domain Validation certificate.\n";
+		return 2;
+	}
 	if ($no_wait && $accept_dummy) {
 		print STDERR "Error: --no-wait and --temp are mutually exclusive.\n";
 		return 2;
@@ -1798,10 +1778,6 @@ sub command_buy {
 		return 2;
 	}
 	$timeout = 0 if $no_wait;
-	if ($ev && !defined($timeout) && !$accept_dummy) {
-		# --ev implies --temp, unless --timeout or --temp were already specified
-		$accept_dummy = 1;
-	}
 	$timeout //= $DEFAULT_CERT_TIMEOUT;
 
 	my $csr = undef;
@@ -1817,7 +1793,7 @@ sub command_buy {
 
 	my $cn = lc shift @ARGV;
 	push @sans, map(lc, @ARGV);
-	$cert_type //= $ev ? 'ev' : 'dv';
+	$cert_type //= 'dv';
 	$multi = 1 if @sans;
 	validate_cn($cn) or return 1;
 
@@ -1983,7 +1959,7 @@ sub command_buy {
 	# Buy the certificate from SSLMate
 	#
 	print "Placing order...\n";
-	$request = { days => $days, %opts };
+	$request = { force_new_subscription => 'true', days => $days, %opts };
 
 	my $cert_instance;
 	($status, $cert_instance) = authed_api_call('POST', '/certs/' . qs_escape($cn) . '/buy', undef, $request) or $exit_with_error->();
@@ -2008,11 +1984,6 @@ sub command_reissue_rekey {
 	if (@ARGV >= 1 && $ARGV[0] eq "-?") {
 		print "Usage: sslmate $command [OPTIONS] HOSTNAME\n\n";
 		print "Example: sslmate $command www.example.com\n";
-		if ($command eq 'reissue') {
-			print "\n";
-			print "Options:\n";
-			print " --same-key         reissue with the same key instead of generating a new key\n";
-		}
 		print "\n";
 		print "Batch options:\n";
 		print " --timeout=SECONDS  wait at most SECONDS seconds for new cert to be issued\n";
@@ -2056,16 +2027,6 @@ sub command_reissue_rekey {
 	my $rekey = 0;
 	if ($command eq 'rekey') {
 		$rekey = 1;
-	} elsif ($command eq 'reissue') {
-		unless ($same_key) {
-			$rekey = 1;
-			print STDERR "Warning: 'sslmate reissue' without the --same-key option is deprecated.\n";
-			print STDERR "To reissue with a new key, use 'sslmate rekey' instead.\n";
-			print STDERR "To reissue with the same key, use 'sslmate reissue --same-key'.\n";
-			print STDERR "Starting with SSLMate 2.0, --same-key will be implied.\n";
-			sleep(3) unless $batch;
-			print STDERR "\n";
-		}
 	}
 
 	if (defined($timeout) && $no_wait) {
@@ -2168,7 +2129,7 @@ sub command_reissue_rekey {
 		$exit_with_error->();
 	}
 
-	$timeout //= ($cert_instance->{type} eq 'ev' ? 0 : $DEFAULT_CERT_TIMEOUT);
+	$timeout //= $DEFAULT_CERT_TIMEOUT;
 
 	print "Reissue complete.\n\n";
 	if (!do_wait_for_cert($cn, $cert_instance, $timeout, 0, $paths, $new_key_filename)) {
@@ -2276,7 +2237,6 @@ sub command_renew {
 		print "         sslmate renew '*.example.com'\n";
 		print "\n";
 		print "Common options:\n";
-		print " --coupon=CODE        use the given coupon code for a discount\n";
 		print " --invoice-note=NOTE  include the given note with the invoice\n";
 		print " --email-invoice-to=ADDRESS\n";
 		print "                      email an invoice to the given address\n";
@@ -2287,6 +2247,8 @@ sub command_renew {
 		print "\n";
 		print "Advanced options:\n";
 		print " -f, --force          replace existing files, certificates\n";
+		print " --force-new-subscription\n";
+		print "                      always renew the subscription, even if it's not ending\n";
 		return 0;
 	}
 
@@ -2295,15 +2257,16 @@ sub command_renew {
 	my $timeout = undef;
 	my $days = undef;
 	my $no_wait = 0;
+	my $force_new_subscription = 0;
 
 	my $getopt = Getopt::Long::Parser->new;
 	$getopt->configure(qw(no_ignore_case permute bundling));
 	$getopt->getoptions('force|f', \$force,
+			    'force-new-subscription', \$force_new_subscription,
 			    'batch', \$batch, # compat with pre-1.0
 			    'days=i', \$days,
 			    'timeout=i', \$timeout,
 			    'no-wait', \$no_wait,
-			    'coupon=s', \$opts{coupon_code},
 			    'email-invoice-to=s', \$opts{email_invoice_to},
 			    'invoice-note=s', \$opts{invoice_note}) or return 2;
 
@@ -2354,6 +2317,8 @@ sub command_renew {
 		exit 1;
 	}
 
+	my $buy_subscription = $force_new_subscription || not(defined($cert->{subscription_ending})) || $cert->{subscription_ending};
+
 	my $paths = get_cert_paths($cn);
 	my $pubkey_hash = undef;
 	if (-f $paths->{key} && -r $paths->{key}) {
@@ -2369,7 +2334,7 @@ sub command_renew {
 			print STDERR "Tip: to restart a certificate's approval process, use 'sslmate retry-approval'.\n";
 			$errors++;
 		}
-		if (defined($cert->{current}) && !$cert->{current}->{expiring}) {
+		if (not($force_new_subscription) && defined($cert->{current}) && !$cert->{current}->{expiring}) {
 			print STDERR "Error: the certificate for $cn is not about to expire.\n";
 			print STDERR "Tip: to reissue this certificate, run 'sslmate reissue $cn'.\n";
 			$errors++;
@@ -2380,7 +2345,7 @@ sub command_renew {
 		}
 	}
 
-	unless ($batch) {
+	if ($buy_subscription && not($batch)) {
 		# Get product/pricing info from the server, ask user for confirmation
 
 		my $multi = 0;
@@ -2439,17 +2404,26 @@ sub command_renew {
 	prepare_approval($cert, $new_cert) or $exit_with_error->();
 
 	# Renew the certificate
-	print "Placing order...\n";
-	my $request = { days => $days, %opts };
-
 	my $cert_instance;
-	($status, $cert_instance) = authed_api_call('POST', '/certs/' . qs_escape($cn) . '/buy', undef, $request) or $exit_with_error->();
-	if ($status != 200) {
-		print STDERR "Error: " . $cert_instance->{message} . "\n";
-		$exit_with_error->();
+	if ($buy_subscription) {
+		print "Placing order...\n";
+		my $request = { force_new_subscription => 'true', days => $days, %opts };
+
+		($status, $cert_instance) = authed_api_call('POST', '/certs/' . qs_escape($cn) . '/buy', undef, $request) or $exit_with_error->();
+		if ($status != 200) {
+			print STDERR "Error: " . $cert_instance->{message} . "\n";
+			$exit_with_error->();
+		}
+	} else {
+		print "Renewing certificate using existing subscription...\n";
+		($status, $cert_instance) = authed_api_call('POST', '/certs/' . qs_escape($cn) . '/reissue') or $exit_with_error->();
+		if ($status != 200) {
+			print STDERR "Error: " . $cert_instance->{message} . "\n";
+			$exit_with_error->();
+		}
 	}
 
-	$timeout //= ($cert_instance->{type} eq 'ev' ? 0 : $DEFAULT_CERT_TIMEOUT);
+	$timeout //= $DEFAULT_CERT_TIMEOUT;
 
 	print "Renewal complete.\n\n";
 	if (!do_wait_for_cert($cn, $cert_instance, $timeout, 0, $paths)) {
@@ -2500,12 +2474,7 @@ sub command_req {
 	my $cn = lc $ARGV[0];
 	$key_filename //= "$cn.key";
 	$csr_filename //= "$cn.csr";
-	if (keys %$dn) {
-		$dn->{C} //= 'US';
-		$dn->{CN} = $cn;
-	} else {
-		$dn = make_dn($cn);
-	}
+	$dn->{CN} //= $cn;
 
 	# 0. Open the files
 	my $open_flags = O_WRONLY | O_CREAT | O_TRUNC;
@@ -2812,6 +2781,7 @@ sub make_cert_info {
 		name => $cert->{cn},
 		status => $latest ? $latest->{state} : undef,
 		expiration => $latest ? $latest->{expiration} : undef,
+		billed_through => $cert->{billed_through},
 		local_status => $local_status,
 		fingerprint => $latest ? $latest->{sha1_fingerprint} : undef,
 		sha256_fingerprint => $latest ? $latest->{sha256_fingerprint} : undef,
@@ -2829,6 +2799,7 @@ my %cert_column_titles = (
 	name =>			'Name',
 	status =>		'Status',
 	expiration =>		'Expiration',
+	billed_through =>	'Billed Through',
 	local_status => 	'Local Status',
 	fingerprint =>		'Fingerprint',
 	sha256_fingerprint =>	'Fingerprint (SHA-256)',
@@ -2880,6 +2851,7 @@ sub format_yesno {
 }
 my %cert_column_formatters = (
 	expiration => \&format_expiration,
+	billed_through => \&format_expiration,
 	status => \&format_status,
 	local_status => \&format_local_status,
 	fingerprint => \&format_hash,
@@ -3057,7 +3029,7 @@ sub command_show {
 	}
 	my $cn = lc $ARGV[0];
 
-	my @fields = defined($fields) ? split(/,/, $fields) : qw/name all_alt_names type status expiration auto_renew approval_method approver_email fingerprint local_status/;
+	my @fields = defined($fields) ? split(/,/, $fields) : qw/name all_alt_names type status expiration billed_through auto_renew approval_method approver_email fingerprint local_status/;
 	for my $field (@fields) {
 		if (not exists $field_titles{$field}) {
 			print STDERR "Error: Invalid field: $field\n";

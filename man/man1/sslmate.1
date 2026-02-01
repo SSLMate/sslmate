@@ -1,13 +1,13 @@
 '\" t
 .\"     Title: sslmate
 .\"    Author: SSLMate <sslmate@sslmate.com>
-.\" Generator: DocBook XSL Stylesheets v1.79.1 <http://docbook.sf.net/>
-.\"      Date: 2022-05-03
+.\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
+.\"      Date: 2026-02-01
 .\"    Manual: SSLMate
-.\"    Source: SSLMate 1.9.1
+.\"    Source: SSLMate 1.10.0
 .\"  Language: English
 .\"
-.TH "SSLMATE" "1" "2022\-05\-03" "SSLMate 1.9.1" "SSLMate"
+.TH "SSLMATE" "1" "2026\-02\-01" "SSLMate 1.10.0" "SSLMate"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -94,6 +94,13 @@ If the hostname starts with "*\&.", then a wildcard certificate is issued which 
 If more than one hostname is specified, a multi\-hostname certificate is issued\&. The first hostname is the primary name of the certificate and is placed in the certificate\*(Aqs common name field, as well as a subjectAltName field\&. The remaining hostnames are placed in subjectAltNames\&. The certificate is referred to by its primary name when downloading, renewing, reissuing, etc\&. The primary name cannot be changed without purchasing a new certificate, but alternative names can be added and removed after the certificate is issued by running
 \fBsslmate edit\fR\&.
 .sp
+\fBsslmate buy\fR
+will bill you for a one year subscription, and the issued certificate will have the longest lifetime allowed by industry regulations\&. You can get new certificates at no charge using
+\fBsslmate renew\fR
+or
+\fBsslmate reissue\fR
+until the subscription ends\&.
+.sp
 The following options are understood:
 .PP
 \fB\-\-auto\-renew\fR, \fB\-\-no\-auto\-renew\fR
@@ -162,11 +169,6 @@ When the real certificate is issued, it can be downloaded with the
 command\&.
 .RE
 .PP
-\fB\-\-coupon=\fR\fB\fICODE\fR\fR
-.RS 4
-Use the given coupon code for a discount\&.
-.RE
-.PP
 \fB\-\-invoice\-note=\fR\fB\fINOTE\fR\fR
 .RS 4
 Include the given note with the invoice for this purchase\&.
@@ -198,13 +200,24 @@ configuration option (see the CONFIGURATION section for details)\&.
 .PP
 \fB\-\-no\-auto\-san\fR
 .RS 4
-Disable the addition of the automatic second subjectAltName if only one one hostname was specified on the command line\&.
+Disable the addition of the automatic second subjectAltName if only one hostname was specified on the command line\&.
 .RE
 .RE
 .PP
 \fBrenew \fR\fB[\fIOPTIONS\fR]\fR\fB \fR\fB\fIHOSTNAME\fR\fR
 .RS 4
-Renew the certificate for the given hostname\&.
+Renew an expiring certificate for the given hostname\&. Using this command is unnecessary when auto\-renew is enabled as SSLMate will automatically renew expiring certificates, which you can download using
+\fBsslmate download\fR\&.
+.sp
+If the certificate\*(Aqs subscription is ending soon, then this command will bill your account for a new subscription which ends one year from the end date of the current subscription\&. Unless
+\fB\-\-batch\fR
+is used, you\*(Aqll be prompted to confirm the purchase\&. The new certificate will have the maximum lifetime allowed by industry regulations\&.
+.sp
+If the certificate\*(Aqs subscription is not ending soon, then this command will issue a new certificate using the current subscription, at no charge\&. Note that the new certificate\*(Aqs expiration will be no later than the subscription\*(Aqs end date, as indicated by
+\fBsslmate show\fR
+under "Billed Through"\&. You can use the
+\fB\-\-force\-new\-subscription\fR
+to force the purchase of a new subscription\&.
 .sp
 The following options are understood:
 .PP
@@ -229,11 +242,6 @@ This option is equivalent to
 \fB\-\-timeout 0\fR\&.
 .RE
 .PP
-\fB\-\-coupon=\fR\fB\fICODE\fR\fR
-.RS 4
-Use the given coupon code for a discount\&.
-.RE
-.PP
 \fB\-\-invoice\-note=\fR\fB\fINOTE\fR\fR
 .RS 4
 Include the given note with the invoice for this purchase\&.
@@ -249,25 +257,25 @@ By default, invoices are not emailed, but can be downloaded from your
 .PP
 \fB\-f\fR, \fB\-\-force\fR
 .RS 4
-Renew the certificate even if it\*(Aqs not about to expire\&. Note that the renewed certificate will expire one year from the today\*(Aqs date, not from the expiration date of the current certificate\&.
+Renew the certificate even if it\*(Aqs not about to expire\&.
+.RE
+.PP
+\fB\-\-force\-new\-subscription\fR
+.RS 4
+Purchase a new subscription even if the current subscription is not ending soon\&. The new subscription will end one year from today\&. The issued certificate will have the longest lifetime allowed by industry regulations\&.
 .RE
 .RE
 .PP
 \fBreissue \fR\fB[\fIOPTIONS\fR]\fR\fB \fR\fB\fIHOSTNAME\fR\fR
 .RS 4
-Generate a new private key (unless
-\fB\-\-same\-key\fR
-is specified) and reissue the certificate for the given hostname\&.
-.sp
-Note:
+Reissue the certificate for the given hostname, keeping the same private key\&. After adding or removing hostnames using
+\fBsslmate edit\fR, you must use
 \fBsslmate reissue\fR
-without the
-\fB\-\-same\-key\fR
-option is deprecated\&. Starting with SSLMate 2\&.0,
-\fB\-\-same\-key\fR
-will be implied\&. To reissue a certificate with a new key, use
-\fBsslmate rekey\fR
-instead\&.
+to get a new certificate with the new set of hostnames\&.
+.sp
+The new certificate will have an expiration date no later than the subscription end date, as indicated by
+\fBsslmate show\fR
+under "Billed Through"\&.
 .sp
 Reissuing a certificate does
 \fInot\fR
@@ -276,17 +284,6 @@ revoke it\&. Use the
 command to revoke a certificate after you have reissued it\&.
 .sp
 The following options are understood:
-.PP
-\fB\-\-same\-key\fR
-.RS 4
-Keep the same private key when reissuing\&. This is useful if you are reissuing a certificate not because of a lost key, but to add or remove the alternative names of a multi\-hostname certificate\&.
-.sp
-Note: Starting with SSLMate 2\&.0,
-\fB\-\-same\-key\fR
-will be implied\&. To reissue a certificate with a new key, use
-\fBsslmate rekey\fR
-instead\&.
-.RE
 .PP
 \fB\-\-timeout=\fR\fB\fISECONDS\fR\fR
 .RS 4
@@ -473,6 +470,11 @@ expiration
 The certificate\*(Aqs expiration date, in YYYY\-MM\-DD format\&.
 .RE
 .PP
+billed_through
+.RS 4
+The end date of the certificate\*(Aqs subscription, in YYYY\-MM\-DD format\&.
+.RE
+.PP
 local_status
 .RS 4
 The status of the locally\-installed copy of the certificate ("Installed", "Temporary", "Mismatched key", "No key file", "Out\-of\-date", or "None")\&.
@@ -495,7 +497,7 @@ The certificate\*(Aqs auto\-renew setting\&.
 .PP
 type
 .RS 4
-The certificate\*(Aqs type ("DV" or "EV")\&.
+Always "DV"\&. This column exists for backwards compatibility only and should no longer be used\&.
 .RE
 .PP
 approval_method
@@ -576,6 +578,11 @@ expiration
 The certificate\*(Aqs expiration date, in YYYY\-MM\-DD format\&.
 .RE
 .PP
+billed_through
+.RS 4
+The end date of the certificate\*(Aqs subscription, in YYYY\-MM\-DD format\&.
+.RE
+.PP
 local_status
 .RS 4
 The status of the locally\-installed copy of the certificate ("Installed", "Temporary", "Mismatched key", "No key file", "Out\-of\-date", or "None")\&.
@@ -598,7 +605,7 @@ The certificate\*(Aqs auto\-renew setting\&.
 .PP
 type
 .RS 4
-The certificate\*(Aqs type ("DV" or "EV")\&.
+Always "DV"\&. This field exists for backwards compatibility only and should no longer be used\&.
 .RE
 .PP
 approval_method
@@ -657,10 +664,7 @@ Enable or disable auto\-renew for this certificate\&.
 Add or remove the given hostname to or from this certificate\&. Only alternative names (not the common name) can be removed\&.
 .sp
 The name is not added or removed immediately\&. Instead, the changes take effect on the next call to
-\fBsslmate reissue\fR\&. Any names that were added since the last issuance will need to be approved\&. Existing names do not need to be re\-approved as long as you preserve the existing private key by passing the
-\fB\-\-same\-key\fR
-option to
-\fBsslmate reissue\fR\&. If there has been a net increase in hostnames since the last issuance, your account will be charged for the new names\&.
+\fBsslmate reissue\fR\&. Any names that were added since the last issuance will need to be approved\&. Existing names do not need to be re\-approved\&. If there has been a net increase in hostnames since the last issuance, your account will be charged for the new names\&.
 .RE
 .RE
 .PP
