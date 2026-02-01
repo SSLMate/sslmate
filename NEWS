@@ -1,3 +1,9 @@
+v1.10.0 (2026-02-01)
+ * Update for shorter certificate lifetimes. See
+   https://sslmate.com/help/shorter_certificate_lifetimes for details.
+ * Drop requirement to use --same-key to keep the same key when reissuing; reissue
+   now always uses the same key, as announced in 2015; use rekey to generate a new key.
+
 v1.9.1 (2022-05-03)
  * Improve error message when HTTP approval is not configured.
 
